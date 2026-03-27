@@ -58,22 +58,73 @@ HORS-LIGNE, développé en Python. Il remplace les imprimantes de bons
 traditionnelles par des écrans fluides et intuitifs pour optimiser le flux 
 de travail des restaurants et pizzerias.
 
---- LE PRINCIPE DE FONCTIONNEMENT ---
+--- LE PRINCIPE DE FONCTIONNEMENT : UN PONT INTELLIGENT ---
 
-Le logiciel agit comme un RÉCEPTEUR D'IMPRESSION VIRTUEL UNIVERSEL. Il s'intercepte 
-entre votre logiciel de caisse (POS) et la cuisine :
+Le logiciel agit comme un RÉCEPTEUR D'IMPRESSION VIRTUEL UNIVERSEL. Il se place 
+stratégiquement entre votre logiciel de caisse (POS) et la production, 
+éliminant le besoin de papier thermique tout en structurant l'information.
 
-1. CAPTURE : Le système écoute en continu les flux entrants via Réseau TCP 
-   (Port 9100) ou Ports Série RS232/USB.
-2. INTERPRÉTATION (Parsing) : Il décode les données brutes (langage standard 
-   ESC/POS) pour extraire : Numéro de facture, Table, Serveur et Items.
-3. AFFICHAGE DYNAMIQUE : Les commandes apparaissent sous forme de "Post-it" 
-   numériques colorés selon leur statut.
-4. INTERACTION : Les cuisiniers gèrent la production tactilement 
-   (En attente 🟦 -> En cours 🟨 -> Prêt/Traité 🟩).
+1. CAPTURE MULTI-FLUX (Dual-Listening) :
+   Le système surveille simultanément plusieurs vecteurs d'entrée sans conflit :
+   - RÉSEAU TCP (Port 9100) : Émule une imprimante réseau standard (Standard JetDirect).
+   - PORTS SÉRIE (RS232/USB) : Écoute les ports COM (Windows) ou /dev/tty (Linux) 
+     pour intercepter les données des caisses physiques traditionnelles.
+   - MODE "SILENT SNIFFER" : Capture les données brutes sans interrompre le 
+     flux de communication original.
+
+2. PARSING & INTELLIGENCE ARTIFICIELLE LOCALE :
+   Le "moteur de parsing" ne se contente pas de lire du texte, il analyse la 
+   structure ESC/POS (langage universel des imprimantes thermiques) :
+   - NETTOYAGE OCR : Corrige les erreurs de frappe récurrentes du personnel 
+     (ex: "C-SAR" devient "CÉSAR") via un dictionnaire de correspondance.
+   - EXTRACTION DE STRUCTURE : Isole intelligemment le numéro de facture, 
+     le nom du serveur, le type de service (Livraison, Salle, Emporter) 
+     et la destination (Table #).
+   - DÉCOUPE D'ITEMS : Sépare le plat principal de ses options/modificateurs 
+     (ex: "1 x PIZZA" lié à "EXTRA FROMAGE") pour un affichage hiérarchisé.
+
+3. AFFICHAGE DYNAMIQUE & GESTION DES PRIORITÉS :
+   Les commandes sont converties en "Post-it" numériques intelligents :
+   - COLONNAGE AUTOMATIQUE : Répartition automatique dans les zones dédiées 
+     (ex: Les livraisons à gauche, les tables en salle au centre).
+   - TRI CHRONOLOGIQUE : Gestion stricte de l'ordre d'arrivée pour respecter 
+     le "Premier Entré, Premier Sorti" (FIFO).
+   - ADAPTABILITÉ VISUELLE : Les polices et tailles de cartes s'ajustent 
+     selon le volume de commandes pour rester lisibles même en plein "rush".
+
+4. CYCLE DE VIE DE LA COMMANDE (Interaction Tactile) :
+   Le cuisinier fait progresser la production d'une simple pression sur l'écran :
+   - EN ATTENTE (Bleu) : Commande reçue, prête à être lancée.
+   - EN COURS (Jaune) : Indique au reste de l'équipe qu'un cuisinier s'en occupe.
+   - PRÊT / TRAITÉ (Vert) : La commande disparaît de l'écran de production, 
+     est archivée en base de données, et l'information est envoyée en temps 
+     réel vers l'interface des serveurs/livreurs.
+   - ARCHIVAGE & RÉCUPÉRATION : Chaque action est loggée. Une facture 
+     effacée par erreur peut être restaurée instantanément via la corbeille.
+     
+--- L'ÉCOSYSTÈME WEB (ACCÈS À DISTANCE) ---
+
+Le programme intègre un serveur Web local (Flask) permettant de consulter les 
+données de cuisine sur n'importe quel appareil (Tablette, Mobile, PC) :
+
+* VUE CUISINE GLOBALE (/kds) : 
+  Une réplique de l'écran principal pour la supervision.
+  
+* VUE LIVREURS (/kds_livreur) : 
+  Interface simplifiée affichant uniquement les commandes prêtes pour la 
+  livraison. Permet aux livreurs de visualiser leur charge de travail sans 
+  entrer en cuisine.
+
+* VUE SERVEURS / PA (/kds_pa) : 
+  Permet au personnel de salle de voir instantanément quelle table est prête 
+  et de recevoir les appels (PA) envoyés par les cuisiniers.
+
+* ANALYSE & HISTORIQUE : 
+  Accès à la base de données de consultation pour revoir les performances 
+  passées sans interrompre le "rush" en cuisine.
 
 --- FONCTIONNALITÉS CLÉS ---
-
+  
 * INTERFACE TACTILE OPTIMISÉE :
   - Post-it graphiques adaptatifs avec défilement fluide.
   - Claviers virtuels intégrés à taille variable (5 niveaux de zoom).
