@@ -1,0 +1,925 @@
+
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-2">
+    
+    
+    <div id="custom-toast" style="display:none; position:fixed; top:20px; right:20px; background:#2ecc71; color:white; padding:20px; border-radius:10px; z-index:10000; font-size:20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 2px solid #fff;">
+        <span id="toast-message"></span>
+    </div>
+    <div id="casiers-ajax-zone">
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <button id="btn-reset-view" class="btn btn-lg btn-warning" 
+                    style="display: none; font-weight: bold; height: 80px; font-size: 1.5rem;" 
+                    onclick="resetFilter()">
+                ⬅ RETOUR
+            </button>
+            
+
+            <div class="casiers-container" style="display: flex; gap: 16px; align-items: center;">
+                {% for nom, nb in stats.items() %}
+                <div class="casier-card" onclick="filterByLivreur('{{ nom }}')" id="btn-{{ nom }}">
+                    <div class="casier-name fs-5">{{ nom }}</div>
+                    <div class="casier-count">{{ nb }}</div>
+                </div>
+                {% endfor %}
+
+                <div class="casier-card" onclick="enableAudio()" id="btn-audio-enable" 
+                    style="background-color: #8e44ad; border-color: #fff; min-width: 120px; width: 120px; cursor: pointer;">
+                    <div class="casier-name" style="color: white; font-size: 1rem !important;">AUDIO</div>
+                    <div class="casier-count" style="color: white; font-size: 1.8rem !important;">🔊</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row"id="kds-ajax-zone">
+        {% for bid, item in livraisons.items() %}
+        <div class="kds-column order-wrapper" data-livreur="{{ item.livreur if item.livreur else '' }}"
+             style="display: {{ 'block' if (not item.livreur or show_all) else 'none' }};">
+            
+            <div class="kds-card {{ 'assigned' if item.livreur }} {{ 'pulse-red' if item.is_new else 'not-new' }}" id="order-{{ bid }}">
+                <div class="card-header d-flex justify-content-between align-items-center" onclick="toggleView('{{ bid }}')">
+                    <span>
+                        {% set ns = namespace(found_no="", address="", phone="") %}
+                        
+                        {% for raw_it in item.data['items'] %}
+                            {% set it = raw_it | from_json %}
+                            {% set main = (it.main_item|string).replace('@', '').replace(' ', '')|trim %}
+
+                            {# 1. Logique Livraison #}
+                            {% if "LIVRAISON #" in (it.main_item|upper) %}
+                                {% set ns.found_no = it.main_item.split('#')[1]|trim %}
+                            {% endif %}
+
+                            {# 2. Logique Adresse : Si main_item est un numéro (ex: 37 ou 1083) #}
+                            {% if main|length > 0 and main|int(-1) != -1 and ns.address == "" %}
+                                {% if it.sub_items|length >= 1 %}
+                                    {% set ns.address = it.main_item.replace('@', '')|trim ~ " " ~ it.sub_items[0] %}
+                                {% endif %}
+                            {% endif %}
+
+                            {# 3. Logique Téléphone : Scan des sub_items #}
+                            {% if it.sub_items %}
+                                {% for sub in it.sub_items %}
+                                    
+                                    {# On garde seulement les chiffres #}
+                                    {% set clean = sub | regex_replace('[^0-9]', '') %}
+                                    
+                                    {# Numéro canadien standard #}
+                                    {% if clean|length == 10 %}
+                                        {% set ns.phone = clean[0:3] ~ '-' ~ clean[3:6] ~ '-' ~ clean[6:10] %}
+                                    {% endif %}
+
+                                    {# Vérif livraison dans sub_items au cas où #}
+                                    {% if "LIVRAISON #" in sub|upper %}
+                                        {% set ns.found_no = sub.split('#')[1]|trim %}
+                                    {% endif %}
+                                    
+                                {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+
+                        <div>
+                            <strong>LIVRAISON :</strong> {{ ns.found_no if ns.found_no != "" else "???" }}<br>
+                            <strong>Adresse :</strong> {{ ns.address if ns.address != "" else "Non disponible" }}<br>
+                            <strong>Tél :</strong> {{ ns.phone if ns.phone != "" else "Non disponible" }}
+                        </div>
+                    </span>
+                    
+                    <span>{{ '➕' if item.collapsed else '➖' }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div id="timer-{{ bid }}" class="fw-bold text-center" 
+                            style="color: #ffff00; font-size: 1.8rem; margin-bottom: 10px; text-shadow: 2px 2px 4px #000;"
+                            data-start="{{ item.depart_at if item.depart_at else '' }}">
+                        </div>
+
+                        <div class="d-flex flex-column mt-2 mb-2">
+                            <div class="extras-row">
+                                <div id="btn-heure-{{ bid }}" 
+                                    class="extra-box {% if item.extras.desired_time != 'HEURE' %}extra-selected{% endif %}" 
+                                    onclick="openTimePicker('{{ bid }}')">
+                                    {{ item.extras.desired_time if item.extras.desired_time else 'HEURE' }}
+                                </div>
+
+                                <div id="btn-ust-{{ bid }}" 
+                                    class="extra-box {% if item.extras.utensils != 'UST' %}extra-selected{% endif %}" 
+                                    onclick="showUtensilPicker('{{ bid }}')">
+                                    {{ item.extras.utensils if item.extras.utensils else 'UST' }}
+                                </div>
+
+                                <div id="btn-note-{{ bid }}" 
+                                    class="extra-box {% if item.extras.custom_note != 'NOTE' %}extra-selected{% endif %}" 
+                                    onclick="showNoteModal('{{ bid }}')">
+                                    {{ item.extras.custom_note if item.extras.custom_note else 'NOTE' }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="actions-section mt-3 mb-3">
+                            <button id="ok-{{ bid }}" class="btn btn-success w-100 mb-2 fw-bold touch-element-xxl" 
+                                    style="display:none; height: 60px; font-size: 1.3rem; background-color: #2ecc71 !important;" 
+                                    onclick="sendAllExtras('{{ bid }}')">
+                                ✅ ENREGISTRER (OK)
+                            </button>
+
+                            <button id="btn-assign-{{ bid }}" 
+                                    class="btn btn-white-touch w-100 touch-element-xxl d-flex align-items-center justify-content-center" 
+                                    style="border: 2px solid #00d2ff !important; color: #00d2ff !important; background: #000 !important; height: 60px; font-weight: bold;"
+                                    onclick="openLivreurModal('{{ bid }}')">
+                                {{ item.livreur if item.livreur else '👤 ASSIGNER LIVREUR' }}
+                            </button>
+
+                            {% if item.livreur %}
+                            <div class="d-flex gap-2 mt-2">
+                                <button class="btn-unassign flex-grow-1" 
+                                        style="height: 60px; background-color: #e67e22 !important; color: white !important;" 
+                                        onclick="resetLivraison('{{ bid }}')">
+                                    🔄 ATTENTE
+                                </button>
+                                <button id="btn-delivered-{{ bid }}" 
+                                        class="btn-unassign flex-grow-1" 
+                                        style="height: 60px; background-color: #27ae60 !important; color: white !important;" 
+                                        onclick="markAsDelivered('{{ bid }}')">
+                                    ✅ LIVRÉE
+                                </button>
+                            </div>
+
+                            <button class="btn btn-warning w-100 mt-2 fw-bold" 
+                                    style="height: 60px; font-size: 1.2rem; background-color: #f39c12 !important;" 
+                                    onclick="printOrder('{{ bid }}')">
+                                🖨️ IMPRIMER
+                            </button>
+                            {% endif %}
+                        </div>
+
+                        <span class="text-white fs-6">📍 {{ item.data.address or 'En salle' }}</span>
+                    </div>
+
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for raw_it in item.data['items'] %}
+                            {% set it = raw_it | from_json %}
+                            <li class="list-group-item">
+                                {# Affiche l'item s'il est au format dictionnaire #}
+                                {% if it is mapping and it.main_item is defined %}
+                                    <div class="item-main">{{ it.main_item }}</div>
+                                    {% if it.sub_items %}
+                                    <ul class="sub-items-list">
+                                        {% for sub in it.sub_items %}<li>• {{ sub }}</li>{% endfor %}
+                                    </ul>
+                                    {% endif %}
+                                {# Affiche l'item si c'est du texte simple #}
+                                {% else %}
+                                    <div class="item-main">{{ it }}</div>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+
+                    
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+
+<div id="modal-livreur" style="display:none; position:fixed; z-index:10005; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%; ">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #f1c40f; padding:30px; border-radius:30px; min-width:450px; box-shadow: 0 0 50px rgba(241, 196, 15, 0.2);">
+        <h2 class="text-white text-center mb-4" style="font-weight: 800;">CHOISIR LIVREUR</h2>
+        
+        <div id="livreur-list-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+            {% for nom in livreurs %}
+            <div class="numpad-btn" style="font-size: 1.2rem; height: 70px;" onclick="confirmAssignation('{{ nom }}')">
+                {{ nom }}
+            </div>
+            {% endfor %}
+        </div>
+
+        <button class="btn btn-danger btn-lg w-100 touch-element-xxl" onclick="closeLivreurModal()">ANNULER / FERMER</button>
+    </div>
+</div>
+
+<script>
+    let currentBid = null;
+    let isEditing = false; 
+    let currentLivreurFilter = null; // ⭐ On stocke le livreur sélectionné ici
+    let pendingBid = null; // Stocke l'ID en attente de confirmation
+    let lastHtmlContent = ""; // Pour éviter de clignoter si rien ne change
+    let tempExtras = {}; // Stockage temporaire avant le OK
+    let noteTargetBid = null; // Variable globale pour stocker le BID en cours
+    let timeInputBuffer = ""; // Stocke les chiffres tapés
+    let isModalOpen = false;
+    let timeTargetBid = null;
+    let assignTargetBid = null;
+    let audioCtx = null;
+
+    if (!sessionStorage.getItem('session_active')) {
+        localStorage.removeItem('delivered_orders');
+        sessionStorage.setItem('session_active', 'true');
+        console.log("Nouvelle session détectée : Cache des commandes grisées vidé.");
+    }
+
+    function refreshKDS() {
+        // 1. DÉTECTION DES MODALES OUVERTES
+        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm'];
+        const isModalOpen = modals.some(selector => {
+            const modal = document.querySelector(selector);
+            return modal && modal.style.display === 'block';
+        });
+
+        // 2. VÉRIFICATION DE L'ACTIVITÉ UTILISATEUR
+        const activeEl = document.activeElement;
+        const isUserTyping = (
+            activeEl.tagName === 'INPUT' || 
+            activeEl.tagName === 'SELECT' || 
+            activeEl.tagName === 'TEXTAREA' ||
+            activeEl.isContentEditable
+        );
+
+        // 3. BLOCAGE DU REFRESH
+        if (isModalOpen || isUserTyping || (typeof isEditing !== 'undefined' && isEditing)) {
+            console.log("⚠️ Refresh suspendu : Modale ouverte ou saisie en cours...");
+            return;
+        }
+
+        // 4. LOGIQUE DE RAFRAÎCHISSEMENT (Fetch)
+        fetch(window.location.href)
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                const newKds = doc.getElementById('kds-ajax-zone');
+                const newCasiers = doc.getElementById('casiers-ajax-zone');
+                const currentKdsZone = document.getElementById('kds-ajax-zone');
+                
+                if (newKds && currentKdsZone && newKds.innerHTML !== currentKdsZone.innerHTML) {
+                    
+                    const currentCount = currentKdsZone.querySelectorAll('.kds-column').length;
+                    const newCount = newKds.querySelectorAll('.kds-column').length;
+
+                    // Si on a plus de commandes qu'avant, on sonne !
+                    if (newCount > currentCount) {
+                        playNewOrderSound();
+                    }
+                    // --- ⭐ DÉTECTION DES CHANGEMENTS AVANT REMPLACEMENT ---
+                    let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+
+                    doc.querySelectorAll('.kds-card').forEach(newCard => {
+                        const bid = newCard.id.replace('order-', '');
+                        const oldCard = document.getElementById('order-' + bid);
+
+                        if (oldCard) {
+                            // Comparer les textes des boutons (Heure, Note, Ustensiles)
+                            const fields = [
+                                { id: 'btn-heure-', selector: '[id^="btn-heure-"]' },
+                                { id: 'btn-note-',  selector: '[id^="btn-note-"]'  },
+                                { id: 'btn-ust-',   selector: '[id^="btn-ust-"]'   }
+                            ];
+
+                            fields.forEach(f => {
+                                const oldBtn = oldCard.querySelector(f.selector);
+                                const newBtn = newCard.querySelector(f.selector);
+                                
+                                if (oldBtn && newBtn) {
+                                    const oldVal = oldBtn.innerText.trim();
+                                    const newVal = newBtn.innerText.trim();
+                                    
+                                    // Si le texte a changé et n'est pas vide
+                                    if (newVal !== oldVal && newVal !== "") {
+                                        if (!modifiedOrders.includes(bid)) {
+                                            modifiedOrders.push(bid);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+                    // -------------------------------------------------------
+
+                    // Sauvegarde des états 'collapsed'
+                    const stateMap = {};
+                    document.querySelectorAll('.kds-card').forEach(card => {
+                        stateMap[card.id] = card.classList.contains('collapsed');
+                    });
+
+                    // Remplacement du contenu
+                    currentKdsZone.innerHTML = newKds.innerHTML;
+                    if (newCasiers && document.getElementById('casiers-ajax-zone')) {
+                        document.getElementById('casiers-ajax-zone').innerHTML = newCasiers.innerHTML;
+                    }
+
+                    // Restauration des états 'collapsed' et application du FLASH MAUVE
+                    document.querySelectorAll('.kds-card').forEach(card => {
+                        const bid = card.id.replace('order-', '');
+
+                        // Restaurer Collapsed
+                        if (stateMap[card.id]) {
+                            card.classList.add('collapsed');
+                            const headerSpan = card.querySelector('.card-header span:last-child');
+                            if (headerSpan) headerSpan.innerText = '➕';
+                        }
+
+                        // ⭐ Appliquer le Flash Mauve si dans la liste des modifiés
+                        if (modifiedOrders.includes(bid)) {
+                            card.classList.add('pulse-red'); // ou 'flash-mauve' selon ton CSS
+                        }
+                    });
+
+                    // Ré-appliquer les filtres
+                    if (typeof currentLivreurFilter !== 'undefined' && currentLivreurFilter) {
+                        applyFilter(currentLivreurFilter);
+                    }
+
+                    if (typeof updateTimers === 'function') updateTimers();
+
+                    // Restaurer visuel livré
+                    let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
+                    deliveredOrders.forEach(bid => {
+                        if (typeof applyDeliveredVisual === 'function') applyDeliveredVisual(bid); 
+                    });
+                }
+            })
+            .catch(err => console.error("Erreur refresh KDS:", err));
+    }
+
+    function playBeep(frequency = 440, duration = 0.1) {
+        try {
+            // Initialise le contexte seulement au premier appel
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            // Si le navigateur l'a suspendu, on essaie de le relancer
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.value = frequency;
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + duration);
+        } catch (e) {
+            console.error("Erreur Audio:", e);
+        }
+    }
+
+    function enableAudio() {
+        // Création/Reprise du contexte sur un clic utilisateur réel
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        audioCtx.resume().then(() => {
+            console.log("Audio activé avec succès !");
+            // Petit bip de confirmation
+            playNewOrderSound();
+            
+            // On change le bouton pour montrer que c'est actif
+            const btn = document.getElementById('btn-audio-enable');
+            btn.innerHTML = "✅ SON ACTIF";
+            btn.style.backgroundColor = "#27ae60"; 
+            btn.disabled = true;
+        });
+    }
+
+    // Fonction pour faire le "Double Beep"
+    function playNewOrderSound() {
+        playBeep(660, 0.1); // Premier bip (plus aigu)
+        setTimeout(() => playBeep(660, 0.1), 200); // Deuxième bip après 200ms
+    }
+
+
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('custom-toast');
+        const msgSpan = document.getElementById('toast-message');
+        
+        toast.style.background = isError ? "#e74c3c" : "#2ecc71"; // Rouge si erreur, Vert si succès
+        msgSpan.innerText = message;
+        
+        toast.style.display = 'block';
+        
+        // Disparaît après 3 secondes
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3000);
+    }
+
+    function printOrder(bid) {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.innerText = "⏳ EN COURS...";
+
+        fetch('/print_bill', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ bid: bid })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Erreur réseau');
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // ⭐ Notification personnalisée SUCCÈS
+                showToast("✅ TICKET #" + bid + " ENVOYÉ !");
+            } else {
+                // ⭐ Notification personnalisée ERREUR
+                showToast("❌ ERREUR : " + (data.error || "IMPOSSIBLE D'IMPRIMER"), true);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            showToast("⚠️ CONNEXION IMPOSSIBLE AU SERVEUR", true);
+        })
+        .finally(() => {
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerText = "🖨️ IMPRIMER";
+            }, 2000);
+        });
+    }
+
+    // Fonction helper pour le rendu visuel
+    function updateVisualOnly(bid, prefix, value) {
+        const el = document.getElementById(prefix + bid);
+        if (el) {
+            el.classList.add('extra-selected');
+            el.innerText = value;
+        }
+    }
+
+
+    function updateTimers() {
+        document.querySelectorAll('[id^="timer-"]').forEach(timerDiv => {
+            // 1. Trouver la carte parente pour vérifier si elle est grisée
+            const bid = timerDiv.id.replace('timer-', '');
+            const card = document.getElementById('order-' + bid);
+
+            // ⭐ SI LE TICKET EST GRISÉ : On arrête le chrono (on ne change plus le texte)
+            if (card && card.classList.contains('order-delivered')) {
+                timerDiv.style.color = "#7f8c8d"; // Optionnel: mettre le temps figé en gris
+                return; // On sort de la boucle pour ce ticket précis
+            }
+
+            const startTimeStr = timerDiv.getAttribute('data-start');
+            
+            // Si pas d'heure de départ, on n'affiche rien
+            if (!startTimeStr || startTimeStr === "") {
+                timerDiv.innerText = ""; 
+                return;
+            }
+
+            const startTime = new Date(startTimeStr);
+            const now = new Date();
+            const diff = Math.floor((now - startTime) / 1000); // Différence en secondes
+
+            if (diff < 0) return;
+
+            const mins = Math.floor(diff / 60);
+            const secs = diff % 60;
+
+            // Affiche ⏳ 1:05 (Calculé seulement si non livré)
+            timerDiv.innerText = "⏳ " + mins + ":" + (secs < 10 ? "0" : "") + secs;
+            
+            // Alerte visuelle si trop long (ex: plus de 15 min)
+            if (mins >= 15) {
+                timerDiv.style.color = "#e74c3c"; // Rouge
+            }
+        });
+    }
+
+    // On lance le calcul toutes les secondes
+    setInterval(updateTimers, 1000);
+
+
+    function markAsDelivered(bid) {
+        // 1. Enregistrer le BID dans la mémoire du navigateur (localStorage)
+        let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
+        if (!deliveredOrders.includes(bid)) {
+            deliveredOrders.push(bid);
+            localStorage.setItem('delivered_orders', JSON.stringify(deliveredOrders));
+        }
+
+        // 2. Appliquer le visuel immédiatement
+        applyDeliveredVisual(bid);
+        
+    }
+
+    function applyDeliveredVisual(bid) {
+        const card = document.getElementById('order-' + bid);
+        if (!card) return;
+
+        // Appliquer le style grisé et bloquer les clics
+        card.classList.add('order-delivered');
+        card.style.pointerEvents = "none"; 
+        card.style.opacity = "0.5";
+        card.style.filter = "grayscale(1)";
+
+        // Cacher le bouton remettre (on utilise querySelector pour être sûr de le trouver)
+        const btnRemettre = card.querySelector('.btn-unassign');
+        if (btnRemettre) {
+            btnRemettre.style.setProperty('display', 'none', 'important');
+        }
+
+        // Modifier le bouton de validation
+        // Attention : vérifie que l'id dans ton HTML est bien btn-delivered-{{ bid }}
+        const btnDelivered = document.getElementById('btn-delivered-' + bid);
+        if (btnDelivered) {
+            btnDelivered.innerText = "LIVRÉE / TERMINÉE";
+            btnDelivered.style.backgroundColor = "#2c3e50";
+            btnDelivered.disabled = true;
+        }
+    }
+
+    function updateLocalExtra(bid, field, value) {
+        const btnId = (field === 'desired_time') ? 'btn-heure-' : (field === 'utensils' ? 'btn-ust-' : 'btn-note-');
+        const element = document.getElementById(btnId + bid);
+        const oldText = element.innerText.trim();
+
+        if (value === oldText) return;
+
+        if (!tempExtras[bid]) tempExtras[bid] = {};
+        tempExtras[bid][field] = value;
+        
+        // Appliquer le style visuel du bouton
+        element.classList.add('extra-selected');
+        element.innerText = value;
+        
+        // ⭐ AJOUT : Appliquer l'animation de pulsation mauve à la carte
+        const card = document.getElementById('order-' + bid);
+        if (card) {
+            card.classList.add('flash-mauve');
+        }
+        
+        // Afficher le bouton OK
+        document.getElementById('ok-' + bid).style.display = 'block';
+    }
+
+    function openLivreurModal(bid) {
+        assignTargetBid = bid;
+        isEditing = true; // Bloque le refresh auto de PyQt
+        document.getElementById('modal-livreur').style.display = 'block';
+    }
+
+    function closeLivreurModal() {
+        document.getElementById('modal-livreur').style.display = 'none';
+        isEditing = false;
+        assignTargetBid = null;
+    }
+
+    function confirmAssignation(nomLivreur) {
+        if (!assignTargetBid) return;
+        
+        // On réutilise votre logique d'assignation existante
+        fetch(`/assign_livreur/${assignTargetBid}/${nomLivreur}`, { method: 'POST' })
+        .then(response => {
+            if (response.ok) {
+                closeLivreurModal();
+                refreshKDS(); // Rafraîchit pour voir le changement
+            }
+        })
+        .catch(err => {
+            console.error("Erreur assignation:", err);
+            closeLivreurModal();
+        });
+    }
+
+    function openTimePicker(bid) {
+        
+    }
+
+    function pressKey(key) {
+        if (key === 'BACK') {
+            timeInputBuffer = timeInputBuffer.slice(0, -1);
+        } else if (key === '.') {
+            // Optionnel : on peut ignorer le point ou l'utiliser comme séparateur
+            if (timeInputBuffer.length === 2 && !timeInputBuffer.includes(':')) {
+                timeInputBuffer += ":";
+            }
+        } else {
+            // Limite à 4 chiffres
+            if (timeInputBuffer.replace(':', '').length < 4) {
+                timeInputBuffer += key;
+                // Ajoute automatiquement le ":" après les 2 premiers chiffres (HH:MM)
+                if (timeInputBuffer.length === 2) {
+                    timeInputBuffer += ":";
+                }
+            }
+        }
+        
+        // Mise à jour de l'affichage
+        let display = timeInputBuffer;
+        while (display.length < 5) {
+            display += (display.length === 2) ? ":" : "_";
+        }
+        document.getElementById('time-display').innerText = display;
+    }
+
+    function confirmTime() {
+        // Validation simple du format HH:MM
+        if (timeInputBuffer.length === 5) {
+            updateLocalExtra(timeTargetBid, 'desired_time', timeInputBuffer);
+            closeTimeModal();
+        } else {
+            // Effet visuel d'erreur si incomplet
+            const disp = document.getElementById('time-display');
+            disp.style.color = 'red';
+            setTimeout(() => disp.style.color = '#00d2ff', 500);
+        }
+    }
+
+    function closeTimeModal() {
+        document.getElementById('modal-time').style.display = 'none';
+        isEditing = false;
+        timeTargetBid = null;
+    }
+
+    function acknowledgeModification(bid) {
+        let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+        modifiedOrders = modifiedOrders.filter(id => id !== bid);
+        localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+        
+        const card = document.getElementById('order-' + bid);
+        if (card) card.classList.remove('flash-mauve');
+    }
+
+    function sendAllExtras(bid) {
+        // 1. On récupère les éléments de la carte
+        const card = document.getElementById('order-' + bid);
+        if (!card) return;
+
+        const headerText = card.querySelector('.card-header span').innerText;
+        const numLivrMatch = headerText.match(/LIVRAISON\s*:\s*(\d+)/i);
+        const numLivr = numLivrMatch ? numLivrMatch[1] : null;
+
+        // 2. Préparation des données
+        let payload = {
+            bid: bid,
+            num_livraison: numLivr,
+            ...tempExtras[bid]
+        };
+
+        // 3. Envoi au serveur
+        fetch('/update_livraison_details', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // 4. Nettoyage
+                delete tempExtras[bid];
+                isEditing = false;
+
+                // 5. Cache le bouton OK
+                const okBtn = document.getElementById('ok-' + bid);
+                if (okBtn) okBtn.style.display = 'none';
+
+                // ⭐ NOUVEAU : On enregistre dans le localStorage que ce ticket a été modifié 
+                // pour qu'il reste mauve même après le refresh AJAX
+                let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+                if (!modifiedOrders.includes(bid)) {
+                    modifiedOrders.push(bid);
+                    localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+                }
+                
+                const card = document.getElementById('order-' + bid);
+                if (card && !card.classList.contains('collapsed')) {
+                    // On appelle la fonction toggleView pour réduire la carte
+                    toggleView(bid);
+                }
+
+                // 6. Force le rafraîchissement
+                refreshKDS(); 
+                
+                console.log("Enregistrement réussi pour BID:", bid);
+            } else {
+                alert("Erreur lors de l'enregistrement");
+            }
+        })
+        .catch(err => {
+            console.error("Erreur réseau:", err);
+            alert("Impossible de joindre le serveur");
+        });
+    }
+
+    // ⭐ NOUVELLE FONCTION POUR APPLIQUER LE FILTRE VISUEL
+    function applyFilter(nom) {
+        currentLivreurFilter = nom;
+        
+        // 1. On affiche le bouton retour
+        const resetBtn = document.getElementById('btn-reset-view');
+        if (resetBtn) {
+            resetBtn.style.display = "block";
+        }
+
+        // 2. On met en surbrillance le casier actif
+        document.querySelectorAll('.casier-card').forEach(c => c.classList.remove('active'));
+        const btn = document.getElementById('btn-' + nom);
+        if (btn) btn.classList.add('active');
+        
+        // 3. On filtre les factures
+        document.querySelectorAll('.order-wrapper').forEach(el => {
+            if (el.getAttribute('data-livreur') === nom) {
+                el.style.display = "block";
+            } else {
+                el.style.display = "none";
+            }
+        });
+    }
+
+    // MODIFIÉ : Quand on clique sur un casier
+    function filterByLivreur(nom) {
+        if (currentLivreurFilter === nom) {
+            // Si on reclique sur le même, on pourrait choisir d'enlever le filtre (optionnel)
+            // Mais ici on reste sur le comportement standard :
+            currentLivreurFilter = nom;
+        } else {
+            currentLivreurFilter = nom;
+        }
+        applyFilter(nom);
+    }
+
+
+    function toggleView(bid) {
+        const card = document.getElementById('order-' + bid);
+        if (!card) return;
+
+        // 1. Gérer l'animation mauve (Acquittement de la notification)
+        // On vérifie les deux classes possibles (pulse-mauve de votre CSS ou flash-mauve)
+        if (card.classList.contains('pulse-red') || card.classList.contains('flash-mauve')) {
+            card.classList.remove('pulse-red');
+            card.classList.remove('flash-red');
+            card.classList.add('not-new'); // Applique le style standard des commandes lues
+
+            // Retirer du localStorage pour que l'effet ne revienne pas au rafraîchissement local
+            let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+            if (modifiedOrders.includes(bid)) {
+                modifiedOrders = modifiedOrders.filter(id => id !== bid);
+                localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+            }
+
+            // Optionnel : Envoyer une requête spécifique pour marquer comme "lu" côté serveur
+            // Cela permet de s'assurer que item.is_new passera à False
+            
+        }
+
+        // 2. Bascule visuelle de l'affichage (Ouverture/Fermeture)
+        // Note : Si vous avez supprimé la classe 'collapsed' de votre HTML, 
+        // cette partie gérera l'affichage du contenu interne.
+        const content = card.querySelector('.card-content');
+        const isCollapsed = card.classList.toggle('collapsed');
+        
+        if (content) {
+            content.style.display = isCollapsed ? 'none' : 'block';
+        }
+        
+        // 3. Mise à jour de l'icône (➕/➖)
+        const headerSpan = card.querySelector('.card-header span:last-child');
+        if (headerSpan) {
+            headerSpan.innerText = isCollapsed ? '➕' : '➖';
+        }
+
+        // 4. Appel serveur pour synchroniser l'état de réduction (collapsed)
+        fetch(`/toggle_view/${bid}`, { method: 'POST' })
+        .then(response => {
+            if (!response.ok) {
+                // En cas d'erreur, on remet l'état visuel précédent
+                card.classList.toggle('collapsed');
+                if (content) content.style.display = card.classList.contains('collapsed') ? 'none' : 'block';
+            }
+        })
+        .catch(err => {
+            console.error("Erreur toggle_view:", err);
+        });
+    }
+    
+    function assignLivreur(bid, nom) { 
+        if (!nom) return; // Si on choisit "-- ASSIGNER --", on ne fait rien
+
+        isEditing = true; // On bloque le rafraîchissement automatique pendant l'envoi
+        
+        fetch(`/assign_livreur/${bid}/${nom}`, { method: 'POST' })
+        .then(response => {
+            if (response.ok) {
+                // ⭐ C'EST ICI : On lance le rafraîchissement AJAX immédiatement
+                isEditing = false; 
+                refreshKDS(); 
+            }
+        })
+        .catch(err => {
+            console.error("Erreur lors de l'assignation:", err);
+            isEditing = false;
+        });
+    }
+
+    
+    function resetLivraison(bid) {
+        // On appelle directement le serveur sans afficher de modal
+        fetch(`/reset_livraison/${bid}`, { method: 'POST' })
+            .then(response => {
+                if (response.ok) {
+                    console.log("Commande remise en attente :", bid);
+                    refreshKDS(); // Rafraîchissement immédiat
+                } else {
+                    alert("Erreur lors de la remise en attente");
+                }
+            })
+            .catch(err => {
+                console.error("Erreur réseau:", err);
+                alert("Impossible de contacter le serveur");
+            });
+    }
+
+    function closeConfirmModal() {
+        document.getElementById('modal-confirm').style.display = 'none';
+        pendingBid = null;
+        isEditing = false;
+    }
+
+    function showUtensilPicker(bid) {
+        
+    }
+
+    function saveUtensils() {
+        let type = document.getElementById('selected-type').value;
+        let qty = document.getElementById('utensil-qty').value;
+        
+        // Appelle la fonction de mise à jour locale que nous avons créée avant
+        updateLocalExtra(currentBid, 'utensils', qty + " " + type);
+        
+        // Ferme le modal
+        document.getElementById('modal-utensils').style.display = 'none';
+        isEditing = false;
+    }
+
+    function showNoteModal(bid) {
+        
+    }
+
+    function confirmNote() {
+        const text = document.getElementById('note-textarea').value.trim();
+        if (text !== "") {
+            updateLocalExtra(noteTargetBid, 'custom_note', text.toUpperCase());
+        }
+        closeNoteModal();
+    }
+
+    function closeNoteModal() {
+        document.getElementById('modal-note').style.display = 'none';
+        isEditing = false;
+        noteTargetBid = null;
+    }
+
+    function selectType(type, element) {
+        // Met à jour la valeur cachée
+        document.getElementById('selected-type').value = type;
+        
+        // Gère l'apparence des boutons
+        document.querySelectorAll('.extra-option').forEach(opt => opt.classList.remove('active'));
+        element.classList.add('active');
+    }
+
+    function changeQty(v) {
+        let input = document.getElementById('utensil-qty');
+        let newValue = parseInt(input.value) + v;
+        
+        // Limites : Entre 1 et 50
+        if (newValue >= 1 && newValue <= 50) {
+            input.value = newValue;
+        }
+    }
+
+    function resetFilter() {
+        currentLivreurFilter = null;
+        // On cache le bouton
+        const resetBtn = document.getElementById('btn-reset-view');
+        if (resetBtn) resetBtn.style.display = "none";
+        
+        // On enlève le mode "active" des casiers
+        document.querySelectorAll('.casier-card').forEach(c => c.classList.remove('active'));
+        
+        // On affiche à nouveau tout (ou on refresh)
+        refreshKDS(); 
+    }
+
+    setInterval(refreshKDS, {{ refresh_rate }} * 1000);
+</script>
+{% endblock %}

@@ -1,0 +1,25 @@
+{
+    "BAUD_RATE": 9600,
+    "PRINT_DELAY": 0.5,
+    "ENCODING_STANDARD": "latin-1",
+    "COMMANDS": {
+        "INIT": "1b40",
+        "FONT_BIG": "1b401b2114",
+        "FONT_NORMAL": "1b401b2100",
+        "CUT_PAPER": "1d5600",
+        "ALIGN_CENTER": "1b6101",
+        "BEEP": "1b07"
+    },
+    "DETECTION_PATTERNS": {
+        "BILL_ID": "Facture\\s*#?\\s*(\\d+)",
+        "TABLE_NAME": "Table\\s*:\\s*([^\\n\\r]+)",
+        "SERVER_NAME": "Serveur\\s*:\\s*([^\\n\\r]+)",
+        "TOTAL_AMOUNT": "TOTAL\\s*:\\s*([\\d,.]+)"
+    },
+    "TICKET_SETTINGS": {
+        "LINE_SPACING_BEFORE": 2,
+        "LINE_SPACING_AFTER": 3,
+        "CLEAN_EMPTY_LINES": true,
+        "AUTO_BEEP": true
+    }
+}

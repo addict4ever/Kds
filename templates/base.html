@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}KDS & Consultation{% endblock %}</title>
+    <style>
+        /* BASE & TYPO */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            background-color: #2c3e50; 
+            color: #ecf0f1; 
+        }
+        header { 
+            background-color: #34495e; 
+            color: white; 
+            padding: 10px 20px; 
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); 
+            display: flex; 
+            justify-content: space-between;
+            align-items: center;
+        }
+        nav a { 
+            color: white; 
+            margin-right: 25px; 
+            text-decoration: none; 
+            font-weight: 600; 
+            font-size: 1.1em; 
+        }
+        nav a:hover { 
+            text-decoration: underline; 
+            color: #3498db; 
+        }
+        .container { 
+            padding: 5px; 
+        }
+        h1 { 
+            border-bottom: 2px solid #3498db; 
+            padding-bottom: 5px; 
+            font-size: 1.8em; 
+            margin-bottom: 10px; 
+            color: #ecf0f1; 
+        }
+        h2 { 
+            border-bottom: 2px solid #5a7b9e; 
+            padding-bottom: 5px; 
+            font-size: 1.4em; 
+            margin-top: 15px; 
+            color: #f1c40f; 
+        }
+
+        /* ⭐ CARTE KDS (POST-IT) */
+        .kds-card { 
+            background-color: #34495e; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5); 
+            
+            /* Retiré la largeur fixe et la hauteur pour la grille */
+            overflow-y: auto; 
+            
+            padding: 15px; 
+            margin: 10px 0; 
+            border-left: 8px solid; 
+            
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-sizing: border-box; 
+        }
+        .kds-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.7);
+        }
+
+        /* STATUTS COULEURS (Fortes) */
+        .status-En-attente { border-left-color: #e67e22; } 
+        .status-En-cours { border-left-color: #3498db; } 
+        .status-Traitée { border-left-color: #27ae60; opacity: 0.7; } 
+        .status-Annulée { border-left-color: #e74c3c; opacity: 0.5; } 
+
+        /* CONTENU DE LA COMMANDE */
+        .kds-card h3 { 
+            color: #f1c40f; 
+            margin-top: 0; 
+            font-size: 1.3em; 
+            border-bottom: 1px dashed #5a7b9e; 
+            padding-bottom: 5px;
+        }
+        .kds-card h4 { 
+            color: #bdc3c7; 
+            font-size: 1.1em; 
+            margin-top: 10px; 
+            margin-bottom: 5px; 
+        }
+        .order-item { margin-left: 10px; font-style: italic; color: #ecf0f1; font-size: 0.95em; }
+        .order-item strong { color: #95a5a6; } 
+        .order-item span { color: #bdc3c7; } 
+        
+        .note-content { 
+            margin-top: 10px; 
+            padding: 8px; 
+            background-color: #f39c12; 
+            border-radius: 5px; 
+            color: #2c3e50; 
+            font-weight: bold;
+        }
+        
+        /* NOUVEAU: Conteneur de grille pour les cartes (3 colonnes) */
+        .kds-cards-grid {
+            display: grid;
+            /* Crée 3 colonnes responsives d'au moins 300px chacune */
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+            gap: 20px; /* Espace entre les cartes */
+            padding: 10px 0;
+        }
+        /* Assure que la colonne de service prend toute la largeur pour le grid interne */
+        .service-column {
+            width: 100%;
+            padding: 0 5px; 
+            box-sizing: border-box;
+        }
+        .clearfix::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
+
+        /* ACTIONS (Boutons pour tablette) */
+        .action-button { 
+            padding: 12px 20px; 
+            margin-top: 10px; 
+            cursor: pointer; 
+            border: none; 
+            border-radius: 6px; 
+            color: white; 
+            font-weight: bold;
+            font-size: 1em; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            transition: background-color 0.2s;
+            width: 100%; 
+            box-sizing: border-box; 
+        }
+        .btn-start { 
+            background-color: #2980b9; 
+        } 
+        .btn-start:hover { background-color: #3498db; }
+        .btn-complete { 
+            background-color: #2ecc71; 
+        } 
+        .btn-complete:hover { background-color: #27ae60; }
+        
+        .btn-close { 
+            background-color: #e74c3c; 
+        }
+        .btn-close:hover { background-color: #c0392b; }
+        
+        /* Style pour le nouveau bouton de suppression définitive */
+        .btn-delete {
+            background-color: #c0392b; /* Rouge plus foncé pour la suppression définitive */
+        }
+        .btn-delete:hover {
+            background-color: #922b21;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .fullscreen-button {
+            padding: 8px 15px;
+            background-color: #e67e22; 
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            white-space: nowrap; 
+        }
+        .fullscreen-button:hover {
+            background-color: #d35400;
+        }
+
+        /* ---------------- CONSULTATION STYLES ---------------- */
+        .search-form { background-color: #34495e; padding: 15px; border-radius: 8px; margin-bottom: 20px; color: #ecf0f1;}
+        .search-form input, .search-form button { padding: 8px; margin-right: 10px; border-radius: 4px; border: 1px solid #5a7b9e; background-color: #2c3e50; color: #ecf0f1;}
+        .archive-table { width: 100%; border-collapse: collapse; margin-top: 15px;}
+        .archive-table th, .archive-table td { border: 1px solid #5a7b9e; padding: 10px; text-align: left;}
+        .archive-table th { background-color: #34495e; color: #f1c40f;}
+        .archive-table tr:nth-child(even) { background-color: #34495e; }
+        .archive-table tr:nth-child(odd) { background-color: #2c3e50; }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    {% block header %}
+    <header id="main-header">
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="fullscreen-button" id="fullscreen-btn" onclick="toggleFullScreen()">
+                Plein Écran
+            </button>
+
+            <button class="fullscreen-button" style="background-color: #27ae60;" onclick="window.location.reload();">
+                🔄 Refresh
+            </button>
+
+            <button class="fullscreen-button" style="background-color: #e74c3c;" onclick="confirmResetAll()">
+                ⚠️ RESET ALL
+            </button>
+        </div>
+    </header>
+    {% endblock %}
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <div id="custom-confirm-modal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); align-items: center; justify-content: center;">
+        <div style="background: #1a1a1a; border: 2px solid #3498db; border-radius: 20px; padding: 30px; width: 90%; max-width: 500px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+            <div style="font-size: 50px; margin-bottom: 20px;">⚠️</div>
+            <h2 style="color: #fff; margin-bottom: 15px; border: none;">Confirmation Requise</h2>
+            <p style="color: #bdc3c7; font-size: 1.1rem; line-height: 1.5; margin-bottom: 30px;">
+                Voulez-vous vraiment effacer <strong style="color: #e74c3c;">TOUTES</strong> les commandes ? <br>
+                <span style="font-size: 0.9rem;">(Cette action videra aussi les tickets grisés)</span>
+            </p>
+            
+            <div style="display: flex; gap: 15px;">
+                <button onclick="closeConfirmModal()" style="flex: 1; padding: 15px; border-radius: 12px; border: none; background: #34495e; color: white; font-weight: bold; cursor: pointer; font-size: 1rem;">
+                    ANNULER
+                </button>
+                <button onclick="executeResetAll()" style="flex: 1; padding: 15px; border-radius: 12px; border: none; background: #e74c3c; color: white; font-weight: bold; cursor: pointer; font-size: 1rem; box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);">
+                    OUI, TOUT EFFACER
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function toggleFullScreen() {
+            const isFullScreen = document.fullscreenElement;
+            if (!isFullScreen) {
+                // Demander le plein écran et sauvegarder l'état
+                document.documentElement.requestFullscreen().then(() => {
+                    localStorage.setItem('kds_fullscreen', 'true');
+                }).catch(err => {
+                    console.error(`Erreur lors de l'activation du mode plein écran: ${err.message}`);
+                });
+            } else {
+                // Quitter le plein écran et sauvegarder l'état
+                document.exitFullscreen().then(() => {
+                    localStorage.setItem('kds_fullscreen', 'false');
+                });
+            }
+        }
+
+        function confirmResetAll() {
+            document.getElementById('custom-confirm-modal').style.display = 'flex';
+        }
+
+        // 2. Ferme le modal si on annule
+        function closeConfirmModal() {
+            document.getElementById('custom-confirm-modal').style.display = 'none';
+        }
+
+        // 3. Exécute la suppression si on confirme
+        function executeResetAll() {
+            // On ferme le modal visuellement
+            closeConfirmModal();
+
+            // On vide la mémoire locale (grisage)
+            localStorage.removeItem('delivered_orders');
+
+            // Appel au serveur
+            fetch('/reset_all_commandes', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload(); 
+                } else {
+                    alert("Erreur serveur.");
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                window.location.reload();
+            });
+        }
+        
+        function checkFullScreenStateOnLoad() {
+            // Tente d'activer le plein écran si l'état n'a pas été explicitement désactivé
+            if (localStorage.getItem('kds_fullscreen') !== 'false' && window.location.pathname.includes('kds')) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.warn("L'activation automatique du plein écran a été bloquée. Veuillez cliquer sur le bouton.");
+                });
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            const btn = document.getElementById('fullscreen-btn');
+            const header = document.getElementById('main-header');
+            const isFullScreen = document.fullscreenElement;
+            
+            // Met à jour l'état dans le local storage
+            localStorage.setItem('kds_fullscreen', isFullScreen ? 'true' : 'false');
+            
+            if (btn) {
+                btn.textContent = isFullScreen ? 'Quitter Plein Écran (ESC)' : 'Plein Écran';
+            }
+            
+            // Masque la barre d'en-tête lorsque l'on est en mode plein écran
+            if (header) {
+                header.style.display = isFullScreen ? 'none' : 'flex';
+            }
+            
+            // Déclenche le défilement après que le plein écran soit actif
+            if (isFullScreen && typeof scrollToLastOrder === 'function') {
+                setTimeout(scrollToLastOrder, 50);
+            }
+        });
+        
+        window.addEventListener('load', checkFullScreenStateOnLoad);
+    </script>
+</body>
+</html>

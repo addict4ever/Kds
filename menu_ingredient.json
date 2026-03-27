@@ -1,0 +1,44 @@
+{
+    "couleurs_tags": {
+        "sauce": {"color": "#ff9f43", "keywords": ["MAYONNAISE", "SAUCE", "PESTO", "ITALIENNE", "VINAIGRETTE", "MAYO", "CÉSAR", "TARTARE"]},
+        "jaune": {"color": "#f1c40f", "keywords": ["FROMAGE", "FETA", "SUISSE", "FONDU", "CHEDDAR", "PARMESAN", "BEURRE", "AIL"]},
+        "viande": {"color": "#ff7675", "keywords": ["STEAK", "BACON", "PEPPERONI", "JAMBON", "MIGNON", "FILET"]},
+        "mer": {"color": "#00d2d3", "keywords": ["CREVETTES", "LANGOUSTINES", "SOLE", "POISSON", "FISH", "MER"]},
+        "legume": {"color": "#55efc4", "keywords": ["SALADE", "TOMATE", "OIGNON", "PIMENT", "OLIVE", "CHAMPIGNON", "LAITUE", "CORNICHON", "ORIGAN", "CONCOMBRE", "CHOU", "BETTERAVE", "LUZERNE", "CITRON", "CÂPRES"]},
+        "gris": {"color": "#dfe6e9", "keywords": ["RIZ", "FRITES", "CROÛTONS", "LÉGUMES"]},
+        "brun": {"color": "#ccae62", "keywords": ["PATATE", "ANCIENNES"]}
+    },
+    "categories": {
+        "🍔 BURGERS": {
+            "LE CLASSIQUE": "MAYONNAISE, Fromage Suisse, Tomates, Salade, Oignons, Cornichons, Bacon",
+            "LE MEXICAIN": "MAYONNAISE JALAPEÑO, Fromage Suisse, Piments Verts, Oignons Rouges, Tomates, Salade",
+            "4 FROMAGES": "MAYONNAISE CITRONNÉE POIVRÉE, Fromages, Salade, Tomates, Oignons",
+            "A LA GRECQUE": "MAYONNAISE PESTO, Fromage FETA, Oignons Rouges, Olives Noires, Salade, Tomates"
+        },
+        "🍕 PIZZAS": {
+            "LA GRECQUE": "Sauce Tomate, Fromage, Feta, Olives Noires, Oignons Rouges, Tomates, Origan",
+            "LA GARNIE": "Sauce Tomate, Fromage, Pepperoni, Champignons, Piments Verts"
+        },
+        "🥖 SOUS-MARINS": {
+            "MAISON": "Jambon, Tomates, Bacon, Pepperoni, Fromage, Salade",
+            "ITALIEN": "Cornichons, Oignons, Piments, Pepperoni, Fromage"
+        },
+        "🥗 SALADES": {
+            "SALADE CÉSAR": "Laitue Romaine, Croûtons, Bacon, Fromage Parmesan, Câpres, Sauce César",
+            "SALADE DU CHEF": "Laitue, Tomates, Concombres, Oignons, Chou Rouge, Betteraves, Luzerne, 1 pot de Mayonnaise, Vinaigrette Chef"
+        },
+        "🐟 POISSONS": {
+            "FILET DE SOLE": "Filet de Sole, Citron, Frites, Légumes, Sauce Tartare, Salade du Chef",
+            "FISH AND CHIPS": "Poisson Pané, Sauce Tartare, Citron, Frites, Salade du Chef"
+        },
+        "🦐 FRUITS DE MER": {
+            "ASSIETTE CREVETTES": "Crevettes à l'Ail (12), Beurre à l'Ail, Citron, Riz, Patates Anciennes, Salade César",
+            "ASSIETTE LANGOUSTINES": "Langoustines (8), Beurre à l'Ail, Citron, Riz, Patates Anciennes, Salade César"
+        },
+        "🥩 GRILLADES": {
+            "F. MIGNON & LANGOUSTINES": "Filet Mignon, 4 Langoustines, Riz, Patates Anciennes, Beurre à l'Ail, Salade César",
+            "F. MIGNON & CREVETTES": "Filet Mignon, 6 Crevettes à l'Ail, Riz, Patates Anciennes, Beurre à l'Ail, Salade César",
+            "TRIO MER ET TERRE": "Filet Mignon, 3 Crevettes, 3 Langoustines, Riz, Patates Anciennes, Beurre à l'Ail, Salade César"
+        }
+    }
+}

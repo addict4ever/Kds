@@ -1,0 +1,10 @@
+{
+    "tcp_config": {
+        "SERIAL_PORT_TCP_1": "0.0.0.0",
+        "SERIAL_PORT_TCP_1_PORT": 9100,
+        "SERIAL_TCP_PRINTER_1": "16.16.16.100",
+        "SERIAL_TCP_PRINTER_1_PORT": 9200,
+        "SERIAL_TCP_COMPUTER_1":"127.0.0.1",
+        "SERIAL_TCP_COMPUTER_PORT_1":9200 
+    }
+}

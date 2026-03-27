@@ -1,0 +1,1233 @@
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-2">
+    <div id="custom-toast" style="display:none; position:fixed; top:20px; right:20px; background:#2ecc71; color:white; padding:20px; border-radius:10px; z-index:10000; font-size:20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 2px solid #fff;">
+        <span id="toast-message"></span>
+    </div>
+    <div class="search-bar p-3 bg-dark rounded-3 shadow-lg">
+        <form method="GET" action="/kds" class="row g-3 align-items-center">
+            <div class="col-12 col-xl-6">
+                <input type="text" name="search" class="form-control touch-element-xxl" 
+                    style="background-color: #f8f9fa;"
+                    placeholder="🔍 Rechercher..." value="{{ search_query }}">
+            </div>
+
+            <div class="col-12 col-md-6 col-xl-3">
+                <button type="submit" class="btn btn-white-touch w-100 touch-element-xxl">
+                    RECHERCHER
+                </button>
+            </div>
+
+            <div class="col-12 col-md-6 col-xl-3">
+                <a href="/kds" class="btn btn-white-touch w-100 touch-element-xxl">
+                    RESET FILTRE
+                </a>
+            </div>
+
+            <div class="col-12 d-flex align-items-center mt-3">
+                <div class="form-check form-switch d-flex align-items-center">
+                    <input class="form-check-input" type="checkbox" name="show_all" id="showAllCheck" value="1" checked 
+                        style="width: 80px; height: 40px; cursor: pointer;" 
+                        {% if show_all %}checked{% endif %} onchange="this.form.submit()">
+                    <label class="form-check-label text-warning fw-bold fs-2 ms-3" for="showAllCheck">
+                        VOIR TOUT
+                    </label>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    
+
+    <div class="row"id="kds-ajax-zone">
+        {% for bid, item in livraisons.items() %}
+        <div class="kds-column order-wrapper" data-livreur="{{ item.livreur if item.livreur else '' }}"
+             style="display: {{ 'block' if (not item.livreur or show_all) else 'none' }};">
+            
+            <div class="kds-card {{ 'assigned' if item.livreur }} {{ 'collapsed' if item.collapsed or not item.is_new }}" id="order-{{ bid }}">
+                <div class="card-header d-flex justify-content-between align-items-center" onclick="toggleView('{{ bid }}')">
+                    <span>
+                        {% set ns = namespace(found_no="", address="", phone="") %}
+                        
+                        {% for raw_it in item.data['items'] %}
+                            {% set it = raw_it | from_json %}
+                            {% set main = (it.main_item|string).replace('@', '').replace(' ', '')|trim %}
+
+                            {# 1. Logique Livraison #}
+                            {% if "LIVRAISON #" in (it.main_item|upper) %}
+                                {% set ns.found_no = it.main_item.split('#')[1]|trim %}
+                            {% endif %}
+
+                            {# 2. Logique Adresse : Si main_item est un numéro (ex: 37 ou 1083) #}
+                            {% if main|length > 0 and main|int(-1) != -1 and ns.address == "" %}
+                                {% if it.sub_items|length >= 1 %}
+                                    {% set ns.address = it.main_item.replace('@', '')|trim ~ " " ~ it.sub_items[0] %}
+                                {% endif %}
+                            {% endif %}
+
+                            {# 3. Logique Téléphone : Scan des sub_items #}
+                            {% if it.sub_items %}
+                                {% for sub in it.sub_items %}
+                                    
+                                    {# On garde seulement les chiffres #}
+                                    {% set clean = sub | regex_replace('[^0-9]', '') %}
+                                    
+                                    {# Numéro canadien standard #}
+                                    {% if clean|length == 10 %}
+                                        {% set ns.phone = clean[0:3] ~ '-' ~ clean[3:6] ~ '-' ~ clean[6:10] %}
+                                    {% endif %}
+
+                                    {# Vérif livraison dans sub_items au cas où #}
+                                    {% if "LIVRAISON #" in sub|upper %}
+                                        {% set ns.found_no = sub.split('#')[1]|trim %}
+                                    {% endif %}
+                                    
+                                {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+
+                        <div>
+                            <strong>LIVRAISON :</strong> {{ ns.found_no if ns.found_no != "" else "???" }}<br>
+                            <strong>Adresse :</strong> {{ ns.address if ns.address != "" else "Non disponible" }}<br>
+                            <strong>Tél :</strong> {{ ns.phone if ns.phone != "" else "Non disponible" }}
+                        </div>
+                    </span>
+                    
+                    <span>{{ '➕' if item.collapsed else '➖' }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        
+                        <div id="timer-{{ bid }}" class="fw-bold text-center" 
+                            style="color: #ffff00; font-size: 1.8rem; margin-bottom: 10px; text-shadow: 2px 2px 4px #000;"
+                            data-start="{{ item.depart_at if item.depart_at else '' }}">
+                        </div>
+                        
+
+                        <div class="d-flex flex-column mt-2 mb-3">
+                            <div class="extras-row d-flex justify-content-between mb-2">
+                                <div id="btn-heure-{{ bid }}" 
+                                    class="extra-box {% if item.extras.desired_time != 'HEURE' %}extra-selected{% endif %}" 
+                                    onclick="openTimePicker('{{ bid }}')">
+                                    {{ item.extras.desired_time if item.extras.desired_time else 'HEURE' }}
+                                </div>
+
+                                <div id="btn-ust-{{ bid }}" 
+                                    class="extra-box {% if item.extras.utensils != 'UST' %}extra-selected{% endif %}" 
+                                    onclick="showUtensilPicker('{{ bid }}')">
+                                    {{ item.extras.utensils if item.extras.utensils else 'UST' }}
+                                </div>
+
+                                <div id="btn-note-{{ bid }}" 
+                                    class="extra-box {% if item.extras.custom_note != 'NOTE' %}extra-selected{% endif %}" 
+                                    onclick="showNoteModal('{{ bid }}')">
+                                    {{ item.extras.custom_note if item.extras.custom_note else 'NOTE' }}
+                                </div>
+                            </div>
+
+                            <div class="sauce-row mb-2">
+                                <div id="btn-sauce-{{ bid }}" 
+                                    class="extra-box w-100 {% if item.extras.sauces %}extra-selected-sauce{% endif %}" 
+                                    style="text-align: center; justify-content: center;"
+                                    onclick="showSauceModal('{{ bid }}')">
+                                    {{ item.extras.sauces if item.extras.sauces else '🥫 SAUCES' }}
+                                </div>
+                            </div>
+
+                            <button id="ok-{{ bid }}" class="btn btn-success w-100 mt-2 fw-bold" 
+                                    style="display:none; height: 50px; font-size: 1.2rem;" 
+                                    onclick="sendAllExtras('{{ bid }}')">
+                                ✅ ENREGISTRER (OK)
+                            </button>
+
+                            <button id="btn-assign-{{ bid }}" 
+                                    class="btn btn-white-touch w-100 mt-2 touch-element-xxl" 
+                                    style="border: 2px solid #00d2ff !important; color: #00d2ff !important; background: #000 !important;">
+                                {{ item.livreur if item.livreur else '👤 ASSIGNER LIVREUR' }}
+                            </button>
+
+                            <button class="btn btn-danger w-100 mt-2 fw-bold touch-element-xxl" 
+                                    style="height: 60px; font-size: 1.2rem; border: 2px solid #fff; background-color: #dc3545 !important;"
+                                    onclick="confirmTraitee('{{ bid }}')">
+                                ✅ MARQUER TRAITÉE
+                            </button>
+
+                        </div>
+
+                        <span class="text-white fs-6">📍 {{ item.data.address or 'En salle' }}</span>
+                    </div>
+
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for raw_it in item.data['items'] %}
+                            {% set it = raw_it | from_json %}
+                            <li class="list-group-item">
+                                {# Affiche l'item s'il est au format dictionnaire #}
+                                {% if it is mapping and it.main_item is defined %}
+                                    <div class="item-main">{{ it.main_item }}</div>
+                                    {% if it.sub_items %}
+                                    <ul class="sub-items-list">
+                                        {% for sub in it.sub_items %}<li>• {{ sub }}</li>{% endfor %}
+                                    </ul>
+                                    {% endif %}
+                                {# Affiche l'item si c'est du texte simple #}
+                                {% else %}
+                                    <div class="item-main">{{ it }}</div>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+
+                    
+
+                    {% if item.livreur %}
+                    
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div id="custom-confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:20000; justify-content:center; align-items:center;">
+    <div style="background:#222; border:3px solid #dc3545; border-radius:15px; padding:30px; width:90%; max-width:500px; text-align:center; color:white; box-shadow: 0 0 30px rgba(220, 53, 69, 0.5);">
+        <h2 style="font-size: 2rem; margin-bottom: 20px;">⚠️ CONFIRMATION</h2>
+        <p id="confirm-text" style="font-size: 1.5rem; margin-bottom: 30px;">Voulez-vous marquer cette commande comme TRAITÉE ?</p>
+        
+        <div class="d-flex gap-3">
+            <button id="confirm-yes" class="btn btn-danger flex-grow-1 fw-bold" style="height:80px; font-size:1.5rem;">OUI, TERMINER</button>
+            <button id="confirm-no" class="btn btn-secondary flex-grow-1 fw-bold" style="height:80px; font-size:1.5rem;">ANNULER</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-utensils" style="display:none; position:fixed; z-index:9999; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%; ">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:25px; border-radius:30px; min-width:500px; box-shadow: 0 0 50px rgba(0, 210, 255, 0.2);">
+        
+        <h2 class="text-white text-center mb-4" style="font-weight: 800; letter-spacing: 2px;">EXTRAS LIVRAISON</h2>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 25px;">
+            <div class="extra-option" onclick="selectType('ASSIETTE UST BEURRE', this)">ASSIETTE UST BEURRE</div>
+            <div class="extra-option" onclick="selectType('ASSIETTE UST', this)">ASSIETTE UST</div>
+            <div class="extra-option" onclick="selectType('ASS', this)">ASS</div>
+            <div class="extra-option active" onclick="selectType('UST', this)">UST</div>
+            <div class="extra-option" onclick="selectType('BEURRE', this)">BEURRE</div>
+            <div class="extra-option" onclick="selectType('VERRE', this)">VERRE</div>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-center gap-4 mb-4" style="background: #000; padding: 20px; border-radius: 20px; border: 1px solid #333;">
+            <button class="btn-qty" onclick="changeQty(-1)">-</button>
+            <div style="text-align: center;">
+                <input type="number" id="utensil-qty" value="1" min="1" max="50" readonly
+                    style="width: 100px; text-align: center; font-size: 3.5rem; background: none; color: #00d2ff; border: none; font-weight: 900;">
+                <div style="color: #666; font-size: 0.8rem; text-transform: uppercase;">Maximum 50</div>
+            </div>
+            <button class="btn-qty" onclick="changeQty(1)">+</button>
+        </div>
+
+        <input type="hidden" id="selected-type" value="UST">
+
+        <div class="d-flex gap-3">
+            <button class="btn btn-primary btn-lg w-100 touch-element-xxl" onclick="saveUtensils()" 
+                style="background: #00d2ff !important; border: none; font-size: 1.6rem; border-radius: 20px;">
+                VALIDER
+            </button>
+            <button class="btn btn-danger btn-close-large" onclick="document.getElementById('modal-utensils').style.display='none'">X</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-time" style="display:none; position:fixed; z-index:10002; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%;">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:30px; border-radius:30px; min-width:380px; box-shadow: 0 0 50px rgba(0, 210, 255, 0.3);">
+        
+        <h2 class="text-white text-center mb-4" style="font-weight: 800;">HEURE DÉSIRÉE</h2>
+        
+        <div id="time-display" class="display-time">____</div>
+
+        <div class="numpad-container">
+            <div class="numpad-btn" onclick="pressKey('1')">1</div>
+            <div class="numpad-btn" onclick="pressKey('2')">2</div>
+            <div class="numpad-btn" onclick="pressKey('3')">3</div>
+            <div class="numpad-btn" onclick="pressKey('4')">4</div>
+            <div class="numpad-btn" onclick="pressKey('5')">5</div>
+            <div class="numpad-btn" onclick="pressKey('6')">6</div>
+            <div class="numpad-btn" onclick="pressKey('7')">7</div>
+            <div class="numpad-btn" onclick="pressKey('8')">8</div>
+            <div class="numpad-btn" onclick="pressKey('9')">9</div>
+            <div class="numpad-btn" onclick="pressKey('.')">.</div>
+            <div class="numpad-btn" onclick="pressKey('0')">0</div>
+            <div class="numpad-btn btn-del" onclick="pressKey('BACK')">⌫</div>
+        </div>
+
+        <div class="d-flex gap-3 mt-4">
+            <button class="btn btn-primary btn-lg w-100 touch-element-xxl" onclick="confirmTime()" 
+                style="background: #00d2ff !important; border: none; font-size: 1.6rem;">VALIDER</button>
+            <button class="btn btn-danger btn-close-large" onclick="closeTimeModal()">X</button>
+        </div>
+    </div>
+</div>
+
+
+<div id="modal-note" style="display:none; position:fixed; z-index:10001; background: rgba(0,0,0,0.85); top:0; left:0; width:100%; height:100%; ">
+    <div style="position:absolute; top:45%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:30px; border-radius:25px; text-align:center; min-width:550px; box-shadow: 0 0 40px rgba(0, 210, 255, 0.3);">
+        
+        <div style="font-size: 3rem; margin-bottom: 10px;">📝</div>
+        <h2 class="text-white mb-4" style="font-weight: 800; letter-spacing: 1px;">AJOUTER UNE NOTE</h2>
+        
+        <textarea id="note-textarea" class="form-control mb-2" rows="5" 
+            maxlength="100"
+            oninput="handleNoteInput(this)"
+            onkeydown="handleNoteKeydown(event)"
+            style="background: #000; color: #fff; border: 2px solid #333; border-radius: 15px; font-size: 1.6rem; padding: 20px; text-align: center; resize: none; overflow: hidden; line-height: 1.4;"
+            placeholder="Tapez votre instruction ici..."></textarea>
+        
+        <div id="char-count" style="color: #00d2ff; font-weight: bold; margin-bottom: 15px; text-align: right; font-size: 1.2rem; padding-right: 10px;">
+            0/100
+        </div>
+        
+        <div class="d-flex gap-3">
+            <button id="btn-confirm-note" class="btn btn-lg btn-primary w-100 touch-element-xxl" onclick="confirmNote()" 
+                style="background: #00d2ff !important; border: none; font-size: 1.6rem; font-weight: bold; height: 70px;">
+                VALIDER (ENTRÉE)
+            </button>
+            <button class="btn btn-danger btn-close-large" onclick="closeNoteModal()" style="font-size: 1.6rem; min-width: 80px;">X</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-sauces" style="display:none; position:fixed; z-index:10002; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%;">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #f1c40f; padding:25px; border-radius:25px; text-align:center; width:90%; max-width:650px; box-shadow: 0 0 50px rgba(241, 196, 15, 0.2);">
+        
+        <h2 class="text-white mb-4" style="font-weight: 800;">🥫 SACHETS & SAUCES</h2>
+        
+        <div id="sauce-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; max-height: 400px; overflow-y: auto; padding: 10px;">
+            </div>
+
+        <div id="sauce-summary" style="background: #000; color: #f1c40f; padding: 15px; border-radius: 15px; font-size: 1.2rem; margin-bottom: 20px; min-height: 50px; border: 1px dashed #333;">
+            Sélectionnez vos sachets...
+        </div>
+        
+        <div class="d-flex gap-3">
+            <button class="btn btn-lg btn-success w-100" onclick="confirmSauces()" style="height: 70px; font-size: 1.5rem; font-weight: bold;">✅ VALIDER</button>
+            <button class="btn btn-lg btn-warning" onclick="resetSauces()" style="height: 70px; font-size: 1.2rem;">🔄 RESET</button>
+            <button class="btn btn-lg btn-danger" onclick="closeSauceModal()" style="height: 70px; width: 80px; font-size: 1.5rem;">X</button>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+    let currentBid = null;
+    let isEditing = false; 
+    let currentLivreurFilter = null; // ⭐ On stocke le livreur sélectionné ici
+    let pendingBid = null; // Stocke l'ID en attente de confirmation
+    let lastHtmlContent = ""; // Pour éviter de clignoter si rien ne change
+    let tempExtras = {}; // Stockage temporaire avant le OK
+    let noteTargetBid = null; // Variable globale pour stocker le BID en cours
+    let timeInputBuffer = ""; // Stocke les chiffres tapés
+    let isModalOpen = false;
+    let timeTargetBid = null;
+    let assignTargetBid = null;
+    let sauceTargetBid = null;
+    let selectedSauces = {};
+    let currentBidToProcess = null;
+
+    const SAUCE_LIST = [
+        { id: 'KETCHUP', name: 'Ketchup', icon: '🍅' },
+        { id: 'MAYO', name: 'Mayo', icon: '🥚' },
+        { id: 'VINAIGRE', name: 'Vinaigre', icon: '🧪' },
+        { id: 'BEURRE', name: 'Beurre', icon: '🧈' },
+        { id: 'MIEL', name: 'Miel', icon: '🍯' },
+        { id: 'AIGRE-DOUCE', name: 'Aigre-Douce', icon: '🍱' },
+        { id: 'MOUTARDE', name: 'Moutarde', icon: '🌭' },
+        { id: 'BBQ', name: 'Sauce BBQ', icon: '🔥' },
+        { id: 'PRUNE', name: 'Sauce Prune', icon: '🟣' }
+    ];
+
+
+    if (!sessionStorage.getItem('session_active')) {
+        localStorage.removeItem('delivered_orders');
+        sessionStorage.setItem('session_active', 'true');
+        console.log("Nouvelle session détectée : Cache des commandes grisées vidé.");
+    }
+
+    function refreshKDS() {
+        // 1. DÉTECTION DES MODALES OUVERTES
+        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm', '#modal-sauces', '#modal-time'];
+        const isModalOpen = modals.some(selector => {
+            const modal = document.querySelector(selector);
+            return modal && modal.style.display === 'block';
+        });
+
+        // 2. VÉRIFICATION DE L'ACTIVITÉ UTILISATEUR
+        const activeEl = document.activeElement;
+        const isUserTyping = (
+            activeEl.tagName === 'INPUT' || 
+            activeEl.tagName === 'SELECT' || 
+            activeEl.tagName === 'TEXTAREA' ||
+            activeEl.isContentEditable
+        );
+
+        // 3. BLOCAGE DU REFRESH
+        if (isModalOpen || isUserTyping || (typeof isEditing !== 'undefined' && isEditing)) {
+            console.log("⚠️ Refresh suspendu : Modale ouverte ou saisie en cours...");
+            return;
+        }
+
+        // 4. LOGIQUE DE RAFRAÎCHISSEMENT (Fetch)
+        fetch(window.location.href)
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                const newKds = doc.getElementById('kds-ajax-zone');
+                const newCasiers = doc.getElementById('casiers-ajax-zone');
+                const currentKdsZone = document.getElementById('kds-ajax-zone');
+                
+                if (newKds && currentKdsZone && newKds.innerHTML !== currentKdsZone.innerHTML) {
+                    
+                    // --- LOGIQUE SONORE ---
+                    const currentCount = currentKdsZone.querySelectorAll('.kds-card').length;
+                    const newCount = newKds.querySelectorAll('.kds-card').length;
+                    if (newCount > currentCount) {
+                        if (typeof playNewOrderSound === 'function') playNewOrderSound();
+                    }
+
+                    // ⭐ SAUVEGARDE PRÉCISE DES ÉTATS (Ouvert/Fermé)
+                    const stateMap = {};
+                    document.querySelectorAll('.kds-card').forEach(card => {
+                        stateMap[card.id] = card.classList.contains('collapsed');
+                    });
+
+                    // Remplacement du contenu
+                    currentKdsZone.innerHTML = newKds.innerHTML;
+                    if (newCasiers) {
+                        document.getElementById('casiers-ajax-zone').innerHTML = newCasiers.innerHTML;
+                    }
+
+                    // ⭐ RESTAURATION FORCÉE DES ÉTATS
+                    Object.keys(stateMap).forEach(id => {
+                        const card = document.getElementById(id);
+                        if (card) {
+                            const headerSpan = card.querySelector('.card-header span:last-child');
+                            if (stateMap[id]) {
+                                // Si elle était fermée, on s'assure qu'elle le reste
+                                card.classList.add('collapsed');
+                                if (headerSpan) headerSpan.innerText = '➕';
+                            } else {
+                                // ⭐ SI ELLE ÉTAIT OUVERTE, ON FORCE L'OUVERTURE
+                                // (Cela annule le "collapsed" automatique du serveur pour les anciennes commandes)
+                                card.classList.remove('collapsed');
+                                if (headerSpan) headerSpan.innerText = '➖';
+                            }
+                        }
+                    });
+
+                    // Ré-appliquer les filtres
+                    if (typeof currentLivreurFilter !== 'undefined') {
+                        applyFilter(currentLivreurFilter);
+                    }
+
+                    if (typeof updateTimers === 'function') updateTimers();
+
+                    // --- RESTAURATION DES SAISIES LOCALES ---
+                    if (typeof tempExtras !== 'undefined') {
+                        Object.keys(tempExtras).forEach(bid => {
+                            const extras = tempExtras[bid];
+                            
+                            if (extras.desired_time) updateVisualOnly(bid, 'btn-heure-', extras.desired_time);
+                            if (extras.utensils) updateVisualOnly(bid, 'btn-ust-', extras.utensils);
+                            if (extras.custom_note) updateVisualOnly(bid, 'btn-note-', extras.custom_note);
+                            
+                            // ⭐ SAUCES : Restauration avec l'émoji et la couleur
+                            if (extras.sauces) {
+                                const sauceBtn = document.getElementById('btn-sauce-' + bid);
+                                if (sauceBtn) {
+                                    if (extras.sauces.trim() !== "" && extras.sauces !== 'SAUCES') {
+                                        sauceBtn.innerText = "🥫 " + extras.sauces;
+                                        sauceBtn.classList.add('extra-selected-sauce');
+                                    } else {
+                                        sauceBtn.innerText = "🥫 SAUCES";
+                                        sauceBtn.classList.remove('extra-selected-sauce');
+                                    }
+                                }
+                            }
+                            
+                            const okBtn = document.getElementById('ok-' + bid);
+                            if (okBtn) okBtn.style.display = 'block';
+                            
+                            const card = document.getElementById('order-' + bid);
+                            if (card) card.classList.add('flash-mauve');
+                        });
+                    }
+
+                    // Restaurer les flash mauve persistants
+                    let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+                    modifiedOrders.forEach(bid => {
+                        const card = document.getElementById('order-' + bid);
+                        if (card) card.classList.add('flash-mauve');
+                    });
+
+                    // Appliquer le visuel "Livré"
+                    let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
+                    deliveredOrders.forEach(bid => {
+                        if (typeof applyDeliveredVisual === 'function') applyDeliveredVisual(bid); 
+                    });
+                }
+            })
+            .catch(err => console.error("Erreur refresh KDS:", err));
+    }
+
+    // Écouteur global pour la touche Entrée (Validation finale du ticket)
+    document.addEventListener('keydown', function(event) {
+        if (event.key === "Enter") {
+            // 1. On vérifie si une modale (Note ou Heure) est ouverte. 
+            // Si oui, on laisse la modale gérer son propre "Enter".
+            const noteModal = document.getElementById('modal-note');
+            const timeModal = document.getElementById('modal-time');
+            const isNoteOpen = noteModal && noteModal.style.display === 'block';
+            const isTimeOpen = timeModal && timeModal.style.display === 'block';
+
+            if (isNoteOpen || isTimeOpen) return;
+
+            // 2. On cherche les boutons "ENREGISTRER (OK)" qui sont actuellement visibles
+            const visibleOkButtons = Array.from(document.querySelectorAll('[id^="ok-"]'))
+                                        .filter(btn => btn.style.display === 'block');
+
+            if (visibleOkButtons.length > 0) {
+                event.preventDefault(); // Empêche tout comportement bizarre du navigateur
+                // On clique sur le bouton de la facture modifiée
+                visibleOkButtons[0].click();
+            }
+        }
+    });
+
+    // Fonction helper pour le rendu visuel
+    function updateVisualOnly(bid, prefix, value) {
+        const el = document.getElementById(prefix + bid);
+        if (el) {
+            el.classList.add('extra-selected');
+            el.innerText = value;
+        }
+    }
+
+
+
+    // 1. Fonction qui ouvre la boîte de dialogue
+    function confirmTraitee(bid) {
+        const modal = document.getElementById('custom-confirm-modal');
+        if (!modal) {
+            // Fallback si la modal n'existe pas encore dans votre HTML
+            if (confirm("Marquer cette commande comme traitée ?")) {
+                executeTraitee(bid);
+            }
+            return;
+        }
+
+        modal.style.display = 'flex';
+
+        // On lie le clic sur "OUI" à l'exécution réelle
+        document.getElementById('confirm-yes').onclick = function() {
+            modal.style.display = 'none';
+            executeTraitee(bid);
+        };
+
+        document.getElementById('confirm-no').onclick = function() {
+            modal.style.display = 'none';
+        };
+    }
+
+    // 2. Fonction qui exécute l'appel API
+    function executeTraitee(bid) {
+        const cleanBid = String(bid).trim();
+
+        fetch(`/update_status_livraison/${cleanBid}`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // On cherche la carte visuelle (order-wrapper)
+                // On essaie par l'ID d'abord, sinon par le bouton cliqué
+                let card = document.getElementById('order-' + bid);
+                if (!card) {
+                    const btn = document.querySelector(`button[onclick*="'${bid}'"]`);
+                    card = btn ? btn.closest('.order-wrapper') : null;
+                }
+                
+                if (card) {
+                    card.style.transition = "all 0.5s ease";
+                    card.style.opacity = "0";
+                    card.style.transform = "scale(0.8) translateX(50px)";
+                    setTimeout(() => card.remove(), 500);
+                }
+                
+                if (window.showToast) showToast("Commande terminée !");
+            } else {
+                alert("Erreur : " + data.message);
+            }
+        })
+        .catch(err => {
+            console.error("Erreur Fetch:", err);
+            alert("Erreur de connexion au serveur");
+        });
+    }
+    
+    function updateTimers() {
+        document.querySelectorAll('[id^="timer-"]').forEach(timerDiv => {
+            // 1. Trouver la carte parente pour vérifier si elle est grisée
+            const bid = timerDiv.id.replace('timer-', '');
+            const card = document.getElementById('order-' + bid);
+
+            // ⭐ SI LE TICKET EST GRISÉ : On arrête le chrono (on ne change plus le texte)
+            if (card && card.classList.contains('order-delivered')) {
+                timerDiv.style.color = "#7f8c8d"; // Optionnel: mettre le temps figé en gris
+                return; // On sort de la boucle pour ce ticket précis
+            }
+
+            const startTimeStr = timerDiv.getAttribute('data-start');
+            
+            // Si pas d'heure de départ, on n'affiche rien
+            if (!startTimeStr || startTimeStr === "") {
+                timerDiv.innerText = ""; 
+                return;
+            }
+
+            const startTime = new Date(startTimeStr);
+            const now = new Date();
+            const diff = Math.floor((now - startTime) / 1000); // Différence en secondes
+
+            if (diff < 0) return;
+
+            const mins = Math.floor(diff / 60);
+            const secs = diff % 60;
+
+            // Affiche ⏳ 1:05 (Calculé seulement si non livré)
+            timerDiv.innerText = "⏳ " + mins + ":" + (secs < 10 ? "0" : "") + secs;
+            
+            // Alerte visuelle si trop long (ex: plus de 15 min)
+            if (mins >= 15) {
+                timerDiv.style.color = "#e74c3c"; // Rouge
+            }
+        });
+    }
+
+    // On lance le calcul toutes les secondes
+    setInterval(updateTimers, 1000);
+
+
+    
+
+    function applyDeliveredVisual(bid) {
+        const card = document.getElementById('order-' + bid);
+        if (!card) return;
+
+        // Appliquer le style grisé et bloquer les clics
+        card.classList.add('order-delivered');
+        card.style.pointerEvents = "none"; 
+        card.style.opacity = "0.5";
+        card.style.filter = "grayscale(1)";
+
+        // Cacher le bouton remettre (on utilise querySelector pour être sûr de le trouver)
+        const btnRemettre = card.querySelector('.btn-unassign');
+        if (btnRemettre) {
+            btnRemettre.style.setProperty('display', 'none', 'important');
+        }
+
+        // Modifier le bouton de validation
+        // Attention : vérifie que l'id dans ton HTML est bien btn-delivered-{{ bid }}
+        const btnDelivered = document.getElementById('btn-delivered-' + bid);
+        if (btnDelivered) {
+            btnDelivered.innerText = "LIVRÉE / TERMINÉE";
+            btnDelivered.style.backgroundColor = "#2c3e50";
+            btnDelivered.disabled = true;
+        }
+    }
+
+
+    function updateLocalExtra(bid, field, value) {
+        // 1. Déterminer le bon préfixe d'ID selon le champ modifié
+        let btnPrefix = '';
+        switch(field) {
+            case 'desired_time': btnPrefix = 'btn-heure-'; break;
+            case 'utensils':     btnPrefix = 'btn-ust-';   break;
+            case 'custom_note':  btnPrefix = 'btn-note-';  break;
+            case 'sauces':       btnPrefix = 'btn-sauce-'; break;
+            default:             btnPrefix = 'btn-' + field + '-';
+        }
+
+        const element = document.getElementById(btnPrefix + bid);
+        if (!element) return;
+
+        const oldText = element.innerText.trim();
+
+        // Si la valeur n'a pas changé, on ne fait rien
+        if (value === oldText) return;
+
+        // 2. Enregistrement dans l'objet temporaire avant envoi
+        if (!tempExtras[bid]) tempExtras[bid] = {};
+        tempExtras[bid][field] = value;
+        
+        // 3. Mise à jour visuelle du bouton
+        element.innerText = value;
+        
+        // Appliquer la classe de sélection (jaune pour sauces, bleu pour les autres)
+        if (field === 'sauces') {
+            element.classList.add('extra-selected-sauce');
+        } else {
+            element.classList.add('extra-selected');
+        }
+        
+        // 4. ⭐ Animation de pulsation mauve à la carte (Flash)
+        const card = document.getElementById('order-' + bid);
+        if (card) {
+            // On retire et remet la classe pour relancer l'animation si elle y était déjà
+            card.classList.remove('flash-mauve');
+            void card.offsetWidth; // Force le recalcul pour l'animation
+            card.classList.add('flash-mauve');
+        }
+        
+        // 5. Afficher le bouton vert "ENREGISTRER (OK)"
+        const okBtn = document.getElementById('ok-' + bid);
+        if (okBtn) {
+            okBtn.style.display = 'block';
+        }
+    }
+
+    function openLivreurModal(bid) {
+        assignTargetBid = bid;
+        isEditing = true; // Bloque le refresh auto de PyQt
+        document.getElementById('modal-livreur').style.display = 'block';
+    }
+
+    function closeLivreurModal() {
+        document.getElementById('modal-livreur').style.display = 'none';
+        isEditing = false;
+        assignTargetBid = null;
+    }
+
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('custom-toast');
+        const msgSpan = document.getElementById('toast-message');
+        
+        toast.style.background = isError ? "#e74c3c" : "#2ecc71"; // Rouge si erreur, Vert si succès
+        msgSpan.innerText = message;
+        
+        toast.style.display = 'block';
+        
+        // Disparaît après 3 secondes
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3000);
+    }
+
+    function confirmAssignation(nomLivreur) {
+        if (!assignTargetBid) return;
+        
+        // On réutilise votre logique d'assignation existante
+        fetch(`/assign_livreur/${assignTargetBid}/${nomLivreur}`, { method: 'POST' })
+        .then(response => {
+            if (response.ok) {
+                closeLivreurModal();
+                refreshKDS(); // Rafraîchit pour voir le changement
+            }
+        })
+        .catch(err => {
+            console.error("Erreur assignation:", err);
+            closeLivreurModal();
+        });
+    }
+
+    function openTimePicker(bid) {
+        timeTargetBid = bid;
+        timeInputBuffer = "";
+        isEditing = true;
+        document.getElementById('time-display').innerText = "____";
+        document.getElementById('modal-time').style.display = 'block';
+    }
+
+    function pressKey(key) {
+        if (key === 'BACK') {
+            timeInputBuffer = timeInputBuffer.slice(0, -1);
+        } else if (key === '.') {
+            // Optionnel : on peut ignorer le point ou l'utiliser comme séparateur
+            if (timeInputBuffer.length === 2 && !timeInputBuffer.includes(':')) {
+                timeInputBuffer += ":";
+            }
+        } else {
+            // Limite à 4 chiffres
+            if (timeInputBuffer.replace(':', '').length < 4) {
+                timeInputBuffer += key;
+                // Ajoute automatiquement le ":" après les 2 premiers chiffres (HH:MM)
+                if (timeInputBuffer.length === 2) {
+                    timeInputBuffer += ":";
+                }
+            }
+        }
+        
+        // Mise à jour de l'affichage
+        let display = timeInputBuffer;
+        while (display.length < 5) {
+            display += (display.length === 2) ? ":" : "_";
+        }
+        document.getElementById('time-display').innerText = display;
+    }
+
+    function confirmTime() {
+        // Validation simple du format HH:MM
+        if (timeInputBuffer.length === 5) {
+            updateLocalExtra(timeTargetBid, 'desired_time', timeInputBuffer);
+            closeTimeModal();
+        } else {
+            // Effet visuel d'erreur si incomplet
+            const disp = document.getElementById('time-display');
+            disp.style.color = 'red';
+            setTimeout(() => disp.style.color = '#00d2ff', 500);
+        }
+    }
+
+    function closeTimeModal() {
+        document.getElementById('modal-time').style.display = 'none';
+        isEditing = false;
+        timeTargetBid = null;
+    }
+
+    function showSauceModal(bid) {
+        sauceTargetBid = bid;
+        isEditing = true;
+        selectedSauces = {}; 
+
+        // --- NOUVEAU : Charger les quantités depuis le stockage temporaire ---
+        if (tempExtras[bid] && tempExtras[bid].sauces) {
+            const existingSauces = tempExtras[bid].sauces; // ex: "2 KETCHUP, 1 MAYO"
+            
+            // On sépare par virgule puis par espace pour retrouver les chiffres
+            existingSauces.split(',').forEach(part => {
+                const cleanPart = part.trim(); // "2 KETCHUP"
+                const spaceIndex = cleanPart.indexOf(' ');
+                if (spaceIndex !== -1) {
+                    const qty = parseInt(cleanPart.substring(0, spaceIndex));
+                    const id = cleanPart.substring(spaceIndex + 1);
+                    selectedSauces[id] = qty;
+                }
+            });
+        }
+
+        const grid = document.getElementById('sauce-grid');
+        grid.innerHTML = '';
+        
+        SAUCE_LIST.forEach(s => {
+            // On récupère la quantité déjà stockée ou 0
+            const currentQty = selectedSauces[s.id] || 0;
+            
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <div onclick="addSauce('${s.id}')" class="touch-element" 
+                    style="background: #222; border: 2px solid #444; border-radius: 15px; padding: 15px; cursor: pointer; position: relative;">
+                    <div style="font-size: 2.5rem;">${s.icon}</div>
+                    <div style="color: #fff; font-size: 0.9rem; font-weight: bold; text-transform: uppercase;">${s.name}</div>
+                    <div id="count-${s.id}" style="color: #f1c40f; font-size: 1.8rem; font-weight: 800;">${currentQty}</div>
+                </div>
+            `;
+            grid.appendChild(div);
+        });
+        
+        updateSauceSummary();
+        document.getElementById('modal-sauces').style.display = 'block';
+    }
+
+    function addSauce(id) {
+        selectedSauces[id] = (selectedSauces[id] || 0) + 1;
+        const countEl = document.getElementById(`count-${id}`);
+        if (countEl) countEl.innerText = selectedSauces[id];
+        
+        updateSauceSummary();
+        if (typeof playBeep === 'function') playBeep(880, 0.05);
+    }
+
+    function updateSauceSummary() {
+        const summary = Object.entries(selectedSauces)
+            .filter(([id, qty]) => qty > 0)
+            .map(([id, qty]) => `${qty} ${id}`)
+            .join(', ');
+        
+        const summaryEl = document.getElementById('sauce-summary');
+        summaryEl.innerText = summary || "Sélectionnez vos sachets...";
+        
+        // On change la couleur si vide ou plein
+        summaryEl.style.color = summary ? "#f1c40f" : "#666";
+    }
+
+    function confirmSauces() {
+        const summaryText = document.getElementById('sauce-summary').innerText;
+        
+        // Si l'utilisateur n'a rien choisi
+        if (summaryText === "Sélectionnez vos sachets..." || summaryText === "") {
+            // On remet le bouton à son état initial
+            updateLocalExtra(sauceTargetBid, 'sauces', '🥫 SAUCES');
+        } else {
+            // On enregistre les items (ex: "2 KETCHUP, 1 MAYO") dans le bouton
+            // Cela va aussi activer le bouton "ENREGISTRER (OK)" vert
+            updateLocalExtra(sauceTargetBid, 'sauces', summaryText.toUpperCase());
+        }
+        
+        closeSauceModal();
+    }
+
+    function resetSauces() {
+        selectedSauces = {};
+        document.querySelectorAll('[id^="count-"]').forEach(el => el.innerText = '0');
+        updateSauceSummary();
+        // On vide aussi le stockage
+        updateLocalExtra(sauceTargetBid, 'sauces', '🥫 SAUCES');
+    }
+    function closeSauceModal() {
+        document.getElementById('modal-sauces').style.display = 'none';
+        isEditing = false;
+        sauceTargetBid = null;
+    }
+
+
+    function acknowledgeModification(bid) {
+        let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+        modifiedOrders = modifiedOrders.filter(id => id !== bid);
+        localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+        
+        const card = document.getElementById('order-' + bid);
+        if (card) card.classList.remove('flash-mauve');
+    }
+
+    function sendAllExtras(bid) {
+        // 1. On récupère les éléments de la carte
+        const card = document.getElementById('order-' + bid);
+        if (!card) return;
+
+        const headerText = card.querySelector('.card-header span').innerText;
+        const numLivrMatch = headerText.match(/LIVRAISON\s*:\s*(\d+)/i);
+        const numLivr = numLivrMatch ? numLivrMatch[1] : null;
+
+        // 2. Préparation des données
+        let payload = {
+            bid: bid,
+            num_livraison: numLivr,
+            ...tempExtras[bid]
+        };
+
+        // 3. Envoi au serveur
+        fetch('/update_livraison_details', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // 4. Nettoyage
+                delete tempExtras[bid];
+                isEditing = false;
+
+                // 5. Cache le bouton OK
+                const okBtn = document.getElementById('ok-' + bid);
+                if (okBtn) okBtn.style.display = 'none';
+
+                // ⭐ Enregistrement dans le localStorage pour garder le flash mauve
+                let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+                if (!modifiedOrders.includes(bid)) {
+                    modifiedOrders.push(bid);
+                    localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+                }
+                
+                if (card && !card.classList.contains('collapsed')) {
+                    // On réduit la carte
+                    toggleView(bid);
+                }
+
+                // ✅ REMPLACEMENT DE L'ALERT PAR LE TOAST (SUCCÈS)
+                showToast(`✅ COMMANDE #${numLivr || bid} ENREGISTRÉE !`, "success");
+
+                // 6. Force le rafraîchissement
+                refreshKDS(); 
+                
+                console.log("Enregistrement réussi pour BID:", bid);
+            } else {
+                // ❌ REMPLACEMENT DE L'ALERT PAR LE TOAST (ERREUR SERVEUR)
+                showToast("⚠️ ERREUR : " + (data.message || "L'enregistrement a échoué"), "danger");
+            }
+        })
+        .catch(err => {
+            console.error("Erreur réseau:", err);
+            // ❌ REMPLACEMENT DE L'ALERT PAR LE TOAST (ERREUR RÉSEAU)
+            showToast("🚫 IMPOSSIBLE DE JOINDRE LE SERVEUR", "danger");
+        });
+    }
+
+    // ⭐ NOUVELLE FONCTION POUR APPLIQUER LE FILTRE VISUEL
+    function applyFilter(nom) {
+        currentLivreurFilter = nom;
+        
+        // 1. On cache/montre le bouton retour
+        const resetBtn = document.getElementById('btn-reset-view');
+        if (resetBtn) {
+            resetBtn.style.display = (nom) ? "block" : "none";
+        }
+
+        // 2. Filtrage
+        document.querySelectorAll('.order-wrapper').forEach(el => {
+            // SI nom est null ou vide -> On montre TOUT (assigné ou non)
+            if (!nom || nom === "" || el.getAttribute('data-livreur') === nom) {
+                el.style.display = "block";
+            } else {
+                el.style.display = "none";
+            }
+        });
+
+        // 3. Forcer le défilement vers la gauche pour voir la plus récente
+        const container = document.getElementById('kds-ajax-zone');
+        if (container) {
+            container.scrollLeft = 0; 
+        }
+    }
+
+    // MODIFIÉ : Quand on clique sur un casier
+    function filterByLivreur(nom) {
+        if (currentLivreurFilter === nom) {
+            // Si on reclique sur le même, on pourrait choisir d'enlever le filtre (optionnel)
+            // Mais ici on reste sur le comportement standard :
+            currentLivreurFilter = nom;
+        } else {
+            currentLivreurFilter = nom;
+        }
+        applyFilter(nom);
+    }
+
+
+    function toggleView(bid) {
+        const card = document.getElementById('order-' + bid);
+        if (!card) return;
+
+        // ⭐ NOUVEAU : Acquitter la modification (retire le suivi du flash dans localStorage)
+        let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+        if (modifiedOrders.includes(bid)) {
+            modifiedOrders = modifiedOrders.filter(id => id !== bid);
+            localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+        }
+        
+        // Retirer immédiatement l'effet visuel de la carte
+        card.classList.remove('flash-mauve');
+
+        // Bascule visuelle immédiate (Collapsed)
+        card.classList.toggle('collapsed');
+        
+        // Mise à jour de l'icône
+        const headerSpan = card.querySelector('.card-header span:last-child');
+        if (headerSpan) {
+            headerSpan.innerText = card.classList.contains('collapsed') ? '➕' : '➖';
+        }
+
+        // Appel serveur pour que le serveur sache que l'utilisateur a changé l'état
+        fetch(`/toggle_view/${bid}`, { method: 'POST' })
+        .then(response => {
+            if (!response.ok) {
+                // En cas d'erreur serveur, on annule le changement visuel
+                card.classList.toggle('collapsed');
+            }
+        })
+        .catch(err => {
+            console.error("Erreur toggle:", err);
+            card.classList.toggle('collapsed');
+        });
+    }
+    
+    function assignLivreur(bid, nom) { 
+        if (!nom) return; // Si on choisit "-- ASSIGNER --", on ne fait rien
+
+        isEditing = true; // On bloque le rafraîchissement automatique pendant l'envoi
+        
+        fetch(`/assign_livreur/${bid}/${nom}`, { method: 'POST' })
+        .then(response => {
+            if (response.ok) {
+                // ⭐ C'EST ICI : On lance le rafraîchissement AJAX immédiatement
+                isEditing = false; 
+                refreshKDS(); 
+            }
+        })
+        .catch(err => {
+            console.error("Erreur lors de l'assignation:", err);
+            isEditing = false;
+        });
+    }
+
+    
+    function resetLivraison(bid) {
+        // On appelle directement le serveur sans afficher de modal
+        fetch(`/reset_livraison/${bid}`, { method: 'POST' })
+            .then(response => {
+                if (response.ok) {
+                    console.log("Commande remise en attente :", bid);
+                    refreshKDS(); // Rafraîchissement immédiat
+                } else {
+                    alert("Erreur lors de la remise en attente");
+                }
+            })
+            .catch(err => {
+                console.error("Erreur réseau:", err);
+                alert("Impossible de contacter le serveur");
+            });
+    }
+
+    function closeConfirmModal() {
+        document.getElementById('modal-confirm').style.display = 'none';
+        pendingBid = null;
+        isEditing = false;
+    }
+
+    function showUtensilPicker(bid) {
+        currentBid = bid;
+        isEditing = true;
+        document.getElementById('modal-utensils').style.display = 'block';
+    }
+
+    function saveUtensils() {
+        let type = document.getElementById('selected-type').value;
+        let qty = document.getElementById('utensil-qty').value;
+        
+        // Appelle la fonction de mise à jour locale que nous avons créée avant
+        updateLocalExtra(currentBid, 'utensils', qty + " " + type);
+        
+        // Ferme le modal
+        document.getElementById('modal-utensils').style.display = 'none';
+        isEditing = false;
+    }
+
+    function handleNoteKeydown(event) {
+        if (event.key === "Enter") {
+            event.preventDefault(); 
+            event.stopPropagation(); // Empêche l'événement de "remonter" jusqu'à l'écouteur global
+            confirmNote(); 
+        }
+    }
+
+    // Gère l'affichage du compteur de caractères
+    function handleNoteInput(textarea) {
+        const charCount = document.getElementById('char-count');
+        const length = textarea.value.length;
+        charCount.innerText = length + "/100";
+        
+        // Optionnel: Change la couleur si on approche de la limite
+        if (length >= 100) {
+            charCount.style.color = "#ff4444"; // Rouge à 100
+        } else {
+            charCount.style.color = "#00d2ff"; // Bleu normal
+        }
+    }
+
+    function showNoteModal(bid) {
+        noteTargetBid = bid;
+        isEditing = true; // Bloque le refresh automatique
+        
+        const modal = document.getElementById('modal-note');
+        const textarea = document.getElementById('note-textarea');
+        const charCount = document.getElementById('char-count');
+        
+        // Récupération sécurisée du bouton de note
+        const btnNote = document.getElementById('btn-note-' + bid);
+        const currentNote = btnNote ? btnNote.innerText.trim() : 'NOTE';
+
+        // 1. Si la note est déjà "NOTE", on laisse le champ vide, sinon on met le texte actuel
+        textarea.value = (currentNote === 'NOTE') ? "" : currentNote;
+        
+        // 2. MISE À JOUR DU COMPTEUR à l'ouverture
+        // On affiche le nombre de caractères déjà présents (ex: 45/100)
+        if (charCount) {
+            charCount.innerText = textarea.value.length + "/100";
+        }
+        
+        // 3. Affichage de la modale
+        modal.style.display = 'block';
+        
+        // 4. Focus automatique
+        setTimeout(() => {
+            textarea.focus();
+            // Optionnel : place le curseur à la fin du texte s'il y en a déjà
+            textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+        }, 150);
+    }
+    
+    function confirmNote() {
+        const textarea = document.getElementById('note-textarea');
+        // On prend le texte, on le limite à 100 au cas où, et on passe en majuscule
+        let text = textarea.value.trim();
+        
+        if (text !== "" && text.toUpperCase() !== "NOTE") {
+            // Sécurité supplémentaire : on coupe à 100 caractères
+            const finalNote = text.substring(0, 100).toUpperCase();
+            updateLocalExtra(noteTargetBid, 'custom_note', finalNote);
+        } else {
+            // Si l'utilisateur efface tout, on peut remettre la valeur par défaut
+            updateLocalExtra(noteTargetBid, 'custom_note', 'NOTE');
+        }
+        
+        closeNoteModal();
+    }
+
+    function closeNoteModal() {
+        const textarea = document.getElementById('note-textarea');
+        const modal = document.getElementById('modal-note');
+        const charCount = document.getElementById('char-count');
+
+        // 1. Fermer la modale
+        modal.style.display = 'none';
+        
+        // 2. Vider le champ pour la prochaine fois
+        textarea.value = "";
+        
+        // 3. Réinitialiser le compteur visuel à 0/100
+        if (charCount) {
+            charCount.innerText = "0/100";
+        }
+
+        // 4. Reset des flags
+        isEditing = false;
+        noteTargetBid = null;
+    }
+
+    function selectType(type, element) {
+        // Met à jour la valeur cachée
+        document.getElementById('selected-type').value = type;
+        
+        // Gère l'apparence des boutons
+        document.querySelectorAll('.extra-option').forEach(opt => opt.classList.remove('active'));
+        element.classList.add('active');
+    }
+
+    function changeQty(v) {
+        let input = document.getElementById('utensil-qty');
+        let newValue = parseInt(input.value) + v;
+        
+        // Limites : Entre 1 et 50
+        if (newValue >= 1 && newValue <= 50) {
+            input.value = newValue;
+        }
+    }
+
+    function resetFilter() {
+        currentLivreurFilter = null;
+        // On cache le bouton
+        const resetBtn = document.getElementById('btn-reset-view');
+        if (resetBtn) resetBtn.style.display = "none";
+        
+        // On enlève le mode "active" des casiers
+        document.querySelectorAll('.casier-card').forEach(c => c.classList.remove('active'));
+        
+        // On affiche à nouveau tout (ou on refresh)
+        refreshKDS(); 
+    }
+
+    setInterval(refreshKDS, {{ refresh_rate }} * 1000);
+</script>
+{% endblock %}

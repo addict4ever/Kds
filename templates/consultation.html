@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Consultation - Commandes Archivées{% endblock %}
+
+{% block content %}
+<h1>Consultation des Commandes Archivées (Archive)</h1>
+
+<div class="search-form">
+    <h2>Filtres de Recherche</h2>
+    <form method="POST">
+        <label for="bill_id">ID Facture:</label>
+        <input type="text" id="bill_id" name="bill_id" value="{{ search_params.bill_id }}">
+        
+        <label for="serveuse_name">Nom Serveuse (partiel):</label>
+        <input type="text" id="serveuse_name" name="serveuse_name" value="{{ search_params.serveuse_name }}">
+        
+        <label for="table_number">Table:</label>
+        <input type="number" id="table_number" name="table_number" value="{{ search_params.table_number }}">
+        
+        <label for="start_date">Date d'Archive Début:</label>
+        <input type="datetime-local" id="start_date" name="start_date" value="{{ search_params.start_date }}">
+        
+        <label for="end_date">Date d'Archive Fin:</label>
+        <input type="datetime-local" id="end_date" name="end_date" value="{{ search_params.end_date }}">
+        
+        <button type="submit" class="action-button btn-start" style="margin-left: 10px;">Rechercher</button>
+    </form>
+</div>
+
+<h2>Résultats de la Recherche ({{ archived_orders|length }} commandes)</h2>
+
+{% if archived_orders %}
+    <table class="archive-table">
+        <thead>
+            <tr>
+                <th>ID Facture</th>
+                <th>Table</th>
+                <th>Serveuse</th>
+                <th>Service</th>
+                <th>Statut</th>
+                <th>Total Items</th>
+                <th>Date Création</th>
+                <th>Date Archive</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in archived_orders %}
+            <tr>
+                <td>{{ order.bill_id }}</td>
+                <td>{{ order.table_number }}</td>
+                <td>{{ order.serveuse_name }}</td>
+                <td>{{ order.service_type }}</td>
+                <td>{{ order.status }}</td>
+                <td>{{ order.total_items }}</td>
+                <td>{{ order.creation_date }}</td>
+                <td>{{ order.archived_date }}</td>
+            </tr>
+            <tr>
+                <td colspan="8">
+                    <strong>Items Détaillés:</strong><br>
+                    {% for item_json_str in order.items %}
+                        {% set item_data = item_json_str|from_json %}
+                        <p style="margin: 2px 0 2px 10px;">
+                            <strong>{{ item_data.main_item }}</strong>
+                            {% for sub_item in item_data.sub_items %}
+                                <span style="margin-left: 20px;">&rarr; {{ sub_item }}</span>
+                            {% endfor %}
+                        </p>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>Aucune commande archivée trouvée selon les critères de recherche.</p>
+{% endif %}
+
+{% endblock %}

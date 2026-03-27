@@ -1,0 +1,725 @@
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-2">
+    
+    <div class="row" id="kds-ajax-zone">
+    {% for bid, item in pa_list.items() %}
+    {# MODIFICATION ICI : Ajout de l'ID dynamique pour que JS trouve la carte #}
+    <div class="kds-column order-wrapper" id="order-{{ item.data.id }}" style="display: block;">
+        
+        <div class="card bg-dark text-white card-pulse-yellow" style="border: 2px solid #f1c40f;">
+            <div class="card-header bg-warning text-dark fw-bold">
+                COMMANDE PA : {{ item.data.table_number }}
+            </div>
+            
+            <div class="card-body">
+                
+                {# --- BLOC MODALS (Heure, Ustensiles, Note) --- #}
+                <div class="d-flex flex-column mt-2 mb-3">
+                    <div class="extras-row" style="display: flex; gap: 10px;">
+                        <div id="btn-heure-{{ item.data.id }}" 
+                             class="extra-box {% if item.extras.desired_time != 'HEURE' %}extra-selected{% endif %}" 
+                             onclick="openTimePicker('{{ item.data.id }}')">
+                            {{ item.extras.desired_time if item.extras.desired_time else 'HEURE' }}
+                        </div>
+
+                        <div id="btn-ust-{{ item.data.id }}" 
+                             class="extra-box {% if item.extras.utensils != 'UST' %}extra-selected{% endif %}" 
+                             onclick="showUtensilPicker('{{ item.data.id }}')">
+                            {{ item.extras.utensils if item.extras.utensils else 'UST' }}
+                        </div>
+
+                        <div id="btn-note-{{ item.data.id }}" 
+                             class="extra-box {% if item.extras.custom_note != 'NOTE' %}extra-selected{% endif %}" 
+                             onclick="showNoteModal('{{ item.data.id }}')">
+                            {{ item.extras.custom_note if item.extras.custom_note else 'NOTE' }}
+                        </div>
+                    </div>
+
+                    <button id="ok-{{ item.data.id }}" class="btn btn-success w-100 mt-2 fw-bold" 
+                            style="display:none; height: 50px; font-size: 1.2rem;" 
+                            onclick="sendAllExtras('{{ item.data.id }}')">
+                        ✅ ENREGISTRER (OK)
+                    </button>
+                </div>
+
+                <ul class="list-group list-group-flush mb-3">
+                    {% for raw_it in item.data['items'] %}
+                        {% set it = raw_it | from_json %}
+                        <li class="list-group-item bg-dark text-white border-secondary">
+                            {% if it is mapping and it.main_item is defined %}
+                                <div class="item-main fw-bold">{{ it.main_item }}</div>
+                                {% if it.sub_items %}
+                                    <ul class="sub-items-list text-muted">
+                                        {% for sub in it.sub_items %}<li>• {{ sub }}</li>{% endfor %}
+                                    </ul>
+                                {% endif %}
+                            {% else %}
+                                <div class="item-main">{{ it }}</div>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+
+
+<div id="modal-utensils" style="display:none; position:fixed; z-index:9999; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%; ">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:25px; border-radius:30px; min-width:500px; box-shadow: 0 0 50px rgba(0, 210, 255, 0.2);">
+        
+        <h2 class="text-white text-center mb-4" style="font-weight: 800; letter-spacing: 2px;">EXTRAS LIVRAISON</h2>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 25px;">
+            <div class="extra-option" onclick="selectType('ASSIETTE UST BEURRE', this)">ASSIETTE UST BEURRE</div>
+            <div class="extra-option" onclick="selectType('ASSIETTE UST', this)">ASSIETTE UST</div>
+            <div class="extra-option" onclick="selectType('ASS', this)">ASS</div>
+            <div class="extra-option active" onclick="selectType('UST', this)">UST</div>
+            <div class="extra-option" onclick="selectType('BEURRE', this)">BEURRE</div>
+            <div class="extra-option" onclick="selectType('VERRE', this)">VERRE</div>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-center gap-4 mb-4" style="background: #000; padding: 20px; border-radius: 20px; border: 1px solid #333;">
+            <button class="btn-qty" onclick="changeQty(-1)">-</button>
+            <div style="text-align: center;">
+                <input type="number" id="utensil-qty" value="1" min="1" max="50" readonly
+                    style="width: 100px; text-align: center; font-size: 3.5rem; background: none; color: #00d2ff; border: none; font-weight: 900;">
+                <div style="color: #666; font-size: 0.8rem; text-transform: uppercase;">Maximum 50</div>
+            </div>
+            <button class="btn-qty" onclick="changeQty(1)">+</button>
+        </div>
+
+        <input type="hidden" id="selected-type" value="UST">
+
+        <div class="d-flex gap-3">
+            <button class="btn btn-primary btn-lg w-100 touch-element-xxl" onclick="saveUtensils()" 
+                style="background: #00d2ff !important; border: none; font-size: 1.6rem; border-radius: 20px;">
+                VALIDER
+            </button>
+            <button class="btn btn-danger btn-close-large" onclick="document.getElementById('modal-utensils').style.display='none'">X</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-time" style="display:none; position:fixed; z-index:10002; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%;">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:30px; border-radius:30px; min-width:380px; box-shadow: 0 0 50px rgba(0, 210, 255, 0.3);">
+        
+        <h2 class="text-white text-center mb-4" style="font-weight: 800;">HEURE DÉSIRÉE</h2>
+        
+        <div id="time-display" class="display-time">____</div>
+
+        <div class="numpad-container">
+            <div class="numpad-btn" onclick="pressKey('1')">1</div>
+            <div class="numpad-btn" onclick="pressKey('2')">2</div>
+            <div class="numpad-btn" onclick="pressKey('3')">3</div>
+            <div class="numpad-btn" onclick="pressKey('4')">4</div>
+            <div class="numpad-btn" onclick="pressKey('5')">5</div>
+            <div class="numpad-btn" onclick="pressKey('6')">6</div>
+            <div class="numpad-btn" onclick="pressKey('7')">7</div>
+            <div class="numpad-btn" onclick="pressKey('8')">8</div>
+            <div class="numpad-btn" onclick="pressKey('9')">9</div>
+            <div class="numpad-btn" onclick="pressKey('.')">.</div>
+            <div class="numpad-btn" onclick="pressKey('0')">0</div>
+            <div class="numpad-btn btn-del" onclick="pressKey('BACK')">⌫</div>
+        </div>
+
+        <div class="d-flex gap-3 mt-4">
+            <button class="btn btn-primary btn-lg w-100 touch-element-xxl" onclick="confirmTime()" 
+                style="background: #00d2ff !important; border: none; font-size: 1.6rem;">VALIDER</button>
+            <button class="btn btn-danger btn-close-large" onclick="closeTimeModal()">X</button>
+        </div>
+    </div>
+</div>
+
+
+<div id="modal-note" style="display:none; position:fixed; z-index:10001; background: rgba(0,0,0,0.85); top:0; left:0; width:100%; height:100%; ">
+    <div style="position:absolute; top:45%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:30px; border-radius:25px; text-align:center; min-width:550px; box-shadow: 0 0 40px rgba(0, 210, 255, 0.3);">
+        
+        <div style="font-size: 3rem; margin-bottom: 10px;">📝</div>
+        <h2 class="text-white mb-4" style="font-weight: 800; letter-spacing: 1px;">AJOUTER UNE NOTE</h2>
+        
+        <textarea id="note-textarea" class="form-control mb-2" rows="5" 
+            maxlength="100"
+            oninput="handleNoteInput(this)"
+            onkeydown="handleNoteKeydown(event)"
+            style="background: #000; color: #fff; border: 2px solid #333; border-radius: 15px; font-size: 1.6rem; padding: 20px; text-align: center; resize: none; overflow: hidden; line-height: 1.4;"
+            placeholder="Tapez votre instruction ici..."></textarea>
+        
+        <div id="char-count" style="color: #00d2ff; font-weight: bold; margin-bottom: 15px; text-align: right; font-size: 1.2rem; padding-right: 10px;">
+            0/100
+        </div>
+        
+        <div class="d-flex gap-3">
+            <button id="btn-confirm-note" class="btn btn-lg btn-primary w-100 touch-element-xxl" onclick="confirmNote()" 
+                style="background: #00d2ff !important; border: none; font-size: 1.6rem; font-weight: bold; height: 70px;">
+                VALIDER (ENTRÉE)
+            </button>
+            <button class="btn btn-danger btn-close-large" onclick="closeNoteModal()" style="font-size: 1.6rem; min-width: 80px;">X</button>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    let currentBid = null;
+    let isEditing = false; 
+    let currentLivreurFilter = null; // ⭐ On stocke le livreur sélectionné ici
+    let pendingBid = null; // Stocke l'ID en attente de confirmation
+    let lastHtmlContent = ""; // Pour éviter de clignoter si rien ne change
+    let tempExtras = {}; // Stockage temporaire avant le OK
+    let noteTargetBid = null; // Variable globale pour stocker le BID en cours
+    let timeInputBuffer = ""; // Stocke les chiffres tapés
+    let isModalOpen = false;
+    let timeTargetBid = null;
+    let assignTargetBid = null;
+
+    if (!sessionStorage.getItem('session_active')) {
+        localStorage.removeItem('delivered_orders');
+        sessionStorage.setItem('session_active', 'true');
+        console.log("Nouvelle session détectée : Cache des commandes grisées vidé.");
+    }
+
+    function refreshKDS() {
+        // 1. DÉTECTION DES MODALES OUVERTES
+        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm'];
+        const isModalOpen = modals.some(selector => {
+            const modal = document.querySelector(selector);
+            return modal && modal.style.display === 'block';
+        });
+
+        // 2. VÉRIFICATION DE L'ACTIVITÉ UTILISATEUR
+        const activeEl = document.activeElement;
+        const isUserTyping = (
+            activeEl.tagName === 'INPUT' || 
+            activeEl.tagName === 'SELECT' || 
+            activeEl.tagName === 'TEXTAREA' ||
+            activeEl.isContentEditable
+        );
+
+        // 3. BLOCAGE DU REFRESH
+        if (isModalOpen || isUserTyping || (typeof isEditing !== 'undefined' && isEditing)) {
+            console.log("⚠️ Refresh suspendu : Modale ouverte ou saisie en cours...");
+            return;
+        }
+
+        // 4. LOGIQUE DE RAFRAÎCHISSEMENT (Fetch)
+        fetch(window.location.href)
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                const newKds = doc.getElementById('kds-ajax-zone');
+                const newCasiers = doc.getElementById('casiers-ajax-zone');
+                const currentKdsZone = document.getElementById('kds-ajax-zone');
+                
+                if (newKds && currentKdsZone && newKds.innerHTML !== currentKdsZone.innerHTML) {
+                    
+                    // Sauvegarde des états 'collapsed'
+                    const stateMap = {};
+                    document.querySelectorAll('.kds-card').forEach(card => {
+                        stateMap[card.id] = card.classList.contains('collapsed');
+                    });
+
+                    // Remplacement du contenu
+                    currentKdsZone.innerHTML = newKds.innerHTML;
+                    if (newCasiers) {
+                        document.getElementById('casiers-ajax-zone').innerHTML = newCasiers.innerHTML;
+                    }
+
+                    // Restauration des états 'collapsed'
+                    Object.keys(stateMap).forEach(id => {
+                        const card = document.getElementById(id);
+                        if (card) {
+                            if (stateMap[id]) {
+                                card.classList.add('collapsed');
+                                const headerSpan = card.querySelector('.card-header span:last-child');
+                                if (headerSpan) headerSpan.innerText = '➕';
+                            } else {
+                                card.classList.remove('collapsed');
+                                const headerSpan = card.querySelector('.card-header span:last-child');
+                                if (headerSpan) headerSpan.innerText = '➖';
+                            }
+                        }
+                    });
+
+                    // Ré-appliquer les filtres
+                    if (typeof currentLivreurFilter !== 'undefined' && currentLivreurFilter) {
+                        applyFilter(currentLivreurFilter);
+                    }
+
+                    if (typeof updateTimers === 'function') updateTimers();
+
+                    // RESTAURATION DES SAISIES LOCALES (en attente)
+                    if (typeof tempExtras !== 'undefined') {
+                        Object.keys(tempExtras).forEach(bid => {
+                            const extras = tempExtras[bid];
+                            if (extras.desired_time) updateVisualOnly(bid, 'btn-heure-', extras.desired_time);
+                            if (extras.utensils) updateVisualOnly(bid, 'btn-ust-', extras.utensils);
+                            if (extras.custom_note) updateVisualOnly(bid, 'btn-note-', extras.custom_note);
+                            
+                            const okBtn = document.getElementById('ok-' + bid);
+                            if (okBtn) okBtn.style.display = 'block';
+                        });
+                    }
+
+                    // ⭐ NOUVEAU : Restaurer le flash mauve pour les commandes modifiées (temp) OU acquittées (storage)
+                    // 1. Commandes en cours de modification (temp)
+                    if (typeof tempExtras !== 'undefined') {
+                        Object.keys(tempExtras).forEach(bid => {
+                            const card = document.getElementById('order-' + bid);
+                            if (card) card.classList.add('flash-mauve');
+                        });
+                    }
+                    // 2. Commandes déjà enregistrées mais non encore acquittées (localStorage)
+                    let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+                    modifiedOrders.forEach(bid => {
+                        const card = document.getElementById('order-' + bid);
+                        if (card) card.classList.add('flash-mauve');
+                    });
+
+                    // Appliquer le visuel "Livré"
+                    let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
+                    deliveredOrders.forEach(bid => {
+                        if (typeof applyDeliveredVisual === 'function') applyDeliveredVisual(bid); 
+                    });
+                }
+            })
+            .catch(err => console.error("Erreur refresh KDS:", err));
+    }
+
+    // Fonction helper pour le rendu visuel
+    function updateVisualOnly(bid, prefix, value) {
+        const el = document.getElementById(prefix + bid);
+        if (el) {
+            el.classList.add('extra-selected');
+            el.innerText = value;
+        }
+    }
+
+
+    function updateTimers() {
+        document.querySelectorAll('[id^="timer-"]').forEach(timerDiv => {
+            // 1. Trouver la carte parente pour vérifier si elle est grisée
+            const bid = timerDiv.id.replace('timer-', '');
+            const card = document.getElementById('order-' + bid);
+
+            // ⭐ SI LE TICKET EST GRISÉ : On arrête le chrono (on ne change plus le texte)
+            if (card && card.classList.contains('order-delivered')) {
+                timerDiv.style.color = "#7f8c8d"; // Optionnel: mettre le temps figé en gris
+                return; // On sort de la boucle pour ce ticket précis
+            }
+
+            const startTimeStr = timerDiv.getAttribute('data-start');
+            
+            // Si pas d'heure de départ, on n'affiche rien
+            if (!startTimeStr || startTimeStr === "") {
+                timerDiv.innerText = ""; 
+                return;
+            }
+
+            const startTime = new Date(startTimeStr);
+            const now = new Date();
+            const diff = Math.floor((now - startTime) / 1000); // Différence en secondes
+
+            if (diff < 0) return;
+
+            const mins = Math.floor(diff / 60);
+            const secs = diff % 60;
+
+            // Affiche ⏳ 1:05 (Calculé seulement si non livré)
+            timerDiv.innerText = "⏳ " + mins + ":" + (secs < 10 ? "0" : "") + secs;
+            
+            // Alerte visuelle si trop long (ex: plus de 15 min)
+            if (mins >= 15) {
+                timerDiv.style.color = "#e74c3c"; // Rouge
+            }
+        });
+    }
+
+    // On lance le calcul toutes les secondes
+    setInterval(updateTimers, 1000);
+
+
+    
+
+    function applyDeliveredVisual(bid) {
+        const card = document.getElementById('order-' + bid);
+        if (!card) return;
+
+        // Appliquer le style grisé et bloquer les clics
+        card.classList.add('order-delivered');
+        card.style.pointerEvents = "none"; 
+        card.style.opacity = "0.5";
+        card.style.filter = "grayscale(1)";
+
+        // Cacher le bouton remettre (on utilise querySelector pour être sûr de le trouver)
+        const btnRemettre = card.querySelector('.btn-unassign');
+        if (btnRemettre) {
+            btnRemettre.style.setProperty('display', 'none', 'important');
+        }
+
+        // Modifier le bouton de validation
+        // Attention : vérifie que l'id dans ton HTML est bien btn-delivered-{{ bid }}
+        const btnDelivered = document.getElementById('btn-delivered-' + bid);
+        if (btnDelivered) {
+            btnDelivered.innerText = "LIVRÉE / TERMINÉE";
+            btnDelivered.style.backgroundColor = "#2c3e50";
+            btnDelivered.disabled = true;
+        }
+    }
+
+    function updateLocalExtra(bid, field, value) {
+        const btnId = (field === 'desired_time') ? 'btn-heure-' : (field === 'utensils' ? 'btn-ust-' : 'btn-note-');
+        const element = document.getElementById(btnId + bid);
+        const oldText = element.innerText.trim();
+
+        if (value === oldText) return;
+
+        if (!tempExtras[bid]) tempExtras[bid] = {};
+        tempExtras[bid][field] = value;
+        
+        // Appliquer le style visuel du bouton
+        element.classList.add('extra-selected');
+        element.innerText = value;
+        
+        // ⭐ AJOUT : Appliquer l'animation de pulsation mauve à la carte
+        const card = document.getElementById('order-' + bid);
+        if (card) {
+            card.classList.add('flash-mauve');
+        }
+        
+        // Afficher le bouton OK
+        document.getElementById('ok-' + bid).style.display = 'block';
+    }
+
+
+    function openTimePicker(bid) {
+        timeTargetBid = bid;
+        timeInputBuffer = "";
+        isEditing = true;
+        document.getElementById('time-display').innerText = "____";
+        document.getElementById('modal-time').style.display = 'block';
+    }
+
+    function pressKey(key) {
+        if (key === 'BACK') {
+            timeInputBuffer = timeInputBuffer.slice(0, -1);
+        } else if (key === '.') {
+            // Optionnel : on peut ignorer le point ou l'utiliser comme séparateur
+            if (timeInputBuffer.length === 2 && !timeInputBuffer.includes(':')) {
+                timeInputBuffer += ":";
+            }
+        } else {
+            // Limite à 4 chiffres
+            if (timeInputBuffer.replace(':', '').length < 4) {
+                timeInputBuffer += key;
+                // Ajoute automatiquement le ":" après les 2 premiers chiffres (HH:MM)
+                if (timeInputBuffer.length === 2) {
+                    timeInputBuffer += ":";
+                }
+            }
+        }
+        
+        // Mise à jour de l'affichage
+        let display = timeInputBuffer;
+        while (display.length < 5) {
+            display += (display.length === 2) ? ":" : "_";
+        }
+        document.getElementById('time-display').innerText = display;
+    }
+
+    function confirmTime() {
+        // Validation simple du format HH:MM
+        if (timeInputBuffer.length === 5) {
+            updateLocalExtra(timeTargetBid, 'desired_time', timeInputBuffer);
+            closeTimeModal();
+        } else {
+            // Effet visuel d'erreur si incomplet
+            const disp = document.getElementById('time-display');
+            disp.style.color = 'red';
+            setTimeout(() => disp.style.color = '#00d2ff', 500);
+        }
+    }
+
+    function closeTimeModal() {
+        document.getElementById('modal-time').style.display = 'none';
+        isEditing = false;
+        timeTargetBid = null;
+    }
+
+    function acknowledgeModification(bid) {
+        let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+        modifiedOrders = modifiedOrders.filter(id => id !== bid);
+        localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+        
+        const card = document.getElementById('order-' + bid);
+        if (card) card.classList.remove('flash-mauve');
+    }
+
+    function sendAllExtras(bid) {
+        // 1. On récupère les éléments de la carte
+        const card = document.getElementById('order-' + bid);
+        if (!card) {
+            console.error("Carte introuvable pour l'ID:", bid);
+            return;
+        }
+
+        // 2. Préparation des données depuis tempExtras
+        // Si tempExtras n'est pas défini pour ce bid, on envoie des chaînes vides
+        const extras = tempExtras[bid] || { custom_note: '', desired_time: '', utensils: '' };
+        
+        let payload = {
+            bid: bid,
+            custom_note: extras.custom_note || '',
+            desired_time: extras.desired_time || '',
+            utensils: extras.utensils || ''
+        };
+
+        // 3. Envoi au serveur sur la route PA dédiée
+        fetch('/update_pa_details', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // 4. Nettoyage local
+                delete tempExtras[bid];
+                if (typeof isEditing !== 'undefined') isEditing = false;
+
+                // 5. Cache le bouton OK
+                const okBtn = document.getElementById('ok-' + bid);
+                if (okBtn) okBtn.style.display = 'none';
+
+                // 6. Feedback visuel
+                card.style.borderColor = "#2ecc71"; // Vert pour succès
+                setTimeout(() => card.style.borderColor = "", 1000);
+
+                // 7. Force le rafraîchissement
+                if (typeof refreshKDS === 'function') {
+                    refreshKDS(); 
+                }
+                
+                console.log("Enregistrement réussi pour PA BID:", bid);
+            } else {
+                alert("Erreur lors de l'enregistrement : " + (data.error || "Inconnue"));
+            }
+        })
+        .catch(err => {
+            console.error("Erreur réseau:", err);
+            alert("Impossible de joindre le serveur");
+        });
+    }
+
+    // ⭐ NOUVELLE FONCTION POUR APPLIQUER LE FILTRE VISUEL
+    function applyFilter(nom) {
+        currentLivreurFilter = nom;
+        
+        // 1. On affiche le bouton retour
+        const resetBtn = document.getElementById('btn-reset-view');
+        if (resetBtn) {
+            resetBtn.style.display = "block";
+        }
+
+        // 2. On met en surbrillance le casier actif
+        document.querySelectorAll('.casier-card').forEach(c => c.classList.remove('active'));
+        const btn = document.getElementById('btn-' + nom);
+        if (btn) btn.classList.add('active');
+        
+        // 3. On filtre les factures
+        document.querySelectorAll('.order-wrapper').forEach(el => {
+            if (el.getAttribute('data-livreur') === nom) {
+                el.style.display = "block";
+            } else {
+                el.style.display = "none";
+            }
+        });
+    }
+
+
+
+    function toggleView(bid) {
+        const card = document.getElementById('order-' + bid);
+        if (!card) return;
+
+        // ⭐ NOUVEAU : Acquitter la modification (retire le suivi du flash dans localStorage)
+        let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
+        if (modifiedOrders.includes(bid)) {
+            modifiedOrders = modifiedOrders.filter(id => id !== bid);
+            localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
+        }
+        
+        // Retirer immédiatement l'effet visuel de la carte
+        card.classList.remove('flash-mauve');
+
+        // Bascule visuelle immédiate (Collapsed)
+        card.classList.toggle('collapsed');
+        
+        // Mise à jour de l'icône
+        const headerSpan = card.querySelector('.card-header span:last-child');
+        if (headerSpan) {
+            headerSpan.innerText = card.classList.contains('collapsed') ? '➕' : '➖';
+        }
+
+        // Appel serveur pour que le serveur sache que l'utilisateur a changé l'état
+        fetch(`/toggle_view/${bid}`, { method: 'POST' })
+        .then(response => {
+            if (!response.ok) {
+                // En cas d'erreur serveur, on annule le changement visuel
+                card.classList.toggle('collapsed');
+            }
+        })
+        .catch(err => {
+            console.error("Erreur toggle:", err);
+            card.classList.toggle('collapsed');
+        });
+    }
+    
+
+
+    function closeConfirmModal() {
+        document.getElementById('modal-confirm').style.display = 'none';
+        pendingBid = null;
+        isEditing = false;
+    }
+
+    function showUtensilPicker(bid) {
+        currentBid = bid;
+        isEditing = true;
+        document.getElementById('modal-utensils').style.display = 'block';
+    }
+
+    function saveUtensils() {
+        let type = document.getElementById('selected-type').value;
+        let qty = document.getElementById('utensil-qty').value;
+        
+        // Appelle la fonction de mise à jour locale que nous avons créée avant
+        updateLocalExtra(currentBid, 'utensils', qty + " " + type);
+        
+        // Ferme le modal
+        document.getElementById('modal-utensils').style.display = 'none';
+        isEditing = false;
+    }
+
+    function handleNoteKeydown(event) {
+        if (event.key === "Enter") {
+            event.preventDefault(); // Empêche de créer une nouvelle ligne
+            confirmNote(); // Appelle la validation
+        }
+    }
+
+    // Gère l'affichage du compteur de caractères
+    function handleNoteInput(textarea) {
+        const charCount = document.getElementById('char-count');
+        const length = textarea.value.length;
+        charCount.innerText = length + "/100";
+        
+        // Optionnel: Change la couleur si on approche de la limite
+        if (length >= 100) {
+            charCount.style.color = "#ff4444"; // Rouge à 100
+        } else {
+            charCount.style.color = "#00d2ff"; // Bleu normal
+        }
+    }
+
+    function showNoteModal(bid) {
+        noteTargetBid = bid;
+        isEditing = true; // Bloque le refresh automatique
+        
+        const modal = document.getElementById('modal-note');
+        const textarea = document.getElementById('note-textarea');
+        const charCount = document.getElementById('char-count');
+        
+        // Récupération sécurisée du bouton de note
+        const btnNote = document.getElementById('btn-note-' + bid);
+        const currentNote = btnNote ? btnNote.innerText.trim() : 'NOTE';
+
+        // 1. Si la note est déjà "NOTE", on laisse le champ vide, sinon on met le texte actuel
+        textarea.value = (currentNote === 'NOTE') ? "" : currentNote;
+        
+        // 2. MISE À JOUR DU COMPTEUR à l'ouverture
+        // On affiche le nombre de caractères déjà présents (ex: 45/100)
+        if (charCount) {
+            charCount.innerText = textarea.value.length + "/100";
+        }
+        
+        // 3. Affichage de la modale
+        modal.style.display = 'block';
+        
+        // 4. Focus automatique
+        setTimeout(() => {
+            textarea.focus();
+            // Optionnel : place le curseur à la fin du texte s'il y en a déjà
+            textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+        }, 150);
+    }
+    
+    function confirmNote() {
+        const textarea = document.getElementById('note-textarea');
+        // On prend le texte, on le limite à 100 au cas où, et on passe en majuscule
+        let text = textarea.value.trim();
+        
+        if (text !== "" && text.toUpperCase() !== "NOTE") {
+            // Sécurité supplémentaire : on coupe à 100 caractères
+            const finalNote = text.substring(0, 100).toUpperCase();
+            updateLocalExtra(noteTargetBid, 'custom_note', finalNote);
+        } else {
+            // Si l'utilisateur efface tout, on peut remettre la valeur par défaut
+            updateLocalExtra(noteTargetBid, 'custom_note', 'NOTE');
+        }
+        
+        closeNoteModal();
+    }
+
+    function closeNoteModal() {
+        const textarea = document.getElementById('note-textarea');
+        const modal = document.getElementById('modal-note');
+        const charCount = document.getElementById('char-count');
+
+        // 1. Fermer la modale
+        modal.style.display = 'none';
+        
+        // 2. Vider le champ pour la prochaine fois
+        textarea.value = "";
+        
+        // 3. Réinitialiser le compteur visuel à 0/100
+        if (charCount) {
+            charCount.innerText = "0/100";
+        }
+
+        // 4. Reset des flags
+        isEditing = false;
+        noteTargetBid = null;
+    }
+
+    function selectType(type, element) {
+        // Met à jour la valeur cachée
+        document.getElementById('selected-type').value = type;
+        
+        // Gère l'apparence des boutons
+        document.querySelectorAll('.extra-option').forEach(opt => opt.classList.remove('active'));
+        element.classList.add('active');
+    }
+
+    function changeQty(v) {
+        let input = document.getElementById('utensil-qty');
+        let newValue = parseInt(input.value) + v;
+        
+        // Limites : Entre 1 et 50
+        if (newValue >= 1 && newValue <= 50) {
+            input.value = newValue;
+        }
+    }
+
+
+    setInterval(refreshKDS, {{ refresh_rate }} * 1000);
+</script>
+{% endblock %}

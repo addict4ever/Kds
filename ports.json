@@ -1,0 +1,20 @@
+{
+    "windows_ports": {
+        "SERIAL_PORT": "COM13",
+        "SERIAL_PORT_2": "COM14",
+        "SERIAL_PORT_3": "COM16",
+        "SERIAL_PORT_PRINTER": "COM19",
+        "SERIAL_PORT_PRINTER_2": "COM10",
+        "SERIAL_PORT_PRINTER_3": "COM15",
+        "SERIAL_PORT_COMPUTER": "COM12"
+    },
+    "linux_ports": {
+        "SERIAL_PORT": "/dev/ttyUSB0",
+        "SERIAL_PORT_2": "/dev/ttyUSB5",
+        "SERIAL_PORT_3": "/dev/ttyUSB3",
+        "SERIAL_PORT_PRINTER": "/dev/ttyUSB1",
+        "SERIAL_PORT_PRINTER_2": "/dev/ttyUSB4",
+        "SERIAL_PORT_PRINTER_3": "/dev/ttyUSB6",
+        "SERIAL_PORT_COMPUTER": "/dev/ttyUSB2"
+    }
+}

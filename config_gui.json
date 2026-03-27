@@ -1,0 +1,37 @@
+{
+    "STATUS_COLORS": {
+        "En attente": "#3498db",
+        "En cours": "#f1c40f",
+        "Trait\u00e9e": "#2ecc71",
+        "Annul\u00e9e": "#e74c3c",
+        "Archiv\u00e9e": "#7f8c8d"
+    },
+    "BG_MAIN": "#2c3e50",
+    "CARD_BG": "#34495e",
+    "MAX_CARDS_PER_ROW": 5,
+    "SCROLL_PAGE_SIZE": 1,
+    "COLOR_TEXT": "#ecf0f1",
+    "COLOR_ACCENT": "#3498db",
+    "COLOR_WARNING": "#f1c40f",
+    "COLOR_NOTE": "#f1c40f",
+    "H_SCROLLBAR_HEIGHT": 15,
+    "CARD_WIDTH": 300,
+    "CARD_BORDER_WIDTH": 5,
+    "CARD_PADDING": 5,
+    "H_MARGIN": 5,
+    "SERVICE_TYPES": [
+        "COMMANDE"
+    ],
+    "SERVICE_SPLIT_MARKER": "AUTRE",
+    "REFRESH_RATE_MS": 3000,
+    "TRUNCATE_LEN": 40,
+    "ORDER_STATUS_PENDING": "En attente",
+    "BAUD_RATE": 9600,
+    "SERIAL_TIMEOUT": 0.5,
+    "SERIAL_PORT_WINDOWS": "COM3",
+    "SERIAL_PORT_2_WINDOWS": "COM9",
+    "SERIAL_PORT_PRINTER_WINDOWS": "COM4",
+    "SERIAL_PORT_PRINTER_2_WINDOWS": "COM10",
+    "SERIAL_PORT_COMPUTER_WINDOWS": "COM5",
+    "TICKET_STATUS_COMPLETED": "TERMIN\u00c9"
+}

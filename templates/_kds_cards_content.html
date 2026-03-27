@@ -1,0 +1,50 @@
+{% if orders_by_service %}
+    <div class="clearfix">
+    {% for service_type, orders in orders_by_service.items() %}       
+            {% if orders %}
+                <div class="kds-cards-grid"> 
+                {% for order in orders %}
+                    <div class="kds-card status-{{ order.status|replace(' ', '-') }}" id="order-{{ order.bill_id }}">
+                        
+                        <h3>Table: {{ order.table_number }} | {{ order.serveuse_name }}</h3>
+                        
+                        <p><strong>Facture #{{ order.bill_id }}</strong> | Service: {{ order.service_type }}</p>
+                        
+                        {% if bill_notes.get(order.bill_id) %}
+                            <div class="note-content">Note: {{ bill_notes[order.bill_id] }}</div>
+                        {% endif %}
+
+                        <h4>Items:</h4>
+                        {% for item_json_str in order['items'] %}
+                            {% set item_data = item_json_str|from_json %} 
+                            <p class="order-item">
+                                <strong>{{ item_data.main_item }}</strong><br>
+                                {% for sub_item in item_data.sub_items %}
+                                    <span style="margin-left: 20px;">&rarr; {{ sub_item }}</span><br>
+                                {% endfor %}
+                            </p>
+                        {% endfor %}
+                        
+                        
+
+                        <div class="button-group" style="display: flex; justify-content: space-around; margin-top: 10px;">
+                            <button class="action-button btn-start" 
+                                    onclick="updateOrderStatus('{{ order.bill_id }}', 'En cours')"
+                                    style="flex-grow: 1; margin-right: 5px;">
+                                En cours
+                            </button>
+                            <button class="action-button btn-complete" 
+                                    onclick="updateOrderStatus('{{ order.bill_id }}', 'Traitée')"
+                                    style="flex-grow: 1; margin-left: 5px;">
+                                Régler / Terminer
+                            </button>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div> {% else %}
+            {% endif %}
+        </div>
+    {% endfor %}
+    </div>
+{% else %}
+{% endif %}
