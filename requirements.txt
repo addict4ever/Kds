@@ -1,0 +1,23 @@
+# --- Cœur du Système KDS ---
+pyserial==3.5           # Communication avec les imprimantes (RS232/USB)
+PyQt6==6.4.2            # Framework pour les outils annexes (PA Print)
+PyQt6-WebEngine==6.4.2  # Affichage des vues Web dans les fenêtres Python
+
+# --- Serveur Web & API ---
+flask==3.0.0            # Serveur pour l'accès mobile des livreurs/serveurs
+requests==2.31.0        # Utilisé pour les commandes de shutdown et tests
+
+# --- Interface Graphique & Widgets ---
+Pillow==10.1.0          # Traitement des images et icônes (PIL)
+tkcalendar==1.6.1       # Calendrier tactile pour l'historique
+matplotlib==3.8.2       # Graphiques de statistiques de production
+numpy==1.26.2           # Support mathématique pour matplotlib
+
+# --- Système & Multimédia ---
+pygame==2.5.2           # Lecture des alarmes sonores (MP3) pour les minuteurs
+psutil==5.9.6           # Surveillance réseau et gestion des processus
+
+# --- Outils de Compilation & Protection ---
+pyinstaller==6.3.0      # Création de l'exécutable (.exe)
+# Note: pyarmor n'est pas listé ici car il s'installe généralement à part 
+# pour la licence, mais ses runtimes sont inclus dans tes add-data.
