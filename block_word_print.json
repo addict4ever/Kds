@@ -1,0 +1,13 @@
+{
+    "filter_enabled": true,
+    "keywords": [
+        "LARGE", "XLARGE", "SMALL", "BAMBINO", "MINI", "COMBO", "DUO",
+        "NACHOS", "LASAGNE", "GRATINE", "VEGETARIEN", "PIZZA", "FAMILLE", 
+        "SPECS", "GRATINEES"
+    ],
+    "garnitures": [
+        "GARNIE", "GARNI", "ANANAS", "SPECIAL", "GRECQUE", "FROMAGE", "FROM", "4 FROM",
+        "PEPE", "FAJITAS", "POULET", "MEXICAINE", "VEGE", "CHAMP", "CHAMPIGNON", 
+        "COTE LEVEE", "COTES LEVEE", "FR MER", "FRUITS MER", "GHETTI", "PEP FROM BAC"
+    ]
+}

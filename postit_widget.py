@@ -43,7 +43,7 @@ def _load_config() -> dict:
             "Archivée": "#7f8c8d"
         },
         "CARD_WIDTH": 300,
-        "CARD_PADDING": 5,
+        "CARD_PADDING": 0,
         "SUB_ITEM_POLICE": 14,
         "MAIN_ITEM_POLICE": 15,
         "BG_MAIN": "#2c3e50",
@@ -823,7 +823,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         
         self.border_frame = tk.Frame(self.postit_frame, bg=STATUS_COLORS.get(self.status, BG_MAIN), bd=0)
         self.border_frame.pack(fill=tk.BOTH, expand=True)
-        self.content_frame = tk.Frame(self.border_frame, bg=CARD_BG, padx=10, pady=5)
+        self.content_frame = tk.Frame(self.border_frame, bg=CARD_BG, padx=1, pady=1)
         self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=2, pady=2)
         
         header_text = f"T: {self.order_data['table_number']} | {self.order_data['serveuse_name']}"
@@ -923,12 +923,19 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
 
             # --- LOGIQUE DE COULEUR MODIFIÉE ---
             # On vérifie si c'est une ligne de modification manuelle pour mettre en ROUGE
+            # --- Logique de coloration des items ---
             if any(key in main_text for key in ["HEURE:", "EXTRAS:", "NOTE:", "ENLEVER LE PAPIER JAUNE"]):
-                item_fg = "#e74c3c"  # Code couleur Rouge (Flat UI)
+                item_fg = "#e74c3c"  # Rouge (Priorité haute)
+            
+            # Détection de "PA" suivi d'un numéro (ex: PA #499 ou PA 499)
+            elif re.search(r'PA\s*#?\s*\d+', main_text):
+                item_fg = "#2ecc71"  # Vert (Pour les commandes Pour Emporter)
+                
             elif "*" in main_text:
-                item_fg = "#3498db"  # Bleu pour les items modifiés standards
+                item_fg = "#3498db"  # Bleu (Items modifiés standards)
+            
             else:
-                item_fg = COLOR_TEXT # Couleur par défaut (souvent blanc ou gris très clair)
+                item_fg = COLOR_TEXT # Couleur par défaut
 
             main_item_label = tk.Label(temp_item_frame, 
                                         text=item_data['main_item'], 
@@ -1612,8 +1619,8 @@ class PostitSelector(tk.Frame):
             postit.postit_frame.grid(
                 row=r, 
                 column=c, 
-                padx=10, 
-                pady=10, 
+                padx=CARD_PADDING, 
+                pady=CARD_PADDING, 
                 sticky="nwes"
             )
 

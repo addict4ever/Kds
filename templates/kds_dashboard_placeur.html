@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KDS Pro - Placeur Logistique</title>
+    <script src="{{ url_for('static', filename='js/Sortable.min.js') }}"></script>
+    <style>
+        :root {
+            --bg: #0f1114; --card: #1a1d21; --accent: #0078d4;
+            --invoice-bg: #f1b400; 
+            --invoice-text: #0f31f1; 
+            --text: #e0e0e0; --shadow: 8px 8px 16px #0a0b0d, -4px -4px 12px #2a2e35;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
+            margin: 0; padding: 0; height: 100vh; overflow-x: hidden; overflow-y: auto;
+        }
+
+        #main { 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 25px; 
+            /* Ajoute ceci pour un défilement fluide sur mobile */
+            -webkit-overflow-scrolling: touch; 
+        }
+
+        .section-label { 
+            font-size: 0.9em; font-weight: 800; color: var(--accent); 
+            text-transform: uppercase; letter-spacing: 2px; 
+            margin-bottom: 12px; border-left: 4px solid var(--accent); padding-left: 10px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* --- GRILLES --- */
+        /* Remplacez l'ancien .grid-layout par celui-ci */
+        .grid-layout { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 20px; 
+            align-items: flex-start; /* Empêche les casiers de s'étirer verticalement */
+        }
+
+        /* --- SECTION RÉCEPTION (CENTRE) --- */
+        .reception-container {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            padding: 15px;
+            border: 2px dashed #444;
+            min-height: 120px;
+        }
+
+        #dz-cmd {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+            gap: 5px;
+        }
+
+        /* --- CASIERS --- */
+        /* Modifiez ces deux blocs */
+        /* --- CASIERS --- */
+        .casier {
+            background: var(--card); 
+            border-radius: 10px; 
+            padding: 8px;
+            box-shadow: var(--shadow); 
+            display: flex; 
+            flex-direction: column; 
+            gap: 6px;
+            width: fit-content; 
+            min-width: 210px; /* Plus étroit pour gagner de la place */
+        }
+
+        .drop-zone-zone {
+            /* HAUTEUR POUR 4 FACTURES : ~115px par facture + les écarts */
+            height: 480px; 
+            background: rgba(0,0,0,0.3); 
+            border-radius: 6px;
+            padding: 6px;
+            display: flex;
+            flex-direction: column; 
+            flex-wrap: wrap;       
+            align-content: flex-start; 
+            gap: 8px;
+
+            /* LOGIQUE DE MASQUAGE HORIZONTAL */
+            width: 205px; /* Largeur d'une seule petite colonne */
+            overflow: hidden;
+            transition: width 0.3s ease; 
+        }
+
+        /* État quand le bouton "..." est activé */
+        .casier.expanded .drop-zone-zone {
+            width: fit-content;    /* Révèle toutes les colonnes */
+            min-width: 510px;      /* Largeur de 2 colonnes minimum si déplié */
+        }
+
+        /* Style du bouton "En savoir plus" */
+        .btn-more {
+            background: #333;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            padding: 2px 8px;
+            font-size: 1.1em;
+            display: none; /* Caché par défaut, affiché via JS si > 5 items */
+        }
+        .casier-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.8em; font-weight: bold; color: #aaa; }
+        .badge { background: var(--accent); color: white; padding: 1px 8px; border-radius: 8px; font-size: 0.85em; }
+
+        
+
+        /* Modifiez le bloc .item */
+        .item {
+            width: 240px; /* Largeur fixe pour garder des colonnes propres */
+            min-height: 130px; 
+            background: var(--invoice-bg);
+            color: #000; 
+            padding: 12px; 
+            border-radius: 10px;
+            box-shadow: 4px 4px 10px rgba(0,0,0,0.3); 
+            cursor: grab;
+            display: flex; 
+            flex-direction: column; 
+            box-sizing: border-box;
+        }
+        .livraison-no { font-size: 1.2rem; color: var(--invoice-text); font-weight: 900; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 4px; }
+        .client-address { font-weight: 800; font-size: 1rem; color: #000; }
+        .client-details { list-style: none; padding: 0; margin: 4px 0 0 0; font-size: 0.9rem; font-weight: 600; opacity: 0.8; }
+
+        /* --- MODALS --- */
+        .overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 1000;
+            justify-content: center; align-items: center;
+        }
+        .modal-card { background: #1a1d21; width: 90%; max-width: 500px; border-radius: 15px; padding: 20px; border: 1px solid #333; }
+        .selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 15px; }
+        .select-btn { background: #2a2e35; border: 1px solid #444; color: white; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        .btn-action { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px; border-radius: 6px; cursor: pointer; font-size: 0.75em; font-weight: bold; }
+        
+        .receipt-view { background: #fff; border-radius: 15px; padding: 20px; color: #000; max-height: 85vh; overflow-y: auto; }
+        
+        /* Nouveaux styles pour les extras du placeur */
+        .extras-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 8px;
+        }
+        .extra-badge {
+            background: #000;
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 5px;
+            border: 1px solid rgba(0,0,0,0.3);
+        }
+        .badge-time { background: #0078d4; } /* Bleu pour l'heure */
+        .badge-note { background: #e67e22; } /* Orange pour les notes */
+
+        /* --- ÉTAT DÉSACTIVÉ --- */
+        .casier.disabled {
+            min-width: 50px !important; /* Un peu plus large pour le nom */
+            height: 50px;
+            width: 50px;
+            padding: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #2a2e35;
+            border: 1px solid #444;
+            opacity: 0.8;
+        }
+
+        /* Cache tout le contenu sauf le bouton de réactivation quand désactivé */
+        .casier.disabled .drop-zone-zone, 
+        .casier.disabled .btn-action, 
+        .casier.disabled .casier-header span,
+        .casier.disabled .badge,
+        .casier.disabled .btn-more {
+            display: none !important;
+        }
+
+        /* Bouton On/Off */
+        .btn-toggle-status {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2em;
+            padding: 0;
+            line-height: 1;
+            filter: grayscale(1);
+            transition: transform 0.2s;
+        }
+
+        /* Style du petit nom dans la pastille */
+        .casier.disabled .casier-header span {
+            display: block !important;
+            font-size: 10px;
+            font-weight: bold;
+            text-align: center;
+            color: #888;
+        }
+
+        .btn-toggle-status {
+            background: none; border: none; cursor: pointer; font-size: 1em; padding: 0;
+        }
+        /* --- PERSONNALISATION DE LA BARRE DE DÉFILEMENT --- */
+
+        /* --- BARRE DE DÉFILEMENT LARGE (TOUCH-FRIENDLY) --- */
+
+        /* Largeur globale de la barre */
+        ::-webkit-scrollbar {
+            width: 45px;  /* Très large pour les doigts */
+            height: 45px; /* Pour le défilement horizontal si nécessaire */
+        }
+
+        /* Le fond (la piste) */
+        ::-webkit-scrollbar-track {
+            background: #1a1d21; /* Couleur sombre du thème */
+            border-radius: 20px;
+        }
+
+        /* La partie qui bouge (le curseur) */
+        ::-webkit-scrollbar-thumb {
+            background: #555; /* Gris plus clair pour la visibilité */
+            border-radius: 20px;
+            /* On ajoute une bordure transparente pour créer une marge interne */
+            border: 8px solid transparent;
+            background-clip: content-box;
+        }
+
+        /* Couleur quand on touche ou survole */
+        ::-webkit-scrollbar-thumb:hover, 
+        ::-webkit-scrollbar-thumb:active {
+            background: var(--accent); /* Devient bleue (0078d4) au toucher */
+            background-clip: content-box;
+        }
+
+
+    </style>
+
+</head>
+<body>
+
+<div id="main">
+    <div>
+        <div class="section-label">Livreurs Actifs</div>
+        <div class="grid-layout" id="grid-livreurs"></div>
+    </div>
+
+    <div>
+        <div class="section-label">Réception des Commandes</div>
+        <div class="reception-container">
+            <div id="dz-cmd"></div>
+        </div>
+    </div>
+
+    <div>
+        <div class="section-label">Zones de Groupage</div>
+        <div class="grid-layout" id="grid-groupes"></div>
+    </div>
+</div>
+
+<div id="modal-attr" class="overlay">
+    <div class="modal-card">
+        <h3 style="margin-top:0; color:var(--accent); text-align: center;">Déplacer vers...</h3>
+        <div class="selector-grid" id="attr-options"></div>
+        <button onclick="closeModal('modal-attr')" style="margin-top:20px; width:100%; padding:12px; background:#444; color:white; border:none; border-radius:10px; cursor:pointer;">ANNULER</button>
+    </div>
+</div>
+
+<div id="modal-view" class="overlay" onclick="closeModal('modal-view')">
+    <div class="modal-card receipt-view" onclick="event.stopPropagation()">
+        <h2 id="view-title" style="text-align:center; border-bottom:2px dashed #ccc; padding-bottom:10px;">DÉTAILS</h2>
+        <div id="view-items"></div>
+        <button onclick="closeModal('modal-view')" style="width:100%; padding:12px; background:#000; color:#fff; border:none; font-weight:bold; cursor:pointer; border-radius:8px; margin-top:15px;">FERMER</button>
+    </div>
+</div>
+
+<script>
+    const LISTE_GROUPES = ["GROUPE 1", "GROUPE 2", "GROUPE 3", "GROUPE 4", "GROUPE 5", "GROUPE 6", "GROUPE 8", "GROUPE 9", "GROUPE 10"];
+    const LISTE_LIVREURS = {{ livreurs | tojson | safe }};    const ALL_ZONES = [...LISTE_GROUPES, ...LISTE_LIVREURS];
+
+    let isModalOpen = false;
+    let facturesCache = {};
+
+    window.onload = () => {
+        setupLayout();
+        initSortables();
+        fetchData();
+        setInterval(fetchData, 4000); 
+    };
+
+    function setupLayout() {
+        const gLivreurs = document.getElementById('grid-livreurs');
+        const gGroupes = document.getElementById('grid-groupes');
+
+        // On traite les livreurs
+        LISTE_LIVREURS.forEach((name, index) => {
+            const div = createCasier(name, gLivreurs);
+            
+            // Si l'index est >= 7, on le désactive par défaut
+            if (index >= 7) {
+                toggleStatus(div.id, true); // On force la désactivation initiale
+            }
+        });
+
+        LISTE_GROUPES.forEach(z => {
+            const div = createCasier(z, gGroupes);
+            // On force la désactivation (réduction) par défaut pour tous les groupes
+            toggleStatus(div.id, true); 
+        });
+    }
+
+    function createCasier(name, container) {
+        const div = document.createElement('div'); 
+        div.className = 'casier';
+        div.dataset.id = name;
+        const safeId = name.replace(/\s+/g, '');
+        div.id = "casier-" + safeId;
+        
+        // On prend les 3 premières lettres pour l'affichage réduit
+        const shortName = name.substring(0, 3).toUpperCase();
+
+        div.innerHTML = `
+            <div class="casier-header" style="font-size: 0.75em;">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                    <button class="btn-toggle-status" onclick="toggleStatus('${div.id}')">🟢</button>
+                    <span class="name-label">${name.toUpperCase()}</span>
+                </div>
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <button class="btn-more" onclick="toggleCasier('${div.id}')">...</button>
+                    <div class="badge">0</div>
+                </div>
+            </div>
+            <div class="drop-zone-zone"></div>
+            <button class="btn-action" style="font-size: 0.65em; padding: 3px;" onclick="openAttrib(this)">TRANSFERT</button>
+        `;
+        
+        container.appendChild(div);
+        
+        // IMPORTANT : On retourne l'élément pour pouvoir le modifier (ex: désactivation auto)
+        return div; 
+    }
+
+    
+
+    async function fetchData() {
+        if (isModalOpen) return; 
+        try {
+            const response = await fetch('/livraisons');
+            const result = await response.json();
+            
+            // On récupère la liste des commandes (qui contiennent .data, .extras et .livreur)
+            const serverOrders = result.commandes || [];
+
+            // 1. Nettoyage des anciennes factures (celles qui ne sont plus dans le serveur)
+            const activeIds = serverOrders.map(o => String(o.data.id));
+            document.querySelectorAll('.item').forEach(el => {
+                if (!activeIds.includes(el.dataset.id)) el.remove();
+            });
+
+            // 2. Traitement de chaque commande
+            serverOrders.forEach(order => {
+                const bid = String(order.data.id);
+                const livreurAssigne = order.livreur; // Nom du livreur (ex: "FRANCOIS" ou null)
+
+                // On prépare l'objet complet pour renderItemContent
+                const fullOrderData = {
+                    ...order.data,
+                    extras: order.extras,
+                    livreur: livreurAssigne,
+                    is_new: order.is_new,
+                    is_modified: order.is_modified
+                };
+
+                facturesCache[bid] = fullOrderData;
+
+                let el = document.querySelector(`.item[data-id="${bid}"]`);
+                if (!el) {
+                    el = document.createElement('div');
+                    el.className = 'item';
+                    el.dataset.id = bid;
+                    el.ondblclick = () => openView(bid);
+                }
+
+                // --- LOGIQUE DE PLACEMENT (CASIERS) ---
+                let targetZone = null;
+
+                // PRIORITÉ 1 : Si le serveur dit qu'un livreur est assigné
+                if (livreurAssigne) {
+                    const casierId = `casier-${livreurAssigne.replace(/\s+/g, '')}`;
+                    const casierEl = document.getElementById(casierId);
+                    if (casierEl) {
+                        targetZone = casierEl.querySelector('.drop-zone-zone');
+                    }
+                }
+
+                // PRIORITÉ 2 : Si pas de livreur, on regarde la position sauvegardée localement
+                if (!targetZone) {
+                    const savedPos = localStorage.getItem('pos_p_' + bid);
+                    if (savedPos && savedPos !== "dz-cmd") {
+                        const savedCasierId = `casier-${savedPos.replace(/\s+/g, '')}`;
+                        const savedCasierEl = document.getElementById(savedCasierId);
+                        if (savedCasierEl) {
+                            targetZone = savedCasierEl.querySelector('.drop-zone-zone');
+                        }
+                    }
+                }
+
+                // PRIORITÉ 3 : Par défaut, zone de RÉCEPTION
+                if (!targetZone) {
+                    targetZone = document.getElementById('dz-cmd');
+                }
+
+                // On déplace l'élément physiquement dans la zone choisie
+                if (el.parentElement !== targetZone) {
+                    targetZone.appendChild(el);
+                }
+
+                // --- Rendu du contenu (Heure, Notes, etc.) ---
+                renderItemContent(el, fullOrderData);
+            });
+
+            updateUI();
+        } catch (e) { 
+            console.error("Erreur Fetch fetchData:", e); 
+        }
+    }
+
+    function renderItemContent(el, data) {
+        let items = [];
+        try { 
+            // On récupère les items (soit directement, soit dans data.data selon ton store)
+            let rawItems = data.data ? data.data.items : data.items;
+            items = typeof rawItems === 'string' ? JSON.parse(rawItems) : rawItems; 
+        } catch(e) { 
+            items = []; 
+        }
+
+        let foundNo = "???";
+        let clientMain = "";
+        let clientSubs = [];
+
+        // 1. Extraction des informations de base
+        items.forEach((raw, idx) => {
+            let it = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            if (it.main_item && it.main_item.toUpperCase().includes("LIVRAISON #")) {
+                foundNo = it.main_item.split('#')[1].trim();
+            }
+            if (it.sub_items) {
+                it.sub_items.forEach(sub => {
+                    if (sub.toUpperCase().includes("LIVRAISON #")) foundNo = sub.split('#')[1].trim();
+                });
+            }
+            if (idx === 0) {
+                clientMain = it.main_item || "";
+                clientSubs = it.sub_items || [];
+            }
+        });
+
+        // 2. Logique pour le champ HEURE (Affichage prioritaire)
+        let heureHtml = '';
+        if (data.extras && data.extras.desired_time && data.extras.desired_time !== 'HEURE' && data.extras.desired_time !== '') {
+            heureHtml = `
+                <div style="background: #fff; color: #000; font-size: 1.1rem; font-weight: 900; padding: 2px 8px; border-radius: 5px; margin: 4px 0; display: inline-block; border: 2px solid #000;">
+                    🕒 ${data.extras.desired_time}
+                </div>`;
+        }
+
+        // 3. Logique pour les autres EXTRAS (Ustensiles, Note, Sauces)
+        let extrasHtml = '';
+        if (data.extras) {
+            const ex = data.extras;
+            if (ex.utensils && ex.utensils !== 'UST' && ex.utensils !== '') {
+                extrasHtml += `<div class="extra-badge">🍴 ${ex.utensils}</div>`;
+            }
+            if (ex.custom_note && ex.custom_note !== 'NOTE' && ex.custom_note !== '') {
+                extrasHtml += `<div class="extra-badge badge-note">📝 ${ex.custom_note}</div>`;
+            }
+            if (ex.sauces && ex.sauces !== 'SAUCES' && ex.sauces !== '') {
+                extrasHtml += `<div class="extra-badge" style="background:#27ae60">🥫 ${ex.sauces}</div>`;
+            }
+        }
+
+        let subsHtml = clientSubs.slice(0, -3).map(sub => `<li>${sub}</li>`).join('');
+
+        // 4. Rendu HTML final (Version compacte)
+        el.innerHTML = `
+            <div class="livraison-no" style="font-size: 0.85rem !important;">LIVRAISON : ${foundNo}</div>
+            ${heureHtml}
+            <div class="client-address" style="font-weight: 900; font-size: 0.8rem !important;">${clientMain}</div>
+            <ul class="client-details" style="font-size: 0.7rem !important;">${subsHtml}</ul>
+            <div class="extras-container" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                ${extrasHtml}
+            </div>
+        `;
+
+        // 5. Gestion de l'encadré rouge clignotant
+        const parentCard = el.closest('.kds-card');
+        if (parentCard && (data.is_new || data.is_modified)) {
+            parentCard.classList.add('pulse-red');
+        }
+
+
+    }
+
+    function toggleStatus(casierId, forceDisable = null) {
+        const el = document.getElementById(casierId);
+        const btn = el.querySelector('.btn-toggle-status');
+        const label = el.querySelector('.name-label');
+        const fullName = el.dataset.id.toUpperCase();
+        
+        // Détermine si on doit désactiver (soit forcé, soit par toggle)
+        const isDisabling = (forceDisable !== null) ? forceDisable : !el.classList.contains('disabled');
+
+        if (isDisabling) {
+            const zone = el.querySelector('.drop-zone-zone');
+            // On ne bloque pas si c'est le chargement initial (forceDisable)
+            if (forceDisable === null && zone.children.length > 0) {
+                alert("Videz le casier avant de le désactiver !");
+                return;
+            }
+            el.classList.add('disabled');
+            btn.textContent = "🔴"; 
+            label.textContent = fullName.substring(0, 3);
+        } else {
+            el.classList.remove('disabled');
+            btn.textContent = "🟢";
+            label.textContent = fullName;
+        }
+    }
+
+    function initSortables() {
+        const containers = [document.getElementById('dz-cmd'), ...document.querySelectorAll('.drop-zone-zone')];
+        containers.forEach(container => {
+            if(!container) return;
+            new Sortable(container, {
+                group: 'placeur',
+                animation: 200,
+                onMove: function (evt) {
+                    // EMPÊCHE LE DROP si le casier de destination est désactivé
+                    const targetCasier = evt.to.closest('.casier');
+                    if (targetCasier && targetCasier.classList.contains('disabled')) {
+                        return false;
+                    }
+                },
+                onEnd: (evt) => {
+                    const bid = evt.item.dataset.id;
+                    const parentCasier = evt.to.closest('.casier');
+                    const zoneName = parentCasier ? parentCasier.dataset.id : "dz-cmd";
+                    savePosition(bid, zoneName);
+                }
+            });
+        });
+    }
+
+    function savePosition(bid, zoneName) {
+        // 1. On garde la position en mémoire locale pour le prochain rafraîchissement
+        localStorage.setItem('pos_p_' + bid, zoneName);
+
+        // 2. Si on place dans la RÉCEPTION (dz-cmd), on retire le livreur sur le serveur
+        if (zoneName === "dz-cmd") {
+            fetch(`/assign_livreur/${bid}/NONE`, { method: 'POST' })
+                .then(() => fetchData()) // On rafraîchit pour être sûr
+                .catch(err => console.error("Erreur désassignation:", err));
+            return;
+        }
+
+        // 3. Si on place dans le casier d'un livreur (zoneName est le nom du livreur)
+        if (zoneName) {
+            console.log(`Assignation de ${bid} à ${zoneName}...`);
+            
+            // On bloque temporairement fetchData pour éviter les sauts visuels
+            isModalOpen = true; 
+
+            fetch(`/assign_livreur/${bid}/${zoneName}`, { method: 'POST' })
+                .then(response => {
+                    if (response.ok) {
+                        console.log("Assignation réussie !");
+                    }
+                    isModalOpen = false;
+                    fetchData(); // On relance le fetch pour confirmer les données
+                })
+                .catch(err => {
+                    console.error("Erreur assignation:", err);
+                    isModalOpen = false;
+                });
+        }
+    }
+
+    // Fonction pour ouvrir/fermer le casier
+    function toggleCasier(casierId) {
+        const el = document.getElementById(casierId);
+        el.classList.toggle('expanded');
+    }
+
+    // Modifiez votre fonction updateUI existante pour gérer la visibilité du bouton "..."
+    function updateUI() {
+        document.querySelectorAll('.casier').forEach(c => {
+            const zone = c.querySelector('.drop-zone-zone');
+            const count = zone.children.length;
+            
+            // Mise à jour du badge
+            c.querySelector('.badge').textContent = "00";
+            c.style.border = count > 0 ? "1px solid var(--accent)" : "1px solid rgba(255,255,255,0.05)";
+
+            // Affiche le bouton "..." seulement s'il y a plus de 5 factures
+            const btnMore = c.querySelector('.btn-more');
+            if (count > 3) {
+                btnMore.style.display = 'block';
+            } else {
+                btnMore.style.display = 'none';
+                c.classList.remove('expanded'); // Referme automatiquement si le compte baisse
+            }
+        });
+    }
+
+    function openView(bid) {
+        const data = facturesCache[bid];
+        if(!data) return;
+        isModalOpen = true;
+        document.getElementById('view-title').textContent = "COMMANDE #" + bid;
+        
+        let itemsRaw = [];
+        try { itemsRaw = typeof data.items === 'string' ? JSON.parse(data.items) : data.items; } catch(e) { itemsRaw = []; }
+
+        let html = `<div style="font-family:monospace; font-size:1.1em;">`;
+        itemsRaw.forEach(raw => {
+            let it = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            html += `<div style="margin-bottom:10px;"><strong>● ${it.main_item}</strong>`;
+            if(it.sub_items) html += `<ul style="margin:2px 0 0 15px;">${it.sub_items.map(s => `<li>${s}</li>`).join('')}</ul>`;
+            html += `</div>`;
+        });
+        html += `</div>`;
+        
+        document.getElementById('view-items').innerHTML = html;
+        document.getElementById('modal-view').style.display = 'flex';
+    }
+
+    function openAttrib(btn) {
+        isModalOpen = true;
+        const sourceCasier = btn.closest('.casier');
+        const sourceZone = sourceCasier.querySelector('.drop-zone-zone');
+        
+        // Sécurité : ne rien faire si le casier est vide
+        if (sourceZone.children.length === 0) { 
+            isModalOpen = false; 
+            return; 
+        }
+
+        const sourceName = sourceCasier.dataset.id;
+        const opts = document.getElementById('attr-options');
+        opts.innerHTML = '';
+        
+        // --- LOGIQUE DE TRI DYNAMIQUE ---
+        let sortedZones = [];
+        const isSourceLivreur = LISTE_LIVREURS.includes(sourceName);
+
+        if (isSourceLivreur) {
+            // Si on part d'un livreur : on met les GROUPES en premier
+            sortedZones = [...LISTE_GROUPES, ...LISTE_LIVREURS, "RÉCEPTION"];
+        } else {
+            // Si on part d'un groupe : on met les LIVREURS en premier
+            sortedZones = [...LISTE_LIVREURS, ...LISTE_GROUPES, "RÉCEPTION"];
+        }
+
+        // Création des boutons selon l'ordre défini
+        sortedZones.forEach(name => {
+            // On n'affiche pas le casier d'origine dans la liste
+            if (sourceName !== name) {
+                const b = document.createElement('button');
+                b.className = 'select-btn';
+                
+                // Style visuel pour différencier les types dans la liste
+                if (LISTE_LIVREURS.includes(name)) {
+                    b.style.borderLeft = "4px solid #27ae60"; // Vert pour livreurs
+                } else if (LISTE_GROUPES.includes(name)) {
+                    b.style.borderLeft = "4px solid var(--accent)"; // Bleu pour groupes
+                }
+
+                b.textContent = name;
+                
+                b.onclick = () => {
+                    const targetDz = (name === "RÉCEPTION") 
+                        ? document.getElementById('dz-cmd') 
+                        : document.querySelector(`#casier-${name.replace(/\s+/g, '')} .drop-zone-zone`);
+                    
+                    if (targetDz) {
+                        Array.from(sourceZone.children).forEach(item => {
+                            targetDz.appendChild(item);
+                            savePosition(item.dataset.id, name === "RÉCEPTION" ? "dz-cmd" : name);
+                        });
+                    }
+                    closeModal('modal-attr');
+                };
+                opts.appendChild(b);
+            }
+        });
+
+        document.getElementById('modal-attr').style.display = 'flex';
+    }
+
+    function closeModal(id) { 
+        document.getElementById(id).style.display = 'none'; 
+        isModalOpen = false;
+        updateUI();
+    }
+</script>
+</body>
+</html>

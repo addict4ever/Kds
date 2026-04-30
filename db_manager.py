@@ -66,7 +66,8 @@ class DBManager:
                     service_type TEXT NOT NULL, 
                     items TEXT NOT NULL,
                     creation_date TEXT NOT NULL,
-                    status TEXT NOT NULL
+                    status TEXT NOT NULL,
+                    raw_content BLOB  -- ⭐ Stockage du ticket binaire
                 )
             """)
             
@@ -96,7 +97,8 @@ class DBManager:
                     items TEXT NOT NULL,
                     creation_date TEXT NOT NULL,
                     status TEXT NOT NULL,
-                    archived_date TEXT NOT NULL
+                    archived_date TEXT NOT NULL,
+                    raw_content BLOB  -- ⭐ Stockage du ticket binaire
                 )
             """)
             conn_consultation.commit()
@@ -686,24 +688,25 @@ class DBManager:
 
 # ... (votre classe DBManager)
 
-    def update_pa_details(self, bid, note, desired_time, utensils):
-        """
-        Met à jour les détails (HEURE, NOTE, UST). 
-        Découpe la NOTE en plusieurs lignes de 20 caractères max dans les sub_items.
-        """
-        
+    def update_pa_details(self, bid, note, desired_time, utensils, donner_au_pc=False, pa_number=None):
+        import textwrap
+        import json
+        import threading
+        import sqlite3
+
         conn = self._get_connection()
         try:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             str_bid = str(bid)
             
+            # 1. Récupération de la commande
             cursor.execute("SELECT * FROM orders WHERE id = ?", (str_bid,))
             row = cursor.fetchone()
             if not row:
                 return False
 
-            # 1. Décodage sécurisé
+            # 2. Décodage des items existants
             current_items_objs = []
             raw_items_data = row['items']
             if raw_items_data:
@@ -714,87 +717,77 @@ class DBManager:
                 except:
                     current_items_objs = []
 
-            # --- LOGIQUE DE DÉCOUPAGE DE LA NOTE ---
-            note_valide = note if (note and note.upper() != 'NOTE') else None
-            note_lines = []
-            if note_valide:
-                # textwrap.wrap coupe à 20 carac en respectant les espaces entre les mots
-                note_lines = textwrap.wrap(note_valide, width=18)
-
-            # 2. Logique de Mise à jour des extras existants
-            extras_map = {
-                "HEURE:": desired_time if (desired_time and desired_time.upper() != 'HEURE') else None,
-                "UST:": utensils if (utensils and utensils.upper() != 'UST') else None,
-                "NOTE:": note_valide # Utilisé pour flagger la présence
-            }
-
-            found_keys = set()
-            for item in current_items_objs:
-                if isinstance(item, dict):
-                    main_item = str(item.get('main_item', ""))
-                    
-                    # Gestion Spécifique de la NOTE (avec sub_items)
-                    if main_item.startswith("NOTE:"):
-                        if note_valide:
-                            item['main_item'] = "NOTE:"
-                            item['sub_items'] = note_lines # On met les morceaux ici
-                            found_keys.add("NOTE:")
-                        else:
-                            item['to_delete'] = True
-                        continue
-
-                    # Gestion HEURE et UST
-                    for prefix in ["HEURE:", "UST:"]:
-                        if main_item.startswith(prefix):
-                            new_val = extras_map[prefix]
-                            if new_val:
-                                item['main_item'] = f"{prefix} {new_val}"
-                                item['sub_items'] = [] # Nettoyage au cas où
-                                found_keys.add(prefix)
-                            else:
-                                item['to_delete'] = True
-                            break
+            # --- LOGIQUE DE RÉCUPÉRATION ---
+            # Si on reçoit 'NOTE', 'HEURE' ou 'UST', on essaie de garder l'ancienne valeur si elle existe
             
-            # Suppression des items marqués
-            current_items_objs = [i for i in current_items_objs if not i.get('to_delete')]
+            # Extraction des valeurs actuelles dans les items pour ne pas les perdre
+            old_time = next((i['main_item'].replace("HEURE: ", "") for i in current_items_objs if str(i.get('main_item')).startswith("HEURE:")), None)
+            old_ust = next((i['main_item'].replace("UST: ", "") for i in current_items_objs if str(i.get('main_item')).startswith("UST:")), None)
+            old_note_obj = next((i for i in current_items_objs if str(i.get('main_item')) == "NOTE:"), None)
 
-            # 3. Ajout des nouveaux si non trouvés
-            if extras_map["HEURE:"] and "HEURE:" not in found_keys:
-                current_items_objs.append({"main_item": f"HEURE: {extras_map['HEURE:']}", "sub_items": []})
+            # On décide quelle valeur utiliser (la nouvelle si elle est valide, sinon l'ancienne)
+            final_time = desired_time if (desired_time and desired_time.upper() != 'HEURE') else old_time
+            final_ust = utensils if (utensils and utensils.upper() != 'UST') else old_ust
             
-            if extras_map["UST:"] and "UST:" not in found_keys:
-                current_items_objs.append({"main_item": f"UST: {extras_map['UST:']}", "sub_items": []})
+            # Pour la note, on vérifie si la nouvelle est valide
+            if note and note.upper() != 'NOTE':
+                final_note = note
+            else:
+                # On reconstruit la note à partir des sub_items si elle existait
+                final_note = " ".join(old_note_obj['sub_items']) if old_note_obj else None
 
-            if extras_map["NOTE:"] and "NOTE:" not in found_keys:
+            # 3. Préparation des lignes de note
+            note_lines = textwrap.wrap(final_note, width=18) if final_note else []
+
+            # 4. Nettoyage (on enlève tout pour reconstruire proprement avec les valeurs conservées)
+            prefixes_to_clean = ["HEURE:", "UST:", "NOTE:", "*** DONNER AU PC", "*** ENLEVER", "PA #"]
+            current_items_objs = [
+                i for i in current_items_objs 
+                if not any(str(i.get('main_item', '')).startswith(p) for p in prefixes_to_clean)
+            ]
+
+            # 5. Ajout des valeurs (finales ou récupérées)
+            if final_time:
+                current_items_objs.append({"main_item": f"HEURE: {final_time}", "sub_items": []})
+            
+            if final_ust:
+                current_items_objs.append({"main_item": f"UST: {final_ust}", "sub_items": []})
+
+            if final_note:
                 current_items_objs.append({"main_item": "NOTE:", "sub_items": note_lines})
+            
+            if donner_au_pc:
+                display_pa = pa_number if pa_number else "???"
+                current_items_objs.append({"main_item": f"*** DONNER AU PC (PA #{display_pa}) ***", "sub_items": []})
+                current_items_objs.append({"main_item": "*** ENLEVER LE PAPIER JAUNE ***", "sub_items": []})
 
-            # 4. Mise à jour en base
-            final_items_json_strings = [json.dumps(obj) for obj in current_items_objs]
+            # 6. MISE À JOUR EN BASE
+            final_json = json.dumps([json.dumps(obj) for obj in current_items_objs])
             
             cursor.execute("""
                 UPDATE orders 
                 SET items = ?, status = ? 
                 WHERE id = ?
-            """, (json.dumps(final_items_json_strings), 'Traitée', str_bid))
+            """, (final_json, 'Traitée', str_bid))
             
             conn.commit()
             
-            # 5. Timer pour retour à 'En attente'
+            # 7. RÉACTIVATION après 3 seconde
             def reset_to_pending():
                 try:
-                    conn_timer = self._get_connection()
+                    conn_timer = sqlite3.connect(self.db_path)
                     cur = conn_timer.cursor()
                     cur.execute("UPDATE orders SET status = ? WHERE id = ?", ('En attente', str_bid))
                     conn_timer.commit()
                     conn_timer.close()
                 except Exception as e:
-                    logger.error(f"Erreur reset {str_bid}: {e}")
+                    print(f"Erreur réactivation: {e}")
 
-            threading.Timer(1.0, reset_to_pending).start()
+            threading.Timer(3.0, reset_to_pending).start()
             return True
 
         except Exception as e:
-            logger.error(f"Erreur critique update_pa_details pour {bid}: {e}")
+            print(f"Erreur: {e}")
             if conn: conn.rollback()
             return False
         finally:
@@ -899,10 +892,10 @@ class DBManager:
             return 0
 
     # --- MÉTHODES DE COMMANDE (MODIFIÉE) ---
-    def insert_order(self, bill_id, table_number, serveuse_name, service_type, items, status='En attente', creation_date=None):
+    def insert_order(self, bill_id, table_number, serveuse_name, service_type, items, status='En attente', creation_date=None, raw_content=None):
         """
-        Insère une nouvelle ligne de commande en garantissant l'unicité par un suffixe de 8 caractères.
-        Gère l'insertion dans la base principale et l'archive de consultation de manière sécurisée.
+        Insère une nouvelle ligne de commande avec son contenu binaire brut (ESC/POS).
+        Garantit l'unicité par un suffixe de 8 caractères et gère l'archive de consultation.
         """
         conn = None
         conn_consul = None # Pour la base d'archive
@@ -915,19 +908,19 @@ class DBManager:
         if not creation_date:
             creation_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # Encodage des items
+        # Encodage des items en JSON
         items_json = json.dumps(items, ensure_ascii=False) 
 
         try:
-            # --- BASE PRINCIPALE ---
+            # --- BASE PRINCIPALE (kds_orders.db) ---
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            # 3. Insertion avec le safe_bill_id
+            # 3. Insertion incluant le champ raw_content (BLOB)
             cursor.execute("""
-                INSERT INTO orders (bill_id, table_number, serveuse_name, service_type, items, creation_date, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (safe_bill_id, table_number, serveuse_name, service_type, items_json, creation_date, status))
+                INSERT INTO orders (bill_id, table_number, serveuse_name, service_type, items, creation_date, status, raw_content)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (safe_bill_id, table_number, serveuse_name, service_type, items_json, creation_date, status, raw_content))
             
             # 4. Note de facture (obligatoire pour le fonctionnement du KDS)
             cursor.execute("""
@@ -938,39 +931,35 @@ class DBManager:
             conn.commit()
             logger.info(f"Commande ajoutée avec succès. ID unique: {safe_bill_id}")
             
-           
+            # --- LOGIQUE DE FILTRAGE POUR L'ARCHIVE ---
             est_livreur = (str(table_number) == "999")
-            
-            # 2. Est-ce la table 888 ET le nom contient "INCONNU" ?
-            # On met tout en MAJUSCULES pour que ça marche avec "Inconnu", "INCONNU", etc.
             nom_serveuse_maj = str(serveuse_name).upper()
             est_inconnu_888 = (str(table_number) == "888" and "INCONNU" in nom_serveuse_maj)
 
-            # On n'enregistre dans CONSULTATION que si ce n'est NI l'un NI l'autre
+            # On n'enregistre dans CONSULTATION que si ce n'est NI un livreur NI un test "Inconnu"
             if not est_livreur and not est_inconnu_888:
                 try:
                     conn_consul = self._get_consultation_connection()
                     cursor_consul = conn_consul.cursor()
                     
-                    # Insertion avec archived_date pour respecter la contrainte NOT NULL
+                    # 5. Insertion dans orders_archive incluant le contenu brut
                     cursor_consul.execute("""
                         INSERT INTO orders_archive (
                             bill_id, table_number, serveuse_name, service_type, 
-                            items, creation_date, status, archived_date
+                            items, creation_date, status, archived_date, raw_content
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         safe_bill_id, table_number, serveuse_name, service_type, 
-                        items_json, creation_date, status, creation_date
+                        items_json, creation_date, status, creation_date, raw_content
                     ))
                     
                     conn_consul.commit()
-                    logger.info(f"Commande {safe_bill_id} dupliquée dans l'archive consultation.")
+                    logger.info(f"Commande {safe_bill_id} dupliquée dans l'archive consultation (avec binaire).")
                 except sqlite3.Error as e_consul:
                     logger.error(f"Erreur lors de l'archivage (consultation.db) : {e_consul}")
                     if conn_consul: conn_consul.rollback()
             else:
-                # Log précis pour tes vérifications
                 raison = "LIVREUR (999)" if est_livreur else "TEST/ERREUR (888 + Nom contient INCONNU)"
                 logger.info(f"Commande {safe_bill_id} ignorée pour l'archive (Raison: {raison})")
 
@@ -979,37 +968,49 @@ class DBManager:
             if conn: conn.rollback()
         
         finally:
-            # ⭐ SÉCURITÉ : Fermeture impérative de toutes les connexions
+            # Fermeture impérative des connexions pour libérer SQLite
             if conn:
                 conn.close()
             if conn_consul:
                 conn_consul.close()
         
-    def add_new_order(self, bill_id, table_number, serveuse_name, service_type, items, status='En attente', creation_date=None):
+    def add_new_order(self, bill_id, table_number, serveuse_name, service_type, items, status='En attente', creation_date=None, raw_content=None):
         """
         Ajoute une nouvelle commande. 
-        Appelle la méthode interne insert_order avec la date optionnelle.
+        Relaye les informations, y compris le ticket brut (raw_content), 
+        à la méthode interne insert_order.
         """
         logger.info(f"Tentative d'ajout d'une nouvelle commande : Bill ID {bill_id}.")
-        return self.insert_order(bill_id, table_number, serveuse_name, service_type, items, status, creation_date)
-        # --- MÉTHODES DE LECTURE ---
+        
+        # On passe maintenant raw_content à insert_order
+        return self.insert_order(
+            bill_id=bill_id, 
+            table_number=table_number, 
+            serveuse_name=serveuse_name, 
+            service_type=service_type, 
+            items=items, 
+            status=status, 
+            creation_date=creation_date,
+            raw_content=raw_content
+        )
 
     def get_pending_orders(self):
         """
         Récupère toutes les commandes en cours et les regroupe par types
-        (COMMANDE, LIVRAISON, LIVREUR, POUR EMPORTER).
-        777 -> LIVRAISON, 999 -> LIVREUR, 888 -> EMPORTER.
+        incluant le contenu brut (BLOB) pour la réimpression.
         """
         conn = None
         rows = []
         
-        # --- 1. LECTURE DE LA BASE (Le plus court possible) ---
+        # --- 1. LECTURE DE LA BASE ---
         try:
             conn = self._get_connection()
             if conn:
                 cursor = conn.cursor()
+                # ⭐ AJOUT DE raw_content DANS LE SELECT (Index 8)
                 cursor.execute("""
-                    SELECT id, bill_id, table_number, serveuse_name, service_type, items, creation_date, status 
+                    SELECT id, bill_id, table_number, serveuse_name, service_type, 
+                           items, creation_date, status, raw_content 
                     FROM orders 
                     WHERE status NOT IN ('Traitée', 'Annulée') 
                     ORDER BY creation_date ASC
@@ -1018,12 +1019,10 @@ class DBManager:
         except sqlite3.Error as e:
             logger.error(f"Erreur lors de la récupération des commandes : {e}")
         finally:
-            # ⭐ CRUCIAL : On ferme la connexion immédiatement après la lecture 
-            # pour laisser la place aux threads d'écriture (SerialReader).
             if conn: 
                 conn.close()
 
-        # --- 2. TRAITEMENT DES DONNÉES (Hors connexion SQL) ---
+        # --- 2. TRAITEMENT DES DONNÉES ---
         pending_orders_by_service = {
             'COMMANDE': [],
             'LIVRAISON': [],
@@ -1033,10 +1032,10 @@ class DBManager:
         
         for row in rows:
             try:
-                # Sécurité sur la désérialisation JSON
                 raw_items = row[5]
                 items_list = json.loads(raw_items) if raw_items else []
                 
+                # Construction du dictionnaire avec le BLOB
                 order_data = {
                     'id': row[0],
                     'bill_id': row[1],
@@ -1045,7 +1044,8 @@ class DBManager:
                     'service_type': str(row[4]).upper(), 
                     'items': items_list,
                     'creation_date': row[6],
-                    'status': row[7]
+                    'status': row[7],
+                    'raw_content': row[8]  # ⭐ RÉCUPÉRATION DU BLOB BINAIRE
                 }
                 
                 stype = order_data['service_type']
@@ -1053,29 +1053,78 @@ class DBManager:
                 serveuse = order_data['serveuse_name']
                 
                 # --- LOGIQUE DE CLASSEMENT ---
-                
-                # 1. LIVRAISON (Table 777 ou Serveuse 777 ou mot clé)
+                # 1. LIVRAISON
                 if table == "777" or serveuse == "777" or "LIVRAISON" in stype:
                     pending_orders_by_service['LIVRAISON'].append(order_data)
                 
-                # 2. LIVREUR (Table 999 ou Serveuse 999 ou mot clé)
+                # 2. LIVREUR
                 elif table == "999" or serveuse == "999" or "LIVREUR" in stype:
                     pending_orders_by_service['LIVREUR'].append(order_data)
                 
-                # 3. POUR EMPORTER (Table 888 ou mot clé)
+                # 3. POUR EMPORTER
                 elif table == "888" or "EMPORTER" in stype:
                     pending_orders_by_service['POUR EMPORTER'].append(order_data)
                 
-                # 4. COMMANDE (Par défaut : Salle)
+                # 4. COMMANDE (Salle)
                 else:
                     pending_orders_by_service['COMMANDE'].append(order_data)
                     
             except Exception as e:
-                # Si un ticket est corrompu, on log l'erreur et on passe au suivant sans crasher
                 logger.warning(f"Erreur lors du traitement d'une ligne (ID {row[0]}): {e}")
                 continue
                 
         return pending_orders_by_service
+
+    def get_pa_orders_with_history(self):
+        """
+        Récupère les PA (actifs + poubelle) limités aux 30 derniers
+        et les formate en dictionnaire pour web_access.py.
+        """
+        conn = self._get_connection()
+        rows = []
+        try:
+            cursor = conn.cursor()
+            # On prend les PA actifs ET les 'Traitée' récents, limite à 30
+            cursor.execute("""
+                SELECT id, bill_id, table_number, serveuse_name, service_type, 
+                       items, creation_date, status, raw_content 
+                FROM orders 
+                WHERE (table_number LIKE 'PA%' OR table_number = '888' OR service_type LIKE '%EMPORTER%')
+                  AND status != 'Annulée'
+                ORDER BY 
+                    CASE WHEN status = 'En attente' THEN 1 ELSE 2 END ASC, 
+                    creation_date DESC
+                LIMIT 30
+            """)
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
+
+        # On prépare le format dictionnaire attendu par web_access.py
+        data_filtered = {
+            'POUR EMPORTER': []
+        }
+
+        for row in rows:
+            try:
+                raw_items = row[5]
+                items_list = json.loads(raw_items) if raw_items else []
+                data_filtered['POUR EMPORTER'].append({
+                    'id': row[0],
+                    'bill_id': row[1],
+                    'table_number': str(row[2]).strip(),
+                    'serveuse_name': str(row[3]).strip(),
+                    'service_type': str(row[4]).upper(),
+                    'items': items_list,
+                    'creation_date': row[6],
+                    'status': row[7],
+                    'raw_content': row[8]
+                })
+            except Exception as e:
+                logger.error(f"Erreur parsing item PA: {e}")
+                continue
+        
+        return data_filtered
     
     def get_completed_orders(self):
         """

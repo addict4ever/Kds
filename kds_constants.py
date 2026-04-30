@@ -35,12 +35,12 @@ COLOR_NOTE = '#f1c40f'
 
 # --- Dimensions ---
 
-H_SCROLLBAR_HEIGHT = 15
+H_SCROLLBAR_HEIGHT = 45
 
 CARD_WIDTH = 300
-CARD_BORDER_WIDTH = 5
-CARD_PADDING = 5
-H_MARGIN = 5 # Marge horizontale entre les colonnes
+CARD_BORDER_WIDTH = 0
+CARD_PADDING = 1
+H_MARGIN = 0 # Marge horizontale entre les colonnes
 
 # --- Logique KDS ---
 # Définir l'ordre et les colonnes de service

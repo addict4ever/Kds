@@ -19,14 +19,19 @@
             </button>
             
 
-            <div class="casiers-container" style="display: flex; gap: 16px; align-items: center;">
-                {% for nom, nb in stats.items() %}
-                <div class="casier-card" onclick="filterByLivreur('{{ nom }}')" id="btn-{{ nom }}">
-                    <div class="casier-name fs-5">{{ nom }}</div>
-                    <div class="casier-count">{{ nb }}</div>
+            <div class="casiers-container" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                {% for nom in livreurs_actifs %}
+                {% set nb = stats.get(nom, 0) %}
+                <div class="casier-card" onclick="filterByLivreur('{{ nom }}')" id="casier-{{ nom }}"
+                    style="background: #222; border: 3px solid #3498db; padding: 15px; border-radius: 15px; min-width: 140px; text-align: center; cursor: pointer;">
+                    <div style="font-size: 1.2rem; color: #aaa; font-weight: bold;">{{ nom }}</div>
+                    <div style="font-size: 2.5rem; color: white; font-weight: 900;">00</div>
                 </div>
                 {% endfor %}
-
+                <div class="casier-card" onclick="openAdminLivreurModal()" 
+                    style="background-color: #2c3e50; border-color: #95a5a6; min-width: 80px; width: 80px; display: flex; justify-content: center; align-items: center;">
+                    <div style="font-size: 2rem; color: #ecf0f1;"><i class="fas fa-cog"></i></div>
+                </div>
                 <div class="casier-card" onclick="enableAudio()" id="btn-audio-enable" 
                     style="background-color: #8e44ad; border-color: #fff; min-width: 120px; width: 120px; cursor: pointer;">
                     <div class="casier-name" style="color: white; font-size: 1rem !important;">AUDIO</div>
@@ -36,105 +41,125 @@
         </div>
     </div>
 
-    <div class="row"id="kds-ajax-zone">
+    <div class="row row-cols-5 g-2" id="kds-ajax-zone">
         {% for bid, item in livraisons.items() %}
+            {# --- INITIALISATION ET RECHERCHE DU NUMÉRO --- #}
+            {% set ns = namespace(found_no="") %}
+            
+            {% for raw_it in item.data['items'] %}
+                {% set it = raw_it | from_json %}
+                {% if "LIVRAISON #" in (it.main_item|upper) %}
+                    {# On prend le chiffre après le # et on split par espace pour enlever "FACTURE" #}
+                    {% set ns.found_no = it.main_item.split('#')[1].split(' ')[0]|trim %}
+                {% endif %}
+                {% if it.sub_items %}
+                    {% for sub in it.sub_items %}
+                        {% if "LIVRAISON #" in sub|upper %}
+                            {% set ns.found_no = sub.split('#')[1].split(' ')[0]|trim %}
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            {% endfor %}
         <div class="kds-column order-wrapper" data-livreur="{{ item.livreur if item.livreur else '' }}"
              style="display: {{ 'block' if (not item.livreur or show_all) else 'none' }};">
             
-            <div class="kds-card {{ 'assigned' if item.livreur }} {{ 'pulse-red' if item.is_new else 'not-new' }}" id="order-{{ bid }}">
+            <div class="kds-card {{ 'assigned' if item.livreur }}  {{ 'pulse-red' if item.is_new }}" 
+                id="order-{{ bid }}" 
+                data-livraison-no="{{ ns.found_no }}"
+                ondblclick="handleDblClick('{{ bid }}')">
                 <div class="card-header d-flex justify-content-between align-items-center" onclick="toggleView('{{ bid }}')">
                     <span>
-                        {% set ns = namespace(found_no="", address="", phone="") %}
+                        {% set ns = namespace(found_no="") %}
                         
+                        {# 1. Recherche du numéro de livraison dans toutes les données #}
                         {% for raw_it in item.data['items'] %}
                             {% set it = raw_it | from_json %}
-                            {% set main = (it.main_item|string).replace('@', '').replace(' ', '')|trim %}
-
-                            {# 1. Logique Livraison #}
                             {% if "LIVRAISON #" in (it.main_item|upper) %}
                                 {% set ns.found_no = it.main_item.split('#')[1]|trim %}
                             {% endif %}
-
-                            {# 2. Logique Adresse : Si main_item est un numéro (ex: 37 ou 1083) #}
-                            {% if main|length > 0 and main|int(-1) != -1 and ns.address == "" %}
-                                {% if it.sub_items|length >= 1 %}
-                                    {% set ns.address = it.main_item.replace('@', '')|trim ~ " " ~ it.sub_items[0] %}
-                                {% endif %}
-                            {% endif %}
-
-                            {# 3. Logique Téléphone : Scan des sub_items #}
                             {% if it.sub_items %}
                                 {% for sub in it.sub_items %}
-                                    
-                                    {# On garde seulement les chiffres #}
-                                    {% set clean = sub | regex_replace('[^0-9]', '') %}
-                                    
-                                    {# Numéro canadien standard #}
-                                    {% if clean|length == 10 %}
-                                        {% set ns.phone = clean[0:3] ~ '-' ~ clean[3:6] ~ '-' ~ clean[6:10] %}
-                                    {% endif %}
-
-                                    {# Vérif livraison dans sub_items au cas où #}
                                     {% if "LIVRAISON #" in sub|upper %}
                                         {% set ns.found_no = sub.split('#')[1]|trim %}
                                     {% endif %}
-                                    
                                 {% endfor %}
                             {% endif %}
                         {% endfor %}
 
-                        <div>
-                            <strong>LIVRAISON :</strong> {{ ns.found_no if ns.found_no != "" else "???" }}<br>
-                            <strong>Adresse :</strong> {{ ns.address if ns.address != "" else "Non disponible" }}<br>
-                            <strong>Tél :</strong> {{ ns.phone if ns.phone != "" else "Non disponible" }}
+                        {# 2. Affichage du numéro de livraison en premier #}
+                        <div style="margin-bottom: 8px;">
+                            <strong style="font-size: 1.4rem; color: #0f31f1;">LIVRAISON : {{ ns.found_no if ns.found_no != "" else "???" }}</strong>
                         </div>
+
+                        {# 3. Affichage du bloc Info Client (Adresse + Tél) #}
+                        {% for raw_it in item.data['items'] %}
+                            {% set it = raw_it | from_json %}
+                            {% if loop.first %}
+                                <div class="client-info-card" style="background: none; border: none; padding: 0; margin: 0; box-shadow: none; color: inherit;">
+                                    <div class="client-address" style="font-weight: 800; font-size: 1.15rem; color: #fff;">
+                                        {{ it.main_item }}
+                                    </div>
+                                    {% if it.sub_items %}
+                                    <ul class="client-details-list" style="list-style: none; padding: 0; margin: 2px 0 0 0; font-size: 1.15rem; opacity: 0.95;">
+                                        {# On affiche les détails du client (ex: téléphone) filtrés comme vous le souhaitiez #}
+                                        {% for sub in it.sub_items[:-3] %}
+                                            <li>{{ sub }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
                     </span>
                     
-                    <span>{{ '➕' if item.collapsed else '➖' }}</span>
+                    <span style="font-size: 1.5rem;">{{ '➕' if item.collapsed else '➖' }}</span>
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
+                        
                         <div id="timer-{{ bid }}" class="fw-bold text-center" 
                             style="color: #ffff00; font-size: 1.8rem; margin-bottom: 10px; text-shadow: 2px 2px 4px #000;"
                             data-start="{{ item.depart_at if item.depart_at else '' }}">
                         </div>
+                        
 
-                        <div class="d-flex flex-column mt-2 mb-2">
-                            <div class="extras-row">
-                                <div id="btn-heure-{{ bid }}" 
-                                    class="extra-box {% if item.extras.desired_time != 'HEURE' %}extra-selected{% endif %}" 
-                                    onclick="openTimePicker('{{ bid }}')">
-                                    {{ item.extras.desired_time if item.extras.desired_time else 'HEURE' }}
+                        <div class="d-flex flex-column mt-2 mb-3">
+                            <div class="extras-row d-flex justify-content-between mb-2">
+                                {# Heure : masqué si 'HEURE' ou vide #}
+                                {% if item.extras.desired_time and item.extras.desired_time != 'HEURE' %}
+                                <div id="btn-heure-{{ bid }}" class="extra-box extra-selected">
+                                    {{ item.extras.desired_time }}
                                 </div>
+                                {% endif %}
 
-                                <div id="btn-ust-{{ bid }}" 
-                                    class="extra-box {% if item.extras.utensils != 'UST' %}extra-selected{% endif %}" 
-                                    onclick="showUtensilPicker('{{ bid }}')">
-                                    {{ item.extras.utensils if item.extras.utensils else 'UST' }}
+                                {# Ustensiles : masqué si 'UST' ou vide #}
+                                {% if item.extras.utensils and item.extras.utensils != 'UST' %}
+                                <div id="btn-ust-{{ bid }}" class="extra-box extra-selected">
+                                    {{ item.extras.utensils }}
                                 </div>
+                                {% endif %}
 
-                                <div id="btn-note-{{ bid }}" 
-                                    class="extra-box {% if item.extras.custom_note != 'NOTE' %}extra-selected{% endif %}" 
-                                    onclick="showNoteModal('{{ bid }}')">
-                                    {{ item.extras.custom_note if item.extras.custom_note else 'NOTE' }}
+                                {# Note : masqué si 'NOTE' ou vide #}
+                                {% if item.extras.custom_note and item.extras.custom_note != 'NOTE' %}
+                                <div id="btn-note-{{ bid }}" class="extra-box extra-selected">
+                                    {{ item.extras.custom_note }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            {# Sauces : masqué si 'SAUCES' ou vide #}
+                            {% if item.extras.sauces and item.extras.sauces != 'SAUCES' %}
+                            <div class="sauce-row mb-2">
+                                <div id="btn-sauce-{{ item.bid }}" 
+                                    class="extra-box w-100 extra-selected-sauce" 
+                                    style="text-align: center; justify-content: center;">
+                                    {{ item.extras.sauces }}
                                 </div>
                             </div>
-                        </div>
+                            {% endif %}
 
-                        <div class="actions-section mt-3 mb-3">
-                            <button id="ok-{{ bid }}" class="btn btn-success w-100 mb-2 fw-bold touch-element-xxl" 
-                                    style="display:none; height: 60px; font-size: 1.3rem; background-color: #2ecc71 !important;" 
-                                    onclick="sendAllExtras('{{ bid }}')">
-                                ✅ ENREGISTRER (OK)
-                            </button>
-
-                            <button id="btn-assign-{{ bid }}" 
-                                    class="btn btn-white-touch w-100 touch-element-xxl d-flex align-items-center justify-content-center" 
-                                    style="border: 2px solid #00d2ff !important; color: #00d2ff !important; background: #000 !important; height: 60px; font-weight: bold;"
-                                    onclick="openLivreurModal('{{ bid }}')">
-                                {{ item.livreur if item.livreur else '👤 ASSIGNER LIVREUR' }}
-                            </button>
-
+                            
+                            
                             {% if item.livreur %}
                             <div class="d-flex gap-2 mt-2">
                                 <button class="btn-unassign flex-grow-1" 
@@ -150,37 +175,69 @@
                                 </button>
                             </div>
 
-                            <button class="btn btn-warning w-100 mt-2 fw-bold" 
-                                    style="height: 60px; font-size: 1.2rem; background-color: #f39c12 !important;" 
-                                    onclick="printOrder('{{ bid }}')">
-                                🖨️ IMPRIMER
-                            </button>
+                            
                             {% endif %}
+
+                            <button id="btn-assign-{{ bid }}" 
+                                    class="btn btn-white-touch w-100 touch-element-xxl d-flex align-items-center justify-content-center" 
+                                    style="border: 2px solid #00d2ff !important; color: #00d2ff !important; background: #000 !important; height: 60px; font-weight: bold;"
+                                    onclick="openLivreurModal('{{ bid }}')">
+                                {{ item.livreur if item.livreur else '👤 ASSIGNER LIVREUR' }}
+                            </button>
+
                         </div>
 
-                        <span class="text-white fs-6">📍 {{ item.data.address or 'En salle' }}</span>
                     </div>
 
-                    <ul class="list-group list-group-flush mb-3">
+                    <div class="order-container">
                         {% for raw_it in item.data['items'] %}
                             {% set it = raw_it | from_json %}
-                            <li class="list-group-item">
-                                {# Affiche l'item s'il est au format dictionnaire #}
-                                {% if it is mapping and it.main_item is defined %}
-                                    <div class="item-main">{{ it.main_item }}</div>
-                                    {% if it.sub_items %}
-                                    <ul class="sub-items-list">
-                                        {% for sub in it.sub_items %}<li>• {{ sub }}</li>{% endfor %}
+                            
+                            {# On saute le premier élément (déjà dans le header) #}
+                            {% if not loop.first %}
+                                <div class="order-item-row">
+                                    <div class="order-item-main">
+                                        <span class="item-icon"></span> 
+                                        {% if it is mapping %}
+                                            {# Nettoyage et remplacement du texte principal #}
+                                            {{ it.main_item 
+                                                | replace('MERCI !', '') 
+                                                | replace('A LA PROCHAINE', '') 
+                                                | replace('VOUS AVEZ TO SERVI PAR :', '')
+                                                | replace('LIVRAISON', '')
+                                                | replace('COMMERCANT', '')
+                                                | replace('ORIGINALE', '')
+                                                | replace('TOT', 'TOTAL')
+                                                | replace('=', '')
+                                                | replace('*', '')
+                                                | safe 
+                                            }}
+                                        {% else %}
+                                            {{ it }}
+                                        {% endif %}
+                                    </div>
+                                    
+                                    {% if it is mapping and it.sub_items %}
+                                    <ul class="order-item-subs">
+                                        {% for sub in it.sub_items %}
+                                            {# Filtrage strict des lignes et remplacement du texte dans les options #}
+                                            {% set s_upper = sub | upper %}
+                                            {% if "MERCI" not in s_upper 
+                                                and "PROCHAINE" not in s_upper 
+                                                and "SERVI PAR" not in s_upper 
+                                                and "LIVRAISON #" not in s_upper 
+                                                and "COMMERCANT" not in s_upper
+                                                and "ORIGINALE" not in s_upper
+                                                and "====" not in s_upper %}
+                                                <li>{{ sub | replace('TOT', 'TOTAL') | replace('*', '') }}</li>
+                                            {% endif %}
+                                        {% endfor %}
                                     </ul>
                                     {% endif %}
-                                {# Affiche l'item si c'est du texte simple #}
-                                {% else %}
-                                    <div class="item-main">{{ it }}</div>
-                                {% endif %}
-                            </li>
+                                </div>
+                            {% endif %}
                         {% endfor %}
-                    </ul>
-
+                    </div>
                     
                 </div>
             </div>
@@ -206,8 +263,156 @@
     </div>
 </div>
 
+<div id="custom-confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:20000; align-items:center; justify-content:center;">
+    <div style="background:#1a1a1a; border:3px solid #3498db; padding:40px; border-radius:25px; max-width:550px; width:90%; text-align:center; color:white;">
+        <div id="confirm-icon" style="font-size: 70px; margin-bottom: 20px;">⚠️</div>
+        <h2 id="confirm-title" style="font-weight: 900; font-size: 2.5rem;">Confirmation</h2>
+        <p id="confirm-message" style="font-size: 24px; margin-bottom: 35px;"></p>
+        <div style="display: flex; gap: 20px; justify-content: center;">
+            <button id="confirm-yes-btn" class="btn btn-danger" style="min-width: 180px; height: 90px; font-size: 1.8rem; font-weight: 800; border-radius: 15px; background-color: #e74c3c !important;">OUI</button>
+            <button type="button" id="confirm-no-btn" class="btn btn-secondary" style="min-width: 180px; height: 90px; font-size: 1.8rem; font-weight: 800; border-radius: 15px; background-color: #7f8c8d !important;">ANNULER</button>
+        </div>
+    </div>
+</div>
+
+<div id="confirmAssignGroupModal" class="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:11000; align-items:center; justify-content:center;">
+    <div class="modal-content" style="background:#2c3e50; border:3px solid #f39c12; border-radius:20px; width:90%; max-width:550px; padding:35px; text-align:center; color:white; box-shadow:0 0 40px rgba(243, 156, 18, 0.4);">
+        
+        <div style="font-size:60px; color:#f39c12; margin-bottom:20px;">
+            <i class="fas fa-truck-loading"></i>
+        </div>
+        
+        <h2 style="margin-bottom:15px; font-weight: bold; text-transform: uppercase;">Livraison Multiple</h2>
+        
+        <p style="font-size:1.4rem; margin-bottom:35px; color: #bdc3c7; line-height: 1.4;">
+            Le numéro <strong id="display-assign-no" style="color:#f1c40f; font-size: 1.6rem;"></strong> a plusieurs factures libres.<br>
+            <span style="font-size: 1.2rem; font-weight: 500;">Voulez-vous TOUT vous assigner ?</span>
+        </p>
+
+        <div class="d-flex flex-column gap-3">
+            <button onclick="applyAssignGroup(true)" class="btn" 
+                style="background-color: #27ae60; color: white; padding:20px; font-weight:900; font-size:1.6rem; border-radius: 15px; border: none; box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);">
+                <i class="fas fa-check-double"></i> OUI, PRENDRE TOUT
+            </button>
+            
+            <button onclick="applyAssignGroup(false)" class="btn" 
+                style="background-color: #2980b9; color: white; padding:20px; font-weight:900; font-size:1.6rem; border-radius: 15px; border: none; box-shadow: 0 4px 15px rgba(41, 128, 185, 0.4);">
+                <i class="fas fa-box"></i> NON, JUSTE CELLE-CI
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-admin-livreurs" style="display:none; position:fixed; z-index:10010; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%;">
+    
+    <div id="admin-custom-toast" style="display:none; position:fixed; top:40px; left:50%; transform:translateX(-50%); background:#2ecc71; color:white; padding:20px 40px; border-radius:15px; z-index:10020; font-size:22px; box-shadow: 0 4px 25px rgba(0,0,0,0.7); border: 2px solid #fff; font-weight: bold; text-align: center; min-width: 400px;">
+        <span id="admin-toast-message"></span>
+    </div>
+
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #3498db; padding:30px; border-radius:25px; width:900px; max-height: 95vh; overflow-y: auto; box-shadow: 0 0 60px rgba(0,0,0,0.9);">
+        
+        <h2 class="text-white text-center mb-4" style="font-size: 2.8rem; font-weight: 900; letter-spacing: 2px;">
+            <i class="fas fa-users-cog text-info"></i> ÉQUIPE DE LIVRAISON
+        </h2>
+        
+        <div id="admin-livreur-list">
+            {% for nom in livreurs %}
+            <div class="livreur-card" style="display: flex; align-items: center; justify-content: space-between; background: #222; padding: 20px; border-radius: 15px; margin-bottom: 15px; border: 2px solid #333; opacity: {{ '1' if nom in livreurs_actifs else '0.5' }}; transition: all 0.3s;">
+                
+                <div class="livreur-display-name" style="font-size: 2rem; color: white; font-weight: 900; flex: 1;">
+                    {{ nom }} 
+                    {% if nom not in livreurs_actifs %}
+                        <span style="font-size: 1.2rem; color: #e74c3c; margin-left: 15px;">(INACTIF)</span>
+                    {% endif %}
+                </div>
+                
+                <div class="action-grid" style="display: flex; gap: 12px;">
+                    <button class="btn {{ 'btn-success' if nom in livreurs_actifs else 'btn-secondary' }}" 
+                            style="width: 90px; height: 80px; font-size: 2.2rem; border: 3px solid #fff;" 
+                            onclick="toggleLivreurStatus('{{ nom }}')"
+                            title="{{ 'Désactiver' if nom in livreurs_actifs else 'Activer' }}">
+                        <i class="fas {{ 'fa-eye' if nom in livreurs_actifs else 'fa-eye-slash' }}"></i>
+                    </button>
+
+                    <button class="btn btn-outline-info" style="width: 80px; height: 80px; font-size: 2.2rem; border-width: 3px;" onclick="moveLivreur('{{ loop.index0 }}', 'up')">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
+                    
+                    <button class="btn btn-outline-info" style="width: 80px; height: 80px; font-size: 2.2rem; border-width: 3px;" onclick="moveLivreur('{{ loop.index0 }}', 'down')">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    
+                    <button class="btn btn-warning" 
+                            style="width: 90px; height: 80px; font-size: 2.2rem; background-color: #f1c40f !important; border: none; color: black !important;" 
+                            onclick="renameLivreur('{{ nom }}')">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    
+                    <button class="btn btn-danger" 
+                            style="width: 90px; height: 80px; font-size: 2.2rem; background-color: #e74c3c !important; border: none;" 
+                            onclick="deleteLivreur('{{ nom }}')">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-4 p-4" style="background: #000; border-radius: 20px; border: 3px solid #444;">
+            <h5 class="text-info mb-3" style="font-weight: 900; font-size: 1.5rem;">➕ NOUVEAU LIVREUR</h5>
+            <div class="input-group" style="height: 100px;">
+                <input type="text" id="new-livreur-name" 
+                       class="form-control bg-dark text-white" 
+                       placeholder="NOM DU LIVREUR" 
+                       style="font-size: 2.5rem; font-weight: 900; border: 3px solid #555; padding-left: 25px;"
+                       onkeypress="if(event.key === 'Enter') addNewLivreur()">
+                <button class="btn btn-success" onclick="addNewLivreur()" style="width: 200px; font-size: 1.8rem; font-weight: 900; text-transform: uppercase;">
+                    AJOUTER
+                </button>
+            </div>
+        </div>
+
+        <div class="d-flex gap-4 mt-5">
+            <button class="btn btn-danger shadow" onclick="cancelAdminChanges()" style="background: #c0392b !important; height: 100px; font-size: 2rem; font-weight: 900; border-radius: 20px; flex: 1; border: none;">
+                <i class="fas fa-times-circle"></i> ANNULER
+            </button>
+
+            <button class="btn btn-primary shadow" onclick="saveAndCloseAdmin()" style="height: 100px; font-size: 2rem; font-weight: 900; border-radius: 20px; flex: 1; border: none; background-color: #2980b9 !important;">
+                <i class="fas fa-check-circle"></i> TERMINER
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-rename-livreur" style="display:none; position:fixed; z-index:20000; background: rgba(0,0,0,0.95); top:0; left:0; width:100%; height:100%; align-items:center; justify-content:center;">
+    <div style="background:#1a1a1a; border:3px solid #f1c40f; padding:40px; border-radius:25px; width:600px; text-align:center; box-shadow: 0 0 50px rgba(0,0,0,0.8);">
+        
+        <h2 style="color:white; font-size:2.5rem; font-weight:900; margin-bottom:20px;">
+            <i class="fas fa-user-edit text-warning"></i> RENOMMER
+        </h2>
+        
+        <p id="rename-label" style="color:#aaa; font-size:1.4rem; margin-bottom:15px;"></p>
+        
+        <input type="text" id="rename-input-field" 
+               style="width:100%; height:90px; background:#000; border:3px solid #444; color:white; font-size:2.8rem; font-weight:900; text-align:center; border-radius:15px; margin-bottom:30px; text-transform: uppercase;">
+        
+        <div style="display:flex; gap:20px;">
+            <button class="btn btn-danger" onclick="closeRenameModal()" style="flex:1; height:90px; font-size:1.8rem; font-weight:800; border-radius:15px;">
+                ANNULER
+            </button>
+            <button class="btn btn-warning" onclick="confirmRename()" style="flex:1; height:90px; font-size:1.8rem; font-weight:800; border-radius:15px; background-color:#f1c40f !important; color:black !important;">
+                MODIFIER
+            </button>
+        </div>
+    </div>
+</div>
+
+
+
+
 <script>
     let currentBid = null;
+    let pendingAction = null;
     let isEditing = false; 
     let currentLivreurFilter = null; // ⭐ On stocke le livreur sélectionné ici
     let pendingBid = null; // Stocke l'ID en attente de confirmation
@@ -219,6 +424,29 @@
     let timeTargetBid = null;
     let assignTargetBid = null;
     let audioCtx = null;
+    let sauceTargetBid = null;
+    let selectedSauces = {};
+    let currentBidToProcess = null;
+    let targetBidForAssign = null; 
+    let pendingAssignData = null;
+    let lastNomToDelete = null;
+    let deleteTimeout = null;
+    let nomActuelPourRename = null;
+    
+    
+
+
+    const SAUCE_LIST = [
+        { id: 'KETCHUP', name: 'Ketchup', icon: '🍅' },
+        { id: 'MAYO', name: 'Mayo', icon: '🥚' },
+        { id: 'VINAIGRE', name: 'Vinaigre', icon: '🧪' },
+        { id: 'BEURRE', name: 'Beurre', icon: '🧈' },
+        { id: 'MIEL', name: 'Miel', icon: '🍯' },
+        { id: 'AIGRE-DOUCE', name: 'Aigre-Douce', icon: '🍱' },
+        { id: 'MOUTARDE', name: 'Moutarde', icon: '🌭' },
+        { id: 'BBQ', name: 'Sauce BBQ', icon: '🔥' },
+        { id: 'PRUNE', name: 'Sauce Prune', icon: '🟣' }
+    ];
 
     if (!sessionStorage.getItem('session_active')) {
         localStorage.removeItem('delivered_orders');
@@ -228,7 +456,7 @@
 
     function refreshKDS() {
         // 1. DÉTECTION DES MODALES OUVERTES
-        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm'];
+        const modals = ['#modal-note', '#modal-utensils', '#custom-confirm-modal','#modal-confirm', '#modal-sauces', '#modal-time', 'modal-admin-livreurs'];
         const isModalOpen = modals.some(selector => {
             const modal = document.querySelector(selector);
             return modal && modal.style.display === 'block';
@@ -262,14 +490,15 @@
                 
                 if (newKds && currentKdsZone && newKds.innerHTML !== currentKdsZone.innerHTML) {
                     
-                    const currentCount = currentKdsZone.querySelectorAll('.kds-column').length;
-                    const newCount = newKds.querySelectorAll('.kds-column').length;
+                    const currentCount = currentKdsZone.querySelectorAll('.kds-card').length;
+                    const newCount = newKds.querySelectorAll('.kds-card').length;
 
-                    // Si on a plus de commandes qu'avant, on sonne !
+                    // Si on a plus de commandes qu'avant, on sonne
                     if (newCount > currentCount) {
-                        playNewOrderSound();
+                        if (typeof playNewOrderSound === 'function') playNewOrderSound();
                     }
-                    // --- ⭐ DÉTECTION DES CHANGEMENTS AVANT REMPLACEMENT ---
+
+                    // --- ⭐ DÉTECTION DES CHANGEMENTS (MÊME SI LE BOUTON ÉTAIT ABSENT) ---
                     let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
 
                     doc.querySelectorAll('.kds-card').forEach(newCard => {
@@ -277,33 +506,33 @@
                         const oldCard = document.getElementById('order-' + bid);
 
                         if (oldCard) {
-                            // Comparer les textes des boutons (Heure, Note, Ustensiles)
-                            const fields = [
-                                { id: 'btn-heure-', selector: '[id^="btn-heure-"]' },
-                                { id: 'btn-note-',  selector: '[id^="btn-note-"]'  },
-                                { id: 'btn-ust-',   selector: '[id^="btn-ust-"]'   }
+                            // On vérifie les 4 types de boutons
+                            const selectors = [
+                                '[id^="btn-heure-"]', 
+                                '[id^="btn-note-"]', 
+                                '[id^="btn-ust-"]', 
+                                '[id^="btn-sauce-"]'
                             ];
 
-                            fields.forEach(f => {
-                                const oldBtn = oldCard.querySelector(f.selector);
-                                const newBtn = newCard.querySelector(f.selector);
-                                
-                                if (oldBtn && newBtn) {
-                                    const oldVal = oldBtn.innerText.trim();
-                                    const newVal = newBtn.innerText.trim();
-                                    
-                                    // Si le texte a changé et n'est pas vide
-                                    if (newVal !== oldVal && newVal !== "") {
-                                        if (!modifiedOrders.includes(bid)) {
-                                            modifiedOrders.push(bid);
-                                        }
+                            selectors.forEach(selector => {
+                                const oldBtn = oldCard.querySelector(selector);
+                                const newBtn = newCard.querySelector(selector);
+
+                                // CAS 1 : Le bouton n'existait pas (ex: pas de note) et il apparaît maintenant
+                                if (!oldBtn && newBtn) {
+                                    if (!modifiedOrders.includes(bid)) modifiedOrders.push(bid);
+                                }
+                                // CAS 2 : Le bouton existait déjà mais le texte à l'intérieur a changé
+                                else if (oldBtn && newBtn) {
+                                    if (oldBtn.innerText.trim() !== newBtn.innerText.trim()) {
+                                        if (!modifiedOrders.includes(bid)) modifiedOrders.push(bid);
                                     }
                                 }
                             });
                         }
                     });
                     localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
-                    // -------------------------------------------------------
+                    // ---------------------------------------------------------------------
 
                     // Sauvegarde des états 'collapsed'
                     const stateMap = {};
@@ -311,13 +540,13 @@
                         stateMap[card.id] = card.classList.contains('collapsed');
                     });
 
-                    // Remplacement du contenu
+                    // Remplacement du contenu HTML
                     currentKdsZone.innerHTML = newKds.innerHTML;
                     if (newCasiers && document.getElementById('casiers-ajax-zone')) {
                         document.getElementById('casiers-ajax-zone').innerHTML = newCasiers.innerHTML;
                     }
 
-                    // Restauration des états 'collapsed' et application du FLASH MAUVE
+                    // Restauration des états et application du cadre rouge
                     document.querySelectorAll('.kds-card').forEach(card => {
                         const bid = card.id.replace('order-', '');
 
@@ -328,20 +557,20 @@
                             if (headerSpan) headerSpan.innerText = '➕';
                         }
 
-                        // ⭐ Appliquer le Flash Mauve si dans la liste des modifiés
+                        // ⭐ Ré-appliquer le Cadre Rouge si modifiée
                         if (modifiedOrders.includes(bid)) {
-                            card.classList.add('pulse-red'); // ou 'flash-mauve' selon ton CSS
+                            card.classList.add('pulse-red');
                         }
                     });
 
                     // Ré-appliquer les filtres
                     if (typeof currentLivreurFilter !== 'undefined' && currentLivreurFilter) {
-                        applyFilter(currentLivreurFilter);
+                        if (typeof applyFilter === 'function') applyFilter(currentLivreurFilter);
                     }
 
                     if (typeof updateTimers === 'function') updateTimers();
 
-                    // Restaurer visuel livré
+                    // Restaurer visuel livré (grisé)
                     let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
                     deliveredOrders.forEach(bid => {
                         if (typeof applyDeliveredVisual === 'function') applyDeliveredVisual(bid); 
@@ -350,6 +579,341 @@
             })
             .catch(err => console.error("Erreur refresh KDS:", err));
     }
+
+    function showToast(message, color = "#2ecc71") {
+        const toast = document.getElementById('custom-toast');
+        const msgSpan = document.getElementById('toast-message');
+        
+        toast.style.backgroundColor = color;
+        msgSpan.innerText = message;
+        toast.style.display = 'block';
+        
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3500);
+    }
+
+
+    // --- GESTION DU MODAL ---
+
+    function openAdminLivreurModal() {
+        isEditing = true; // Suspend le refresh auto du KDS
+        document.getElementById('modal-admin-livreurs').style.display = 'block';
+    }
+
+    function saveAndCloseAdmin() {
+        // On recharge la page seulement à la fin pour mettre à jour les casiers du KDS
+        location.reload();
+    }
+
+    function cancelAdminChanges() {
+        // On ferme et on reload pour annuler visuellement tout changement temporaire
+        document.getElementById('modal-admin-livreurs').style.display = 'none';
+        isEditing = false;
+        location.reload();
+    }
+
+    // --- LOGIQUE DE MISE À JOUR VISUELLE (SANS FERMER) ---
+
+    function refreshLivreurListUI() {
+    // Cette fonction demande la liste à jour au serveur et reconstruit le HTML
+    fetch('/api/livreurs')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('admin-livreur-list');
+            if (!container) return;
+            
+            let html = '';
+            // On utilise la concaténation classique (' + variable + ') pour éviter le conflit Jinja2
+            data.forEach((nom, index) => {
+                html += '<div class="livreur-card">';
+                html += '    <div class="livreur-display-name">' + nom + '</div>';
+                html += '    <div class="action-grid">';
+                html += '        <button class="btn btn-outline-info btn-tactile-lg" onclick="moveLivreur(\'' + index + '\', \'up\')">🔼</button>';
+                html += '        <button class="btn btn-outline-info btn-tactile-lg" onclick="moveLivreur(\'' + index + '\', \'down\')">🔽</button>';
+                html += '        <button class="btn btn-warning btn-tactile-lg" onclick="renameLivreur(\'' + nom + '\')">📝</button>';
+                html += '        <button class="btn btn-danger btn-tactile-lg" onclick="deleteLivreur(\'' + nom + '\')">❌</button>';
+                html += '    </div>';
+                html += '</div>';
+            });
+            
+            container.innerHTML = html;
+        })
+        .catch(err => console.error("Erreur refresh UI:", err));
+}
+    // --- ACTIONS LIVREURS ---
+
+    /**
+ * AJOUTER UN LIVREUR
+ */
+    function addNewLivreur() {
+        const input = document.getElementById('new-livreur-name');
+        if (!input) return;
+
+        let nom = input.value.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, "");
+
+        if (nom.length < 2) { showAdminToast("⚠️ TROP COURT", "#e74c3c"); return; }
+        if (nom.length > 15) { showAdminToast("⚠️ TROP LONG", "#e74c3c"); return; }
+
+        const nomsExistants = Array.from(document.querySelectorAll('.livreur-display-name'))
+                                .map(el => el.innerText.trim().toUpperCase());
+
+        if (nomsExistants.includes(nom)) {
+            showAdminToast("⚠️ EXISTE DÉJÀ", "#e74c3c");
+            input.value = "";
+            return;
+        }
+
+        fetch('/api/livreurs/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nom: nom })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showAdminToast("✅ " + nom + " AJOUTÉ", "#2ecc71");
+                input.value = "";
+                // On recharge pour voir le nouveau casier
+                setTimeout(() => { location.reload(); }, 1000);
+            } else {
+                showAdminToast("⚠️ ERREUR : " + data.error, "#e74c3c");
+            }
+        });
+    }
+
+    // --- FONCTIONS DE GESTION DU MODAL ---
+
+    function closeConfirmModal() {
+        const modal = document.getElementById('custom-confirm-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function openConfirmModal(title, message, icon, callback) {
+        const modal = document.getElementById('custom-confirm-modal');
+        const yesBtn = document.getElementById('confirm-yes-btn');
+        const noBtn = document.getElementById('confirm-no-btn');
+        
+        if (!modal || !yesBtn || !noBtn) {
+            if (confirm(message)) callback();
+            return;
+        }
+
+        document.getElementById('confirm-title').innerText = title;
+        document.getElementById('confirm-message').innerText = message;
+        document.getElementById('confirm-icon').innerText = icon;
+        
+        modal.style.display = 'flex';
+
+        // On remplace les boutons pour nettoyer les anciens événements 'click'
+        const newYesBtn = yesBtn.cloneNode(true);
+        yesBtn.parentNode.replaceChild(newYesBtn, yesBtn);
+        
+        const newNoBtn = noBtn.cloneNode(true);
+        noBtn.parentNode.replaceChild(newNoBtn, noBtn);
+
+        newYesBtn.addEventListener('click', function() {
+            callback();
+            closeConfirmModal();
+        });
+
+        newNoBtn.addEventListener('click', closeConfirmModal);
+    }
+
+    function deleteLivreur(nom) {
+        // Action directe sans confirmation
+        fetch('/api/livreurs/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-App-Access': 'MonApplicationUnique123!'
+            },
+            body: JSON.stringify({ nom: nom })
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, body: data })))
+        .then(res => {
+            if (res.ok) {
+                showAdminToast("✅ CASIER DE " + nom.toUpperCase() + " RETIRÉ", "#2ecc71");
+                // On attend un peu pour que tu vois le toast vert avant de rafraîchir
+                setTimeout(() => { location.reload(); }, 1000);
+            } else {
+                // Si le serveur refuse (ex: casier non vide), on affiche le message d'erreur
+                showAdminToast("⚠️ " + (res.body.message || "ERREUR"), "#e74c3c");
+            }
+        })
+        .catch(err => {
+            showAdminToast("❌ ERREUR RÉSEAU", "#e74c3c");
+        });
+    }
+
+    function renameLivreur(ancienNom) {
+        nomActuelPourRename = ancienNom;
+        const modal = document.getElementById('modal-rename-livreur');
+        const input = document.getElementById('rename-input-field');
+        const label = document.getElementById('rename-label');
+
+        if (modal && input) {
+            label.innerText = "Nouveau nom pour : " + ancienNom.toUpperCase();
+            input.value = ancienNom; // Pré-remplit avec l'ancien nom
+            modal.style.display = 'flex';
+            
+            // Focus automatique et sélection du texte pour gagner du temps
+            setTimeout(() => { 
+                input.focus(); 
+                input.select();
+            }, 100);
+        }
+    }
+
+    function closeRenameModal() {
+        document.getElementById('modal-rename-livreur').style.display = 'none';
+    }
+
+    function confirmRename() {
+        const nouveauNom = document.getElementById('rename-input-field').value.trim().toUpperCase();
+        
+        if (!nouveauNom || nouveauNom === nomActuelPourRename.toUpperCase()) {
+            closeRenameModal();
+            return;
+        }
+
+        fetch('/api/livreurs/rename', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-App-Access': 'MonApplicationUnique123!'
+            },
+            body: JSON.stringify({ ancien: nomActuelPourRename, nouveau: nouveauNom })
+        })
+        .then(response => {
+            // On récupère le JSON, peu importe le code HTTP (200, 400, 500)
+            return response.json().then(data => {
+                if (!response.ok) {
+                    // Si Python dit "Impossible", on envoie le message au .catch
+                    throw new Error(data.message || "Erreur inconnue");
+                }
+                return data;
+            });
+        })
+        .then(data => {
+            // SUCCÈS
+            showAdminToast("✅ NOM MODIFIÉ : " + nouveauNom, "#2ecc71");
+            closeRenameModal();
+            setTimeout(() => { location.reload(); }, 1000);
+        })
+        .catch(error => {
+            // ÉCHEC (Commandes en cours ou erreur serveur)
+            // 1. On affiche le message d'erreur de Python dans ton Toast
+            showAdminToast("⚠️ " + error.message.toUpperCase(), "#e74c3c");
+            
+            // 2. On ferme la fenêtre de renommage après 1.5s pour que l'user voit le message
+            setTimeout(() => {
+                closeRenameModal();
+            }, 1500);
+        });
+    }
+    /**
+     * TOAST INTERNE POUR L'ADMIN
+     */
+    function showAdminToast(message, color) {
+        const toast = document.getElementById('admin-custom-toast');
+        const msgSpan = document.getElementById('admin-toast-message');
+        if (toast && msgSpan) {
+            msgSpan.innerText = message;
+            toast.style.backgroundColor = color;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 5000);
+        }
+    }
+
+    function moveLivreur(index, direction) {
+        fetch('/api/livreurs/reorder', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ index: parseInt(index), direction: direction })
+        }).then(res => {
+            if (res.ok) {
+                refreshLivreurListUI(); // Met à jour sans fermer
+            }
+        });
+    }
+    
+    function toggleLivreurStatus(nom) {
+        fetch('/api/livreurs/toggle_status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-App-Access': 'MonApplicationUnique123!' // Ta clé de sécurité définie dans web_access.py
+            },
+            body: JSON.stringify({ nom: nom })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Optionnel : Afficher le toast avant de recharger
+                const toast = document.getElementById('admin-custom-toast');
+                document.getElementById('admin-toast-message').innerText = data.message;
+                toast.style.display = 'block';
+                
+                setTimeout(() => { location.reload(); }, 800);
+            }
+        });
+    }
+
+    function checkAssignGroup(bid, livreurNom) {
+        const currentCard = document.getElementById(`order-${bid}`);
+        let rawNo = currentCard ? currentCard.getAttribute('data-livraison-no') : "";
+        let currentNo = rawNo.match(/\d+/) ? rawNo.match(/\d+/)[0] : "";
+
+        const allCards = document.querySelectorAll('.kds-card');
+        let matchingBids = [];
+
+        if (currentNo !== "") {
+            allCards.forEach(card => {
+                let cardRawNo = card.getAttribute('data-livraison-no') || "";
+                let cardNo = cardRawNo.match(/\d+/) ? cardRawNo.match(/\d+/)[0] : "";
+                if (cardNo === currentNo) {
+                    matchingBids.push(card.id.replace('order-', ''));
+                }
+            });
+        }
+
+        if (matchingBids.length > 1) {
+            pendingAssignData = {
+                targetBid: bid,
+                bids: matchingBids,
+                livreur: livreurNom,
+                livraisonNo: currentNo
+            };
+            document.getElementById('display-assign-no').innerText = currentNo;
+            document.getElementById('confirmAssignGroupModal').style.display = 'flex';
+        } else {
+            // Une seule facture, on assigne normalement
+            assignerCommande(bid, livreurNom);
+        }
+    }
+
+    function applyAssignGroup(all) {
+        if (!pendingAssignData) return;
+
+        if (all) {
+            // Assigner TOUT le groupe
+            pendingAssignData.bids.forEach((bid, index) => {
+                const isLast = (index === pendingAssignData.bids.length - 1);
+                // On appelle ta fonction d'assignation existante
+                // Note: Si assignerCommande fait un refresh, passe un flag comme pour l'heure
+                assignerCommande(bid, pendingAssignData.livreur);
+            });
+            showToast(`✅ GROUPE #${pendingAssignData.livraisonNo} ASSIGNÉ !`, "success");
+        } else {
+            // Juste celle sélectionnée
+            assignerCommande(pendingAssignData.targetBid, pendingAssignData.livreur);
+        }
+
+        document.getElementById('confirmAssignGroupModal').style.display = 'none';
+        pendingAssignData = null;
+    }
+
 
     function playBeep(frequency = 440, duration = 0.1) {
         try {
@@ -516,64 +1080,132 @@
             localStorage.setItem('delivered_orders', JSON.stringify(deliveredOrders));
         }
 
-        // 2. Appliquer le visuel immédiatement
+        // 2. Appliquer le visuel (Grisé + Réduit) immédiatement
         applyDeliveredVisual(bid);
-        
     }
 
-    function applyDeliveredVisual(bid) {
+    function applyDeliveredVisual(bid, forceRemove = false) {
         const card = document.getElementById('order-' + bid);
         if (!card) return;
 
-        // Appliquer le style grisé et bloquer les clics
-        card.classList.add('order-delivered');
-        card.style.pointerEvents = "none"; 
-        card.style.opacity = "0.5";
-        card.style.filter = "grayscale(1)";
-
-        // Cacher le bouton remettre (on utilise querySelector pour être sûr de le trouver)
+        const btnDelivered = document.getElementById('btn-delivered-' + bid);
         const btnRemettre = card.querySelector('.btn-unassign');
-        if (btnRemettre) {
-            btnRemettre.style.setProperty('display', 'none', 'important');
+        const headerSpan = card.querySelector('.card-header span:last-child');
+
+        if (forceRemove) {
+            // --- RETIRER LE GRISÉ (Dégriser) ---
+            card.classList.remove('order-delivered');
+            card.style.pointerEvents = "auto"; 
+            card.style.opacity = "1";
+            card.style.filter = "none";
+            
+            if (btnRemettre) btnRemettre.style.setProperty('display', 'block', 'important');
+            if (headerSpan) headerSpan.innerText = '➖'; // Réouvrir visuellement
+            if (btnDelivered) {
+                btnDelivered.innerText = "✅ LIVRÉE";
+                btnDelivered.style.backgroundColor = "#27ae60";
+                btnDelivered.disabled = false;
+            }
+        } else {
+            // --- APPLIQUER LE GRISÉ (Livré) ---
+            card.classList.add('collapsed');
+            card.classList.add('order-delivered');
+            card.style.pointerEvents = "auto"; // Changé à 'auto' pour permettre le double-clic
+            card.style.opacity = "0.5";
+            card.style.filter = "grayscale(1)";
+
+            if (headerSpan) headerSpan.innerText = '➕';
+            if (btnRemettre) btnRemettre.style.setProperty('display', 'none', 'important');
+            if (btnDelivered) {
+                btnDelivered.innerText = "LIVRÉE / TERMINÉE";
+                btnDelivered.style.backgroundColor = "#2c3e50";
+                btnDelivered.disabled = true;
+            }
+        }
+    }
+
+    function handleDblClick(bid) {
+        const card = document.getElementById('order-' + bid);
+        
+        // ⭐ VÉRIFICATION : On autorise le double-clic SEULEMENT si la carte est assignée (dans un casier)
+        if (!card || !card.classList.contains('assigned')) {
+            console.log("⚠️ Action refusée : La facture n'est pas encore dans un casier.");
+            return; // On sort de la fonction sans rien faire
         }
 
-        // Modifier le bouton de validation
-        // Attention : vérifie que l'id dans ton HTML est bien btn-delivered-{{ bid }}
-        const btnDelivered = document.getElementById('btn-delivered-' + bid);
-        if (btnDelivered) {
-            btnDelivered.innerText = "LIVRÉE / TERMINÉE";
-            btnDelivered.style.backgroundColor = "#2c3e50";
-            btnDelivered.disabled = true;
+        let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
+        
+        if (deliveredOrders.includes(bid)) {
+            // --- CAS : DÉJÀ GRISÉ -> ON RÉACTIVE ---
+            deliveredOrders = deliveredOrders.filter(id => id !== bid);
+            localStorage.setItem('delivered_orders', JSON.stringify(deliveredOrders));
+            
+            applyDeliveredVisual(bid, false);
+            showToast("🔄 COMMANDE RÉACTIVÉE");
+        } 
+        else {
+            // --- CAS : NON GRISÉ -> ON GRISE (LIVRÉ) ---
+            deliveredOrders.push(bid);
+            localStorage.setItem('delivered_orders', JSON.stringify(deliveredOrders));
+            
+            applyDeliveredVisual(bid, true);
+            showToast("✅ COMMANDE LIVRÉE");
         }
     }
 
     function updateLocalExtra(bid, field, value) {
-        const btnId = (field === 'desired_time') ? 'btn-heure-' : (field === 'utensils' ? 'btn-ust-' : 'btn-note-');
-        const element = document.getElementById(btnId + bid);
+        // 1. Déterminer le bon préfixe d'ID selon le champ modifié
+        let btnPrefix = '';
+        switch(field) {
+            case 'desired_time': btnPrefix = 'btn-heure-'; break;
+            case 'utensils':     btnPrefix = 'btn-ust-';   break;
+            case 'custom_note':  btnPrefix = 'btn-note-';  break;
+            case 'sauces':       btnPrefix = 'btn-sauce-'; break;
+            default:             btnPrefix = 'btn-' + field + '-';
+        }
+
+        const element = document.getElementById(btnPrefix + bid);
+        if (!element) return;
+
         const oldText = element.innerText.trim();
 
+        // Si la valeur n'a pas changé, on ne fait rien
         if (value === oldText) return;
 
+        // 2. Enregistrement dans l'objet temporaire avant envoi
         if (!tempExtras[bid]) tempExtras[bid] = {};
         tempExtras[bid][field] = value;
         
-        // Appliquer le style visuel du bouton
-        element.classList.add('extra-selected');
+        // 3. Mise à jour visuelle du bouton
         element.innerText = value;
         
-        // ⭐ AJOUT : Appliquer l'animation de pulsation mauve à la carte
+        // Appliquer la classe de sélection (jaune pour sauces, bleu pour les autres)
+        if (field === 'sauces') {
+            element.classList.add('extra-selected-sauce');
+        } else {
+            element.classList.add('extra-selected');
+        }
+        
+        // 4. ⭐ Animation de pulsation mauve à la carte (Flash)
         const card = document.getElementById('order-' + bid);
         if (card) {
+            // On retire et remet la classe pour relancer l'animation si elle y était déjà
+            card.classList.remove('flash-mauve');
+            void card.offsetWidth; // Force le recalcul pour l'animation
             card.classList.add('flash-mauve');
         }
         
-        // Afficher le bouton OK
-        document.getElementById('ok-' + bid).style.display = 'block';
+        // 5. Afficher le bouton vert "ENREGISTRER (OK)"
+        const okBtn = document.getElementById('ok-' + bid);
+        if (okBtn) {
+            okBtn.style.display = 'block';
+        }
     }
 
     function openLivreurModal(bid) {
-        assignTargetBid = bid;
-        isEditing = true; // Bloque le refresh auto de PyQt
+        console.log("Ouverture modal pour BID:", bid);
+        targetBidForAssign = bid; // Crucial : on stocke le BID ici
+        isEditing = true; // Suspend le refresh pendant qu'on choisit
         document.getElementById('modal-livreur').style.display = 'block';
     }
 
@@ -584,25 +1216,69 @@
     }
 
     function confirmAssignation(nomLivreur) {
-        if (!assignTargetBid) return;
+        const bid = targetBidForAssign; 
+        if (!bid) return;
+
+        const currentCard = document.getElementById(`order-${bid}`);
+        let rawNo = currentCard ? currentCard.getAttribute('data-livraison-no') : "";
+        let currentNo = rawNo.match(/\d+/) ? rawNo.match(/\d+/)[0] : "";
+
+        // On cherche les doublons PARMI celles qui ne sont pas assignées
+        const allCards = document.querySelectorAll('.kds-card');
+        let matchingBids = [];
         
-        // On réutilise votre logique d'assignation existante
-        fetch(`/assign_livreur/${assignTargetBid}/${nomLivreur}`, { method: 'POST' })
-        .then(response => {
-            if (response.ok) {
-                closeLivreurModal();
-                refreshKDS(); // Rafraîchit pour voir le changement
-            }
-        })
-        .catch(err => {
-            console.error("Erreur assignation:", err);
-            closeLivreurModal();
-        });
+        if (currentNo !== "") {
+            allCards.forEach(card => {
+                let cardRawNo = card.getAttribute('data-livraison-no') || "";
+                let cardNo = cardRawNo.match(/\d+/) ? cardRawNo.match(/\d+/)[0] : "";
+                
+                // ⭐ CONDITION : Même numéro ET pas encore de livreur assigné
+                const dejaAssigne = card.classList.contains('assigned') || (card.getAttribute('data-livreur') && card.getAttribute('data-livreur') !== "");
+
+                if (cardNo === currentNo && !dejaAssigne) {
+                    matchingBids.push(card.id.replace('order-', ''));
+                }
+            });
+        }
+
+        closeLivreurModal();
+
+        // Si après filtrage il reste plus d'une facture libre
+        if (matchingBids.length > 1) {
+            pendingAssignData = {
+                targetBid: bid,
+                bids: matchingBids,
+                livreur: nomLivreur,
+                livraisonNo: currentNo
+            };
+            document.getElementById('display-assign-no').innerText = currentNo;
+            document.getElementById('confirmAssignGroupModal').style.display = 'flex';
+        } else {
+            // Sinon on assigne juste celle sur laquelle on a cliqué
+            assignLivreur(bid, nomLivreur, true);
+        }
     }
 
-    function openTimePicker(bid) {
-        
+    function applyAssignGroup(all) {
+        if (!pendingAssignData) return;
+
+        if (all) {
+            // --- PLUSIEURS : On refresh seulement à la fin ---
+            const total = pendingAssignData.bids.length;
+            pendingAssignData.bids.forEach((bid, index) => {
+                const isLast = (index === total - 1);
+                assignLivreur(bid, pendingAssignData.livreur, isLast);
+            });
+            showToast(`✅ GROUPE #${pendingAssignData.livraisonNo} ASSIGNÉ`, "success");
+        } else {
+            // --- UNIQUE : On refresh direct ---
+            assignLivreur(pendingAssignData.targetBid, pendingAssignData.livreur, true);
+        }
+
+        document.getElementById('confirmAssignGroupModal').style.display = 'none';
+        pendingAssignData = null;
     }
+
 
     function pressKey(key) {
         if (key === 'BACK') {
@@ -631,33 +1307,6 @@
         document.getElementById('time-display').innerText = display;
     }
 
-    function confirmTime() {
-        // Validation simple du format HH:MM
-        if (timeInputBuffer.length === 5) {
-            updateLocalExtra(timeTargetBid, 'desired_time', timeInputBuffer);
-            closeTimeModal();
-        } else {
-            // Effet visuel d'erreur si incomplet
-            const disp = document.getElementById('time-display');
-            disp.style.color = 'red';
-            setTimeout(() => disp.style.color = '#00d2ff', 500);
-        }
-    }
-
-    function closeTimeModal() {
-        document.getElementById('modal-time').style.display = 'none';
-        isEditing = false;
-        timeTargetBid = null;
-    }
-
-    function acknowledgeModification(bid) {
-        let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
-        modifiedOrders = modifiedOrders.filter(id => id !== bid);
-        localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
-        
-        const card = document.getElementById('order-' + bid);
-        if (card) card.classList.remove('flash-mauve');
-    }
 
     function sendAllExtras(bid) {
         // 1. On récupère les éléments de la carte
@@ -811,17 +1460,19 @@
         });
     }
     
-    function assignLivreur(bid, nom) { 
-        if (!nom) return; // Si on choisit "-- ASSIGNER --", on ne fait rien
+    function assignLivreur(bid, nom, shouldRefresh) {
+        if (!nom) return;
 
-        isEditing = true; // On bloque le rafraîchissement automatique pendant l'envoi
+        isEditing = true; 
         
         fetch(`/assign_livreur/${bid}/${nom}`, { method: 'POST' })
         .then(response => {
             if (response.ok) {
-                // ⭐ C'EST ICI : On lance le rafraîchissement AJAX immédiatement
-                isEditing = false; 
-                refreshKDS(); 
+                // On ne refresh que si c'est la dernière opération demandée
+                if (shouldRefresh) {
+                    isEditing = false; 
+                    refreshKDS(); 
+                }
             }
         })
         .catch(err => {

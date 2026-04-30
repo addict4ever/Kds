@@ -11,7 +11,7 @@ from PyQt6.QtWebEngineCore import QWebEngineSettings
 PRINTER_IP = "192.168.5.201"
 PRINTER_PORT = 9100
 KDS_URL_GLOBAL = "http://192.168.5.201:5000/kds"
-KDS_URL_LIVREUR = "http://192.168.5.201:5000/kds_livreur"
+KDS_URL_LIVREUR = "http://192.168.5.201:5000/kds_placeur"
 KDS_URL_PA = "http://192.168.5.201:5000/kds_pa"
 
 class PizzeriaApp(QMainWindow):
@@ -47,8 +47,8 @@ class PizzeriaApp(QMainWindow):
         # Initialisation des modules
         self.setup_keypad_ui()
         self.tabs.addTab(self.create_web_tab(KDS_URL_GLOBAL, "SERVEUSE"), " 📋 SERVEUSE ")
-        self.tabs.addTab(self.create_web_tab(KDS_URL_LIVREUR, "LIVREURS"), " 🚚 LIVREURS ")
         self.tabs.addTab(self.create_web_tab(KDS_URL_PA, "P.A."), " 🍕 P.A. ")
+        # self.tabs.addTab(self.create_web_tab(KDS_URL_LIVREUR, "LIVREURS"), " 🚚 LIVREURS ")
 
     def closeEvent(self, event):
         """Empêche la fermeture de la fenêtre (Alt+F4 via système)."""

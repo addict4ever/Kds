@@ -1,11 +1,11 @@
 {
     "windows_ports": {
-        "SERIAL_PORT": "COM13",
+        "SERIAL_PORT": "COM11",
         "SERIAL_PORT_2": "COM14",
         "SERIAL_PORT_3": "COM16",
-        "SERIAL_PORT_PRINTER": "COM19",
-        "SERIAL_PORT_PRINTER_2": "COM10",
-        "SERIAL_PORT_PRINTER_3": "COM15",
+        "SERIAL_PORT_PRINTER": "COM15",
+        "SERIAL_PORT_PRINTER_2": "COM13",
+        "SERIAL_PORT_PRINTER_3": "COM19",
         "SERIAL_PORT_COMPUTER": "COM12"
     },
     "linux_ports": {

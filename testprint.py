@@ -103,7 +103,7 @@ TEST_MODELS = {
         b'\x1br\x00 Heure: 10:52:11\n'
         b'\x1br\x00  27-01-2026\n'
         b'\x1b!2\x1br\x00   TABLE # 302\n'
-        b'\x1b!\x12\x1br\x00 \x1b!2  1\x1b!\x12 DEMI LASAGNE\n'
+        b'\x1b!\x12\x1br\x00 \x1b!2  1\x1b!\x12 DEMI POULET\n'
         b'\x1br\x01   \x1b!2  1\x1b!\x12 VIANDE\x1br\x01\n'
         b'\n###############################\n'
         b'\x1bd\t\x1bi'

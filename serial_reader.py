@@ -3,6 +3,7 @@
 import time
 import threading
 import socket  # <--- AJOUTER CECI
+import queue
 from datetime import datetime
 import logging
 import re
@@ -72,6 +73,43 @@ def _log_activity(message: str, category: str = "INFO"):
         print(f"[LOG_ERROR] Échec de l'écriture du log: {e} - Message original: {log_message.strip()}")
 
 
+def load_print_filters():
+    # Tes paramètres par défaut (si le fichier n'existe pas)
+    default_filters = {
+        "filter_enabled": True,  # Activé par défaut
+        "keywords": [
+            "LARGE", "XLARGE", "SMALL", "BAMBINO", "MINI", "COMBO", "DUO",
+            "NACHOS", "LASAGNE", "GRATINE", "VEGETARIEN", "PIZZA", "FAMILLE", 
+            "SPECS", "GRATINEES"
+        ],
+        "garnitures": [
+            "GARNIE", "GARNI", "ANANAS", "SPECIAL", "GRECQUE", "FROMAGE", "FROM", "4 FROM",
+            "PEPE", "FAJITAS", "POULET", "MEXICAINE", "VEGE", "CHAMP", "CHAMPIGNON", 
+            "COTE LEVEE", "COTES LEVEE", "FR MER", "FRUITS MER", "GHETTI", "PEP FROM BAC"
+        ]
+    }
+    
+    file_path = 'block_word_print.json'
+    
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # On s'assure que le JSON contient bien les clés nécessaires
+                if "keywords" in data and "garnitures" in data:
+                    return data
+                else:
+                    print("JSON incomplet, chargement des paramètres par défaut.")
+        except Exception as e:
+            print(f"Erreur lors du chargement du JSON (Fichier corrompu ?): {e}")
+    else:
+        print("Fichier block_word_print.json non trouvé. Utilisation des paramètres par défaut.")
+    
+    return default_filters
+
+# Chargement initial au démarrage du script
+PRINT_FILTERS = load_print_filters()
+
 # --------------------------------------------------------------------------------
 # ⭐ NOUVEAU: LOGIQUE DE CHARGEMENT DES PORTS SÉRIE DEPUIS JSON
 # --------------------------------------------------------------------------------
@@ -88,7 +126,8 @@ def load_serial_ports_from_json(json_file='ports.json') -> Dict[str, str]:
         'SERIAL_PORT_3': 'COM11' if IS_WINDOWS else '/dev/ttyUSB5',
         'SERIAL_PORT_PRINTER': 'COM5' if IS_WINDOWS else '/dev/ttyUSB1',
         'SERIAL_PORT_PRINTER_2': 'COM10' if IS_WINDOWS else '/dev/ttyUSB4',
-        'SERIAL_PORT_PRINTER_3': 'COM12' if IS_WINDOWS else '/dev/ttyUSB6',
+        'SERIAL_PORT_PRINTER_3': 'COM13' if IS_WINDOWS else '/dev/ttyUSB6',
+        'SERIAL_PORT_PRINTER_4': 'COM12' if IS_WINDOWS else '/dev/ttyUSB10',
         'SERIAL_PORT_COMPUTER': 'COM6' if IS_WINDOWS else '/dev/ttyUSB2'
     }
 
@@ -110,6 +149,7 @@ def load_serial_ports_from_json(json_file='ports.json') -> Dict[str, str]:
                 'SERIAL_PORT_PRINTER': os_ports.get('SERIAL_PORT_PRINTER', default_ports['SERIAL_PORT_PRINTER']),
                 'SERIAL_PORT_PRINTER_2': os_ports.get('SERIAL_PORT_PRINTER_2', default_ports['SERIAL_PORT_PRINTER_2']),
                 'SERIAL_PORT_PRINTER_3': os_ports.get('SERIAL_PORT_PRINTER_3', default_ports['SERIAL_PORT_PRINTER_3']),
+                'SERIAL_PORT_PRINTER_4': os_ports.get('SERIAL_PORT_PRINTER_4', default_ports['SERIAL_PORT_PRINTER_4']),
                 'SERIAL_PORT_COMPUTER': os_ports.get('SERIAL_PORT_COMPUTER', default_ports['SERIAL_PORT_COMPUTER'])
             }
             _log_activity(f"Ports chargés depuis {json_file} pour {OS_KEY}.", "CONFIG_JSON_OK")
@@ -203,6 +243,8 @@ SERIAL_PORT_3 = ports_config['SERIAL_PORT_3'] # <--- Nouveau
 SERIAL_PORT_PRINTER = ports_config['SERIAL_PORT_PRINTER']
 SERIAL_PORT_PRINTER_2 = ports_config['SERIAL_PORT_PRINTER_2'] # <--- Nouveau
 SERIAL_PORT_PRINTER_3 = ports_config['SERIAL_PORT_PRINTER_3'] # <--- Nouveau
+SERIAL_PORT_PRINTER_4 = ports_config['SERIAL_PORT_PRINTER_4'] # <--- Nouveau
+
 
 SERIAL_TCP_COMPUTER_1 = net_config['SERIAL_TCP_COMPUTER_1']
 SERIAL_TCP_COMPUTER_PORT_1 = net_config['SERIAL_TCP_COMPUTER_PORT_1']
@@ -269,14 +311,23 @@ class TCPReader(threading.Thread):
     def _forward_to_tcp_printer(self, raw_bytes):
         """Redirige les octets vers l'imprimante IP réelle sauf si le filtre est activé."""
         
-        # --- LOGIQUE DE FILTRE ---
+        # --- 1. DÉCODAGE ET PRÉPARATION ---
         ticket_content = raw_bytes.decode('latin-1', errors='ignore').upper()
         
-        if "ENLEVER LE PAPIER JAUNE" in ticket_content:
-            _log_activity("FILTRE: 'ENLEVER LE PAPIER JAUNE' détecté. Impression physique bloquée, mais redirection PC maintenue.", "TCP_FILTER")
-            return # Ici, le return arrête SEULEMENT l'envoi à l'imprimante IP
+        # --- 2. LOGIQUE DE FILTRE PRIORITAIRE (Livraison & Papier Jaune) ---
         
-        # --- ENVOI PHYSIQUE (uniquement si le filtre n'a pas déclenché le return ci-dessus) ---
+        # Blocage Livraison (Doit contenir les deux)
+        if "PRINCIPALE" in ticket_content and "LIVRAISON" in ticket_content:
+            _log_activity("TCP FILTRE : Livraison bloquée (PRINCIPALE + LIVRAISON).", "TCP_SKIP_LIV")
+            return
+
+        # Blocage Papier Jaune
+        if "ENLEVER LE PAPIER JAUNE" in ticket_content:
+            _log_activity("TCP FILTRE : 'ENLEVER LE PAPIER JAUNE' détecté. Impression bloquée.", "TCP_FILTER")
+            return 
+
+
+        # --- 4. ENVOI PHYSIQUE (Si passé tous les filtres) ---
         printer_ip = self.net_config.get('SERIAL_TCP_PRINTER_1')
         printer_port = self.net_config.get('SERIAL_TCP_PRINTER_1_PORT')
         
@@ -381,12 +432,17 @@ class SerialReader(threading.Thread):
             SerialReader._print_lock = threading.Lock()
         self.output_lock = threading.Lock() 
 
+        self.printer_2_queue = queue.Queue()
+        threading.Thread(target=self._worker_printer_2, daemon=True).start()
+
         # --- 2. CONFIGURATION DES PORTS KDS ---
         self.ports_config = {
             1: {"port": SERIAL_PORT,   "attr": "serial_port",   "buffer": "input_buffer"},
             2: {"port": SERIAL_PORT_2, "attr": "serial_port_2", "buffer": "input_buffer_2"},
             3: {"port": SERIAL_PORT_3, "attr": "serial_port_3", "buffer": "input_buffer_3"}
         }
+
+        self.persistent_output_ports = {}
 
         # Initialisation par défaut des attributs et buffers
         for cfg in self.ports_config.values():
@@ -422,6 +478,25 @@ class SerialReader(threading.Thread):
             except Exception as e:
                 _log_activity(f"Erreur Port KDS {i} ({cfg['port']}): {e}", "PORT_KDS_ERROR")
     
+
+    def _worker_printer_2(self):
+        while True:
+            # On attend qu'un ticket arrive dans la file
+            raw_data = self.printer_2_queue.get()
+            try:
+                # On envoie à l'imprimante
+                SerialReader._write_to_output_port(
+                    raw_data,
+                    SERIAL_PORT_PRINTER_2,
+                    "Imprimante 2"
+                )
+                # ⭐ ICI : On attend que l'imprimante finisse physiquement d'imprimer
+                # Si une facture prend 14s, on attend 15s pour être sûr.
+                time.sleep(10.0) 
+            except Exception as e:
+                _log_activity(f"Erreur worker Imprimante 2: {e}", "SERIAL_ERROR")
+            finally:
+                self.printer_2_queue.task_done()
 
     def _async_process_ticket(self, ticket_bytes, source_name, is_print_enabled):
         """Traitement asynchrone sécurisé pour l'impression du Service 1 et 2."""
@@ -516,71 +591,99 @@ class SerialReader(threading.Thread):
     @staticmethod
     def _write_to_output_port(data_to_print: str, port, port_name: str, is_printing_enabled=True) -> bool:
         """
-        Écrit le texte brut sur le port série avec protection par Lock et gestion de Retry.
-        Version optimisée pour éviter les collisions et les erreurs d'accès refusé.
+        Écrit sur le port série avec filtres sélectifs.
         """
-        # 1. Extraction de la valeur (gestion si c'est une BooleanVar ou un bool)
+        # 1. Vérification si l'impression est activée
         actual_enabled = is_printing_enabled.get() if hasattr(is_printing_enabled, 'get') else is_printing_enabled
 
         if not actual_enabled:
             _log_activity(f"ACTION ANNULÉE : Envoi vers {port_name} désactivé.", f"SKIP_{port_name.upper()}")
             return True
 
-        if "ENLEVER LE PAPIER JAUNE" in data_to_print.upper():
+        # --- 🎯 CONFIGURATION DES PORTS ---
+        port_1 = str(SERIAL_PORT_PRINTER).upper()
+        port_2 = str(SERIAL_PORT_PRINTER_2).upper()
+        port_3 = str(SERIAL_PORT_PRINTER_3).upper()
+        port_4 = str(SERIAL_PORT_PRINTER_4).upper()
+        current_port_str = str(port).upper()
+        content_upper = data_to_print.upper()
+
+
+        # --- ⭐ FILTRE A : BLOCAGE LIVRAISON (Appliqué aux 3 imprimantes) ---
+        if any(p in current_port_str for p in [port_1, port_2, port_3] if p):
+            if "PRINCIPALE" in content_upper and "LIVRAISON" in content_upper:
+                _log_activity(f"FILTRE LIV : {port_name} bloqué (PRINCIPALE + LIVRAISON).", "SKIP_LIV_PRINC")
+                return True
+
+        # --- ⭐ FILTRE B : FILTRES DE CONTENU (Uniquement sur l'Imprimante 1) ---
+        if port_1 and port_1 in current_port_str:
+            
+            # 1. Vérification si le filtrage est activé dans le JSON
+            # Si "filter_enabled" est false, on ne fait rien (on laisse passer l'impression)
+            if PRINT_FILTERS.get("filter_enabled", True):
+                
+                # 2. Récupération des listes depuis le JSON chargé au début
+                keywords = PRINT_FILTERS.get("keywords", [])
+                garnitures = PRINT_FILTERS.get("garnitures", [])
+                
+                has_pizza_medium = "MEDIUM" in content_upper and any(g in content_upper for g in garnitures)
+                has_pain_ail = "PAIN A L'AIL" in content_upper
+
+                # 3. Logique Cuisson (ex: Steak MEDIUM seul sans mot-clé pizza)
+                is_probably_just_cuisson = ("MEDIUM" in content_upper) and \
+                                           not has_pizza_medium and \
+                                           not any(word in content_upper for word in keywords)
+
+                if is_probably_just_cuisson and "PIZZA" not in content_upper:
+                    _log_activity(f"FILTRE CUISSON : {port_name} bloqué (MEDIUM seul).", "SKIP_CUISSON")
+                    return True
+
+                # 4. Autorisation finale : si aucun mot-clé, ni pizza medium, ni pain ail
+                # ALORS on bloque l'impression (return True pour stopper)
+                if not (any(word in content_upper for word in keywords) or has_pizza_medium or has_pain_ail):
+                    _log_activity(f"FILTRE CONTENU : {port_name} bloqué (Filtre actif, aucun mot trouvé).", "SKIP_CONTENT")
+                    return True
+
+        # --- FIN DES FILTRES ---
+
+        # --- SÉCURITÉ : Ne jamais imprimer l'instruction de nettoyage du papier ---
+        if "ENLEVER LE PAPIER JAUNE" in content_upper:
             return True
 
-        # 2. Préparation des données pour le log
-        content_for_log = data_to_print.replace('\n', ' [LINE_BREAK] ')
-        _log_activity(f"PRÉPARATION ENVOI À {port_name.upper()}: {content_for_log}", "PRINT_PREPARE")
+        # 2. Logique d'envoi physique
+        max_retries = 5
+        retry_delay = 1.0 
 
-        # 3. Paramètres de Retry
-        max_retries = 3
-        retry_delay = 0.5  # Attendre 500ms entre chaque essai
-
-        # ⭐ Utilisation du LOCK : un seul thread à la fois accède à la partie série
         with SerialReader._print_lock:
             for attempt in range(max_retries):
                 output_port = None
                 try:
-                    # Gestion de la connexion
                     is_new_connection = isinstance(port, str)
                     if is_new_connection:
-                        # On tente d'ouvrir le port
                         output_port = serial.Serial(port, 9600, timeout=1)
                     else:
                         output_port = port
 
-                    # Construction des données : Juste Initialisation (ESC @) + Texte
-                    ESC = b'\x1b'
                     encoded_data = data_to_print.encode('latin-1', errors='replace')
-                    final_data = ESC + b'@' + encoded_data
+                    final_data = b'\x1b@' + encoded_data
                     
-                    # Écriture et purge du buffer
                     output_port.write(final_data)
                     output_port.flush()
                     
-                    # Si c'était une nouvelle connexion, on attend un peu et on ferme
                     if is_new_connection:
                         time.sleep(0.3) 
                         output_port.close()
-
-                    _log_activity(f"Transmission réussie vers {port_name} à l'essai {attempt + 1}.", "DATA_SENT")
-                    return True # Succès !
+                    return True 
 
                 except Exception as e:
-                    _log_activity(f"Échec essai {attempt + 1}/{max_retries} sur {port_name}: {e}", "RETRY_WARNING")
-                    
-                    # Fermeture sécurisée en cas d'erreur
+                    _log_activity(f"Échec essai {attempt+1}/{max_retries} sur {port_name}: {e}", "RETRY_WARNING")
                     if output_port and hasattr(output_port, 'close'):
                         try: output_port.close()
                         except: pass
-                    
                     if attempt < max_retries - 1:
-                        time.sleep(retry_delay) # Pause avant le prochain essai
+                        time.sleep(retry_delay)
                     else:
-                        _log_activity(f"ERREUR DÉFINITIVE sur {port_name} après {max_retries} essais.", "SERIAL_ERROR")
                         return False
-
         return False
 
     @staticmethod
@@ -588,7 +691,7 @@ class SerialReader(threading.Thread):
         """
         Réimpression avec récupération TCP depuis le JSON et gestion d'encodage sécurisée.
         """
-        _log_activity(f"RÉIMPRESSION sur : {port_target}", "REPRINT_REQUEST")
+        #_log_activity(f"RÉIMPRESSION sur : {port_target}", "REPRINT_REQUEST")
         
         # --- 1. PRÉPARATION DU CONTENU ---
         ESC = '\x1b'
@@ -615,7 +718,7 @@ class SerialReader(threading.Thread):
                         target_ip = tcp_cfg.get("SERIAL_TCP_PRINTER_1", target_ip)
                         target_port = int(tcp_cfg.get("SERIAL_TCP_PRINTER_1_PORT", target_port))
 
-                _log_activity(f"Réimpression TCP -> Connexion à {target_ip}:{target_port}", "REPRINT_TCP")
+                #_log_activity(f"Réimpression TCP -> Connexion à {target_ip}:{target_port}", "REPRINT_TCP")
 
                 # --- SÉCURISATION DE L'ENCODAGE ---
                 # On encode en 'latin-1' mais on remplace les caractères impossibles (comme →) par '?'
@@ -631,7 +734,7 @@ class SerialReader(threading.Thread):
                     s.connect((target_ip, target_port))
                     s.sendall(raw_data) # On envoie les données déjà encodées
                 
-                _log_activity("Réimpression TCP réussie.", "REPRINT_SUCCESS")
+                #_log_activity("Réimpression TCP réussie.", "REPRINT_SUCCESS")
                 return True
 
             except Exception as e:
@@ -661,7 +764,7 @@ class SerialReader(threading.Thread):
                 if TICKET_END_BINARY_SEQUENCE not in encoded_data:
                     s.sendall(TICKET_END_BINARY_SEQUENCE)
                     
-            _log_activity(f"Copie TCP envoyée à {SERIAL_TCP_COMPUTER_1}:{SERIAL_TCP_COMPUTER_PORT_1}", "TCP_SYNC_OK")
+            #_log_activity(f"Copie TCP envoyée à {SERIAL_TCP_COMPUTER_1}:{SERIAL_TCP_COMPUTER_PORT_1}", "TCP_SYNC_OK")
         except Exception as e:
             # Erreur silencieuse pour le flux principal : on logue et on continue
             _log_activity(f"TCP non disponible ({SERIAL_TCP_COMPUTER_1}) : {e}", "TCP_SYNC_SKIP")
@@ -669,7 +772,23 @@ class SerialReader(threading.Thread):
 
     def _forward_ticket_data(self, raw_ticket_data: str, source_port: str):
         # On vérifie si c'est une addition pour le blocage PC
+        content_upper = raw_ticket_data.upper()
+        
         est_une_addition = "ADDITION" in raw_ticket_data.upper()
+
+        # 🎯 NOUVELLE RÈGLE : COPIE FINANCIÈRE VERS IMPRIMANTE 4
+        # Il faut que les 4 mots soient présents obligatoirement
+        mots_requis = ["TRANS", "ADDITION", "TPS", "TVQ"]
+        if all(mot in content_upper for mot in mots_requis):
+            try:
+                _log_activity("DOC FINANCIER DÉTECTÉ (4/4) : Envoi copie vers Imprimante 4", "FINANCE_COPY")
+                SerialReader._write_to_output_port(
+                    raw_ticket_data,
+                    SERIAL_PORT_PRINTER_4, # Assure-toi que cette variable est définie dans tes constantes
+                    "Imprimante 4 (Finance)"
+                )
+            except Exception as e:
+                _log_activity(f"Erreur copie Imprimante 4 : {e}", "SERIAL_ERROR")
 
         # ⭐ ÉTAPE 1 : ENVOI À L'ORDINATEUR (Sans lock)
         if not est_une_addition:
@@ -716,16 +835,15 @@ class SerialReader(threading.Thread):
                 )
             
             # Cas B : Le ticket vient du deuxième KDS
+            # Cas B : Le ticket vient du deuxième KDS
             elif source_port == SERIAL_PORT_2:
-                SerialReader._write_to_output_port(
-                    raw_ticket_data,
-                    SERIAL_PORT_PRINTER_2,
-                    "Imprimante 2"
-                )
+                _log_activity("Ticket ajouté à la file d'attente (Imprimante 2)", "QUEUE_ADD")
+                # On ne fait plus d'impression directe, on l'envoie au worker
+                self.printer_2_queue.put(raw_ticket_data)
                 
             # Cas C : Le ticket vient du troisième KDS (Réseau)
             elif source_port == SERIAL_PORT_3:
-                _log_activity(f"Routage KDS 3 ({source_port}) vers Imprimante TCP", "ROUTE_TCP")
+                #_log_activity(f"Routage KDS 3 ({source_port}) vers Imprimante TCP", "ROUTE_TCP")
                 self._send_to_network_printer(raw_ticket_data)
     
     
@@ -978,6 +1096,7 @@ class SerialReader(threading.Thread):
                 table_match = re.search(r'TABLE\s*#?\s*(\d+)', upper_text)
                 if table_match:
                     found_table_id = table_match.group(1)
+                    
 
                 # B. Extraire le téléphone pour déterminer le format
                 for l in lines[:15]:
@@ -989,16 +1108,31 @@ class SerialReader(threading.Thread):
                         break 
                 
                 # C. DÉCISION DES NUMÉROS ET DU TYPE DE SERVICE
+                
+                # Détermination du numéro de table trouvé (ou 999 par défaut)
+                final_table_id = found_table_id if table_match else "999"
+                
+                # Vérification si le numéro est dans la plage 300-600
+                is_in_special_range = False
+                if final_table_id.isdigit():
+                    is_in_special_range = 300 <= int(final_table_id) <= 600
+
                 if tel_livr:
-                    # FORMAT LONG (Avec téléphone) -> Livraison standard
-                    service_type = "LIVREUR"
-                    table_number = found_table_id if table_match else "999"
-                    server_name = tel_livr  
+                    if is_in_special_range:
+                        # Priorité à la plage 300-600 : On force le mode LIVRAISON
+                        service_type = "LIVRAISON"
+                        table_number = "LIV"
+                        server_name = final_table_id
+                    else:
+                        # FORMAT LONG standard (Avec téléphone) -> Livraison livreur
+                        service_type = "LIVREUR"
+                        table_number = final_table_id
+                        server_name = tel_livr  
                 else:
                     # FORMAT PETIT (Sans téléphone) -> Utilise le numéro de table extrait
                     service_type = "LIVRAISON"
                     table_number = "LIV"
-                    server_name = found_table_id # Remplace le 777 par le numéro de table (ex: 304)
+                    server_name = final_table_id
 
                 
 
@@ -1036,15 +1170,17 @@ class SerialReader(threading.Thread):
 
             # --- 6️⃣ INSERTION DB ---
             try:
+                # On passe raw_ticket_data au paramètre raw_content
                 self.db_manager.add_new_order(
                     bill_id=bill_id,
-                    table_number=table_number,   # No Livraison ou No Table
-                    serveuse_name=server_name,   # Tel + Adresse ou Nom Serveuse
+                    table_number=table_number,
+                    serveuse_name=server_name,
                     service_type=service_type,
                     items=items_list_json_str,
-                    status='En attente'
+                    status='En attente',
+                    raw_content=raw_ticket_data  # ⭐ AJOUT ICI
                 )
-                _log_activity(f"Succès: {service_type} ajouté. Table/Livr: {table_number}, Info: {server_name}")
+                #_log_activity(f"Succès: {service_type} ajouté. Table/Livr: {table_number}, Info: {server_name}")
             except Exception as db_e:
                 _log_activity(f"Erreur DB: {db_e}", "DB_ERROR")
 

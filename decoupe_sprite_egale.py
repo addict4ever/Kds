@@ -1,159 +1,505 @@
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from PIL import Image, ImageChops
+import sys
+import shutil
+import cv2 # --- NOUVEAU : OpenCV ---
+import numpy as np # --- NOUVEAU : NumPy ---
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                             QLabel, QLineEdit, QPushButton, QFileDialog, QListWidget, 
+                             QListWidgetItem, QCheckBox, QProgressBar, QSplitter, 
+                             QFrame, QMessageBox, QAbstractItemView, QTreeView, 
+                             QMenu, QInputDialog) # QFileSystemModel a été retiré d'ici
+from PyQt6.QtGui import QPixmap, QIcon, QAction, QCursor, QFileSystemModel # Il est ICI
+from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal
+from PIL import Image, ImageOps, ImageFilter, ImageDraw
 
-def get_content_ranges(data, threshold):
-    """Trouve les segments de contenu (lignes ou colonnes)."""
+# --- TES FONCTIONS DE TRAITEMENT (ORIGINALES) ---
+
+def get_content_ranges(data, min_size=5):
     ranges = []
     start = None
     for i, has_content in enumerate(data):
-        if has_content and start is None:
-            start = i
+        if has_content and start is None: start = i
         elif not has_content and start is not None:
-            if i - start > 2:  # Sensibilité ajustée
-                ranges.append((start, i))
+            if i - start >= min_size: ranges.append((start, i))
             start = None
-    if start is not None:
-        ranges.append((start, len(data)))
+    if start is not None: ranges.append((start, len(data)))
     return ranges
 
-def find_sprite_locations(img, threshold=20):
-    """Détecte les sprites dans une image (grille irrégulière)."""
-    width, height = img.size
-    gray = img.convert("L")
+def find_sprite_locations_opencv(pil_img, min_area=500):
+    """
+    Utilise OpenCV pour trouver les composantes connexes (îlots de pixels).
+    C'est la méthode la plus fiable pour séparer des objets.
+    """
+    # 1. Convertir l'image PIL (RGBA) en format OpenCV (BGRA)
+    opencv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGBA2BGRA)
     
-    # 1. Détection des rangées
-    row_content = []
-    for y in range(height):
-        has_content = any(gray.getpixel((x, y)) > threshold for x in range(width))
-        row_content.append(has_content)
+    # 2. Extraire le canal Alpha (le masque de transparence)
+    alpha_channel = opencv_img[:, :, 3]
     
-    row_ranges = get_content_ranges(row_content, threshold)
+    # 3. Binariser le masque (s'assurer que c'est bien noir et blanc pur)
+    _, thresh = cv2.threshold(alpha_channel, 10, 255, cv2.THRESH_BINARY)
+    
+    # 4. Trouver les composantes connexes (les îlots de pixels)
+    # n_labels: nombre d'objets trouvés
+    # labels: une carte de l'image où chaque pixel a l'ID de son objet
+    # stats: statistiques incluant la boîte englobante (x, y, w, h, area)
+    n_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, connectivity=8)
+    
     all_sprites = []
     
-    # 2. Détection des colonnes par rangée
-    for r_start, r_end in row_ranges:
-        col_content = []
-        for x in range(width):
-            has_content = any(gray.getpixel((x, y)) > threshold for y in range(r_start, r_end))
-            col_content.append(has_content)
+    # 5. Parcourir les objets trouvés (on commence à 1 car 0 est le fond)
+    for i in range(1, n_labels):
+        area = stats[i, cv2.CC_STAT_AREA]
         
-        col_ranges = get_content_ranges(col_content, threshold)
-        for c_start, c_end in col_ranges:
-            all_sprites.append((c_start, r_start, c_end, r_end))
+        # Filtrer les petits parasites (poussières de pixels)
+        if area < min_area:
+            continue
             
+        # Récupérer la boîte englobante (bbox)
+        x = stats[i, cv2.CC_STAT_LEFT]
+        y = stats[i, cv2.CC_STAT_TOP]
+        w = stats[i, cv2.CC_STAT_WIDTH]
+        h = stats[i, cv2.CC_STAT_HEIGHT]
+        
+        # Convertir au format PIL (left, top, right, bottom)
+        all_sprites.append((x, y, x + w, y + h))
+        
+    # Optionnel : Trier les sprites de haut en bas, puis de gauche à droite
+    all_sprites.sort(key=lambda b: (b[1], b[0]))
+    
     return all_sprites
 
-def process_single_file(file_path, base_output_folder, target_w, target_h, make_transparent):
-    """Traite une seule image de spritesheet."""
-    try:
-        img_name = os.path.splitext(os.path.basename(file_path))[0]
-        # Création du sous-dossier spécifique à l'action (ex: RUN, IDLE)
-        action_folder = os.path.join(base_output_folder, img_name)
-        if not os.path.exists(action_folder):
-            os.makedirs(action_folder)
+# --- WORKER THREAD POUR LE TRAITEMENT ---
 
-        img_raw = Image.open(file_path).convert("RGBA")
-        sprite_boxes = find_sprite_locations(img_raw)
+class ProcessorThread(QThread):
+    progress = pyqtSignal(int)
+    finished = pyqtSignal(int)
+
+    def __init__(self, files, output_dir, tw, th, settings):
+        super().__init__()
+        self.files = files
+        self.output_dir = output_dir
+        self.tw, self.th = tw, th
+        self.settings = settings
+
+    def run(self):
+        count = 0
+        for i, file_path in enumerate(self.files):
+            if self.process_file(file_path):
+                count += 1
+            self.progress.emit(int((i + 1) / len(self.files) * 100))
+        self.finished.emit(count)
+
+    def fix_white_edges(self, pil_img):
+        """Étend les couleurs des pixels pour éliminer les bordures blanches de découpe."""
+        # On s'assure d'être en RGBA
+        img = pil_img.convert("RGBA")
+        r, g, b, a = img.split()
         
-        if not sprite_boxes:
+        # On crée une version "dilatée" des couleurs (étalement des pixels voisins)
+        rgb = Image.merge("RGB", (r, g, b))
+        # MaxFilter(3) est idéal pour le pixel art et les sprites
+        rgb_dilated = rgb.filter(ImageFilter.MaxFilter(3))
+        
+        # On recompose avec le masque alpha original pour garder la forme exacte
+        return Image.merge("RGBA", (r, g, b, a))
+
+    def process_file(self, file_path):
+        try:
+            img_name = os.path.splitext(os.path.basename(file_path))[0]
+            out_folder = os.path.join(self.output_dir, img_name)
+            os.makedirs(out_folder, exist_ok=True)
+            
+            # 1. Charger l'image
+            img = Image.open(file_path).convert("RGBA")
+            width, height = img.size
+
+            # 2. Nettoyer le fond (Flood Fill depuis les coins)
+            target_color = (0, 0, 0, 0)
+            for seed_point in [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)]:
+                if img.getpixel(seed_point)[3] != 0:
+                    ImageDraw.floodfill(img, seed_point, target_color, thresh=30)
+
+            # 3. DÉTECTION INTELLIGENTE (OpenCV)
+            boxes = find_sprite_locations_opencv(img, min_area=1000) 
+            
+            for j, box in enumerate(boxes):
+                sprite = img.crop(box)
+                
+                # Recrop serré pour un centrage parfait
+                tight_bbox = sprite.getbbox()
+                if tight_bbox:
+                    sprite = sprite.crop(tight_bbox)
+
+                # --- CORRECTION DES BORDURES ---
+                # On applique l'extension de couleur ici, avant le redimensionnement
+                sprite = self.fix_white_edges(sprite)
+                # -------------------------------
+
+                # Thumbnail de haute qualité (LANCZOS pour garder la netteté)
+                sprite.thumbnail((self.tw-10, self.th-10), Image.Resampling.LANCZOS)
+                
+                # Canvas transparent de destination (128x128 par défaut)
+                canvas = Image.new("RGBA", (self.tw, self.th), (0, 0, 0, 0))
+                
+                # Calcul des offsets de centrage
+                offset_x = (self.tw - sprite.width) // 2
+                
+                # Ancrage bas ou centré selon tes réglages
+                if self.settings.get('anchor_bottom'):
+                    offset_y = (self.th - sprite.height)
+                else:
+                    offset_y = (self.th - sprite.height) // 2
+                
+                # Collage final en utilisant le sprite comme son propre masque alpha
+                canvas.paste(sprite, (offset_x, offset_y), sprite) 
+                canvas.save(os.path.join(out_folder, f"{img_name}_{j:03d}.png"), "PNG")
+                
+            return True
+        except Exception as e: 
+            print(f"Erreur lors du traitement de {file_path}: {e}")
             return False
 
-        for i, box in enumerate(sprite_boxes):
-            sprite = img_raw.crop(box)
+# --- INTERFACE PRINCIPALE ---
+
+class SpriteManagerApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Sprite Slicer Pro - Gestionnaire d'Assets")
+        self.resize(1200, 800)
+        self.setStyleSheet("""
+            QMainWindow { background-color: #1e1e2e; }
+            QWidget { color: #cdd6f4; font-family: 'Segoe UI'; }
             
-            # Autocrop
-            bg = Image.new("RGBA", sprite.size, (0, 0, 0, 0))
-            diff = ImageChops.difference(sprite, bg)
-            bbox = diff.getbbox()
-            if bbox:
-                sprite = sprite.crop(bbox)
+            /* Style de l'explorateur */
+            QTreeView { 
+                background-color: #313244; 
+                border: none; 
+                outline: none;
+            }
 
-            # Transparence du noir
-            if make_transparent:
-                datas = sprite.getdata()
-                new_data = [(0,0,0,0) if (d[0]<25 and d[1]<25 and d[2]<25) else d for d in datas]
-                sprite.putdata(new_data)
+            /* --- GRANDEUR DES FLÈCHES (BRANCHES) --- */
+            QTreeView::branch {
+                width: 30px; /* Augmente la zone de clic et l'espace de la flèche */
+            }
 
-            # Redimensionnement centré
-            sprite.thumbnail((target_w, target_h), Image.Resampling.NEAREST)
-            canvas = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-            offset = ((target_w - sprite.width) // 2, (target_h - sprite.height) // 2)
-            canvas.paste(sprite, offset)
+            QTreeView::branch:has-children:!has-siblings:closed,
+            QTreeView::branch:closed:has-children:has-siblings {
+                image: url(none); /* On peut mettre une image ici, mais on va styliser le symbole */
+                border-image: none;
+            }
 
-            # Sauvegarde format: NOM_ACTION_001.png
-            save_name = f"{img_name}_{i+1:03d}.png"
-            canvas.save(os.path.join(action_folder, save_name))
-        return True
-    except Exception as e:
-        print(f"Erreur sur {file_path}: {e}")
-        return False
+            /* Personnalisation visuelle des flèches via les indicateurs */
+            QTreeView::indicator {
+                width: 20px;
+                height: 20px;
+            }
+            
+            /* Si tu veux des flèches vraiment visibles et personnalisées sans images externes, 
+               la méthode la plus simple est d'augmenter l'indentation globale : */
+        """)
+        self.init_ui()
 
-def start_processing():
-    path = entry_input.get()
-    output_folder = entry_output.get()
-    
-    try:
-        tw, th = int(entry_w.get()), int(entry_h.get())
-    except:
-        messagebox.showerror("Erreur", "Taille invalide.")
-        return
+    def init_ui(self):
+        main_layout = QVBoxLayout()
+        container = QWidget()
+        container.setLayout(main_layout)
+        self.setCentralWidget(container)
 
-    if not path or not output_folder:
-        messagebox.showwarning("Attention", "Veuillez remplir les chemins.")
-        return
+        # Splitter principal : Explorateur | Galerie
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
 
-    files_to_process = []
-    if os.path.isfile(path):
-        files_to_process.append(path)
-    elif os.path.isdir(path):
-        # Liste toutes les images du répertoire
-        exts = ('.png', '.jpg', '.jpeg', '.bmp', '.webp')
-        files_to_process = [os.path.join(path, f) for f in os.listdir(path) if f.lower().endswith(exts)]
+        # 1. Explorateur de fichiers (Gauche)
+        # On récupère le chemin "Home" de l'utilisateur (ex: C:/Users/Nom)
+        home_path = os.path.expanduser("~") 
+        
+        self.file_model = QFileSystemModel()
+        self.file_model.setRootPath(home_path) # Définit le périmètre du modèle
+        
+        self.tree = QTreeView()
+        self.tree.setModel(self.file_model)
+        
+        # --- MODIFICATION ICI : On force l'arborescence à s'ouvrir sur le Home ---
+        self.tree.setRootIndex(self.file_model.index(home_path)) 
+        
+        self.tree.setColumnWidth(0, 250)
+        for i in range(1, 4): self.tree.hideColumn(i) # Garde seulement le nom
+        self.tree.clicked.connect(self.on_directory_selected)
+        
+        # 2. Zone Galerie et Contrôles (Droite)
+        right_container = QWidget()
+        right_layout = QVBoxLayout(right_container)
 
-    if not files_to_process:
-        messagebox.showinfo("Info", "Aucune image trouvée.")
-        return
+        # Barre d'outils supérieure
+        top_bar = QHBoxLayout()
+        self.path_display = QLineEdit()
+        self.path_display.setReadOnly(True)
+        self.btn_refresh = QPushButton("🔄 Rafraîchir")
+        self.btn_refresh.clicked.connect(lambda: self.load_images_from_path(self.path_display.text()))
+        top_bar.addWidget(QLabel("Dossier actuel:"))
+        top_bar.addWidget(self.path_display)
+        top_bar.addWidget(self.btn_refresh)
 
-    success_count = 0
-    for f in files_to_process:
-        if process_single_file(f, output_folder, tw, th, var_transparent.get()):
-            success_count += 1
+        # La grille d'images
+        self.list_widget = QListWidget()
+        self.list_widget.setViewMode(QListWidget.ViewMode.IconMode)
+        self.list_widget.setIconSize(QSize(120, 120))
+        self.list_widget.setSpacing(10)
+        self.list_widget.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
 
-    messagebox.showinfo("Terminé", f"Traitement fini !\n{success_count} fichiers traités.")
-    os.startfile(output_folder)
+        # Panneau de réglages de découpe
+        slice_panel = QFrame()
+        slice_panel.setStyleSheet("background-color: #313244; border-radius: 8px;")
+        slice_layout = QHBoxLayout(slice_panel)
+        
+        self.check_clean = QCheckBox("Nettoyer destination")
+        self.check_anchor = QCheckBox("Ancrage bas")
+        self.btn_slice = QPushButton("✂ LANCER LE DÉCOUPAGE")
+        self.btn_slice.setStyleSheet("background-color: #fab387; color: #11111b; font-weight: bold;")
+        self.btn_slice.clicked.connect(self.start_processing)
+        
+        slice_layout.addWidget(self.check_clean)
+        slice_layout.addWidget(self.check_anchor)
+        slice_layout.addStretch()
+        slice_layout.addWidget(self.btn_slice)
 
-# --- GUI ---
-root = tk.Tk()
-root.title("Sprite Slicer Automatique par Dossier 🐱")
-root.geometry("650x500")
+        self.prog_bar = QProgressBar()
 
-tk.Label(root, text="Source (Fichier ou Dossier complet) :", font=("Arial", 9, "bold")).pack(pady=5)
-frame_in = tk.Frame(root)
-frame_in.pack()
-entry_input = tk.Entry(frame_in, width=50)
-entry_input.pack(side=tk.LEFT, padx=5)
-tk.Button(frame_in, text="Fichier", command=lambda: (entry_input.delete(0, tk.END), entry_input.insert(0, filedialog.askopenfilename()))).pack(side=tk.LEFT)
-tk.Button(frame_in, text="Dossier", command=lambda: (entry_input.delete(0, tk.END), entry_input.insert(0, filedialog.askdirectory()))).pack(side=tk.LEFT)
+        right_layout.addLayout(top_bar)
+        right_layout.addWidget(self.list_widget)
+        right_layout.addWidget(slice_panel)
+        right_layout.addWidget(self.prog_bar)
 
-tk.Label(root, text="Dossier de destination (Export) :", font=("Arial", 9, "bold")).pack(pady=5)
-frame_out = tk.Frame(root)
-frame_out.pack()
-entry_output = tk.Entry(frame_out, width=50)
-entry_output.pack(side=tk.LEFT, padx=5)
-tk.Button(frame_out, text="Choisir", command=lambda: (entry_output.delete(0, tk.END), entry_output.insert(0, filedialog.askdirectory()))).pack(side=tk.LEFT)
+        self.splitter.addWidget(self.tree)
+        self.splitter.addWidget(right_container)
+        self.splitter.setStretchFactor(1, 3)
+        main_layout.addWidget(self.splitter)
+    # --- GESTION DE LA NAVIGATION ---
 
-frame_size = tk.LabelFrame(root, text=" Paramètres d'exportation ", padx=10, pady=10)
-frame_size.pack(pady=20)
-tk.Label(frame_size, text="Largeur:").grid(row=0, column=0)
-entry_w = tk.Entry(frame_size, width=8); entry_w.insert(0, "128"); entry_w.grid(row=0, column=1)
-tk.Label(frame_size, text="Hauteur:").grid(row=0, column=2)
-entry_h = tk.Entry(frame_size, width=8); entry_h.insert(0, "128"); entry_h.grid(row=0, column=3, padx=5)
-var_transparent = tk.BooleanVar(value=True)
-tk.Checkbutton(frame_size, text="Fond noir -> Transparent", variable=var_transparent).grid(row=1, column=0, columnspan=4)
+    def on_directory_selected(self, index):
+        path = self.file_model.filePath(index)
+        if os.path.isdir(path):
+            self.load_images_from_path(path)
 
-tk.Button(root, text="LANCER L'EXTRACTION", command=start_processing, 
-          bg="#27ae60", fg="white", font=("Arial", 12, "bold"), height=2, width=30).pack(pady=20)
+    def load_images_from_path(self, path):
+        if not path or not os.path.exists(path): return
+        self.path_display.setText(path)
+        self.list_widget.clear()
+        
+        files = [f for f in os.listdir(path) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        for f in files:
+            full_path = os.path.join(path, f)
+            item = QListWidgetItem(f)
+            item.setIcon(QIcon(full_path))
+            item.setData(Qt.ItemDataRole.UserRole, full_path)
+            self.list_widget.addItem(item)
 
-root.mainloop()
+    # --- MENU CLIC-DROIT (FONCTIONS DE GESTION) ---
+
+    def show_context_menu(self, pos):
+        items = self.list_widget.selectedItems()
+        if not items: return
+
+        menu = QMenu()
+        menu.setStyleSheet("""
+            QMenu { background-color: #2b2b3b; color: white; border: 1px solid #45475a; padding: 5px; }
+            QMenu::item:selected { background-color: #fab387; color: #11111b; border-radius: 3px; }
+            QMenu::separator { height: 1px; background: #45475a; margin: 5px; }
+        """)
+
+        # --- NAVIGATION & VUE ---
+        open_act = menu.addAction("👁 Voir en grand")
+        folder_act = menu.addAction("📂 Ouvrir l'emplacement")
+        copy_path_act = menu.addAction("🔗 Copier le chemin complet")
+        menu.addSeparator()
+
+        # --- ÉDITION EXTERNE ---
+        edit_menu = menu.addMenu("🎨 Modifier avec...")
+        paint_act = edit_menu.addAction("🖌 Microsoft Paint")
+        external_act = edit_menu.addAction("🦊 Choisir un logiciel (GIMP, etc.)")
+        menu.addSeparator()
+
+        # --- TRANSFORMATIONS (PIL) ---
+        transform_menu = menu.addMenu("🔄 Transformations rapides")
+        flip_h_act = transform_menu.addAction("↔ Miroir Horizontal")
+        flip_v_act = transform_menu.addAction("↕ Miroir Vertical")
+        rot_r_act = transform_menu.addAction("↷ Rotation 90° Droite")
+        gray_act = transform_menu.addAction("🌑 Convertir en Noir & Blanc")
+        
+        # Action de sauvegarde explicite (si on veut valider les changements)
+        save_act = menu.addAction("💾 Enregistrer les modifications")
+        menu.addSeparator()
+
+        # --- ACTIONS DE FICHIERS ---
+        rename_act = menu.addAction("✏ Renommer")
+        dup_act = menu.addAction("👯 Dupliquer")
+        copy_to_act = menu.addAction("📁 Copier vers...")
+        menu.addSeparator()
+        delete_act = menu.addAction("🗑 Supprimer")
+
+        action = menu.exec(self.list_widget.mapToGlobal(pos))
+        if not action: return
+
+        paths = [item.data(Qt.ItemDataRole.UserRole) for item in items]
+
+        try:
+            # 1. OUVERTURE & EXPLORATEUR
+            if action == open_act:
+                for p in paths: os.startfile(p) if sys.platform == 'win32' else os.system(f'open "{p}"')
+            
+            elif action == folder_act:
+                os.system(f'explorer /select,"{os.path.normpath(paths[0])}"')
+
+            elif action == copy_path_act:
+                QApplication.clipboard().setText("\n".join(paths))
+
+            # 2. LOGICIELS EXTERNES
+            elif action == paint_act:
+                for p in paths: os.system(f'mspaint "{p}"')
+
+            elif action == external_act:
+                exe_path, _ = QFileDialog.getOpenFileName(self, "Sélectionner le logiciel (GIMP, Aseprite, Photoshop)", "C:/Program Files", "Executable (*.exe)")
+                if exe_path:
+                    for p in paths: os.startfile(exe_path, arguments=f'"{p}"')
+
+            # 3. TRANSFORMATIONS (Sauvegarde auto incluse pour rafraîchir l'icône)
+            elif action in [flip_h_act, flip_v_act, rot_r_act, gray_act]:
+                for p in paths:
+                    with Image.open(p) as img:
+                        img = img.convert("RGBA")
+                        if action == flip_h_act: img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                        elif action == flip_v_act: img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                        elif action == rot_r_act: img = img.rotate(-90, expand=True)
+                        elif action == gray_act: img = img.convert("L").convert("RGBA")
+                        img.save(p)
+                self.load_images_from_path(self.path_display.text())
+
+            elif action == save_act:
+                # Rafraîchit simplement pour confirmer que tout est sur disque
+                self.load_images_from_path(self.path_display.text())
+                QMessageBox.information(self, "Sauvegarde", "Changements appliqués et images rafraîchies.")
+
+            # 4. GESTION DE FICHIERS
+            elif action == rename_act and len(items) == 1:
+                self.rename_file(items[0])
+
+            elif action == dup_act:
+                for p in paths:
+                    base, ext = os.path.splitext(p)
+                    shutil.copy(p, f"{base}_copy{ext}")
+                self.load_images_from_path(self.path_display.text())
+
+            elif action == copy_to_act:
+                self.copy_files(items)
+
+            elif action == delete_act:
+                self.delete_files(items)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Une erreur est survenue : {str(e)}")
+    # --- MÉTHODES DE SUPPORT ---
+
+    # --- MÉTHODES DE GESTION AMÉLIORÉES ---
+
+    def delete_files(self, items):
+        msg = f"Voulez-vous vraiment supprimer {len(items)} fichier(s) définitivement ?"
+        confirm = QMessageBox.question(self, "Confirmation", msg, 
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if confirm == QMessageBox.StandardButton.Yes:
+            for item in items:
+                path = item.data(Qt.ItemDataRole.UserRole)
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                    self.list_widget.takeItem(self.list_widget.row(item))
+                except Exception as e:
+                    print(f"Erreur suppression {path}: {e}")
+
+    def rename_file(self, item):
+        old_path = item.data(Qt.ItemDataRole.UserRole)
+        old_name = os.path.basename(old_path)
+        new_name, ok = QInputDialog.getText(self, "Renommer", "Nouveau nom (avec extension):", text=old_name)
+        
+        if ok and new_name and new_name != old_name:
+            new_path = os.path.join(os.path.dirname(old_path), new_name)
+            try:
+                if os.path.exists(new_path):
+                    raise FileExistsError("Un fichier porte déjà ce nom.")
+                os.rename(old_path, new_path)
+                item.setText(new_name)
+                item.setData(Qt.ItemDataRole.UserRole, new_path)
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", str(e))
+
+    def copy_files(self, items):
+        if not items: return
+        dest_dir = QFileDialog.getExistingDirectory(self, "Dossier de destination", os.path.expanduser("~"))
+        if dest_dir:
+            errors = []
+            for item in items:
+                src = item.data(Qt.ItemDataRole.UserRole)
+                try:
+                    shutil.copy(src, dest_dir)
+                except Exception as e:
+                    errors.append(f"{os.path.basename(src)}: {str(e)}")
+            
+            if errors:
+                QMessageBox.warning(self, "Erreur de copie", "\n".join(errors))
+            else:
+                QMessageBox.information(self, "Succès", "Tous les fichiers ont été copiés.")
+
+    # --- TRAITEMENT DU DÉCOUPAGE ---
+
+    def start_processing(self):
+        # 1. On récupère le dossier actuellement affiché à droite
+        src = self.path_display.text()
+        if not src or not os.path.exists(src):
+            QMessageBox.warning(self, "Erreur", "Veuillez d'abord sélectionner un dossier valide.")
+            return
+
+        # 2. On ouvre la boîte de dialogue DIRECTEMENT dans le dossier source
+        # Le second argument de getExistingDirectory est le dossier de départ
+        dst = QFileDialog.getExistingDirectory(
+            self, 
+            "Choisir le dossier de destination", 
+            src  # <--- C'est ici que la magie opère : on démarre dans le dossier actuel
+        )
+
+        if not dst:
+            return
+
+        # 3. Sécurité : éviter de supprimer le dossier source par erreur
+        if self.check_clean.isChecked() and os.path.abspath(dst) == os.path.abspath(src):
+            QMessageBox.critical(self, "Action Interdite", 
+                                "Le dossier de destination est le même que la source. "
+                                "Désactivez 'Nettoyer destination' pour extraire ici.")
+            return
+
+        if self.check_clean.isChecked() and os.path.exists(dst):
+            shutil.rmtree(dst)
+            os.makedirs(dst)
+
+        # 4. Liste des fichiers à traiter
+        files = [os.path.join(src, f) for f in os.listdir(src) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        
+        if not files:
+            QMessageBox.information(self, "Info", "Aucune image trouvée dans ce dossier.")
+            return
+
+        settings = {'anchor_bottom': self.check_anchor.isChecked()}
+        
+        # Lancement du thread (inchangé)
+        self.thread = ProcessorThread(files, dst, 128, 128, settings)
+        self.thread.progress.connect(self.prog_bar.setValue)
+        self.thread.finished.connect(lambda c: QMessageBox.information(self, "Succès", f"{c} images traitées avec succès !"))
+        self.thread.start()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = SpriteManagerApp()
+    window.show()
+    sys.exit(app.exec())

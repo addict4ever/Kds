@@ -449,53 +449,65 @@ class TimerManagerWindow(tk.Toplevel):
         main_frame = tk.Frame(self, bg="#ecf0f1", padx=20, pady=20)
         main_frame.pack(fill="both", expand=True)
         
-        
         preset_button_frame = tk.Frame(main_frame, bg="#ecf0f1")
         preset_button_frame.pack(fill=tk.X, pady=5)
         
-        # --- MODIFICATION: 3 BOUTONS PAR RANGÉE (col = i % 3) ---
+        # --- MODIFICATION: 4 SECTIONS DE COULEURS ---
         for i, (name, duration) in enumerate(QUICK_PRESETS):
             minutes = duration // 60
             hours = minutes // 60
             minutes = minutes % 60
+            
             if hours > 0:
                 duration_str = f"({hours}h {minutes}m)"
             elif minutes > 0:
                 duration_str = f"({minutes} min)"
             else:
                 duration_str = f"({duration} sec)"
+            
             full_text = f"{name}\n{duration_str}"
+
+            # LOGIQUE DES 4 COULEURS :
+            if i < 8:
+                # 🔵 SECTION 1 : Les préparations longues / Plats signatures
+                current_bg = "#2980b9" 
+            elif i < 13:
+                # 🟠 SECTION 2 : Accompagnements et Entrées (Pain, Ailes, etc.)
+                current_bg = "#e67e22"
+            elif i < 18:
+                # 🟢 SECTION 3 : Minuteries courtes (1m à 8m)
+                current_bg = "#27ae60"
+            else:
+                # 🔴 SECTION 4 : Minuteries longues (10m et +)
+                current_bg = "#c0392b"
+
             btn = tk.Button(
                 preset_button_frame, 
                 text=full_text, 
-                # ⭐ IMPORTANT: Appelle la méthode dans KDSGUI
                 command=lambda n=name, d=duration: self.create_and_start_timer(n, d),
-                bg="#3498db" if i < 6 else "#f39c12", 
+                bg=current_bg, 
                 fg="white", 
                 font=("Arial", 11, "bold"), 
                 width=15, height=3, bd=4, relief=tk.RAISED
             )
             
-            # Calcul pour 3 colonnes (0, 1, 2)
+            # Calcul pour 3 colonnes
             row = i // 3 
             col = i % 3 
-            
             btn.grid(row=row, column=col, padx=5, pady=5, sticky="ew")
 
-        # Pour que les boutons occupent toute la largeur disponible pour 3 colonnes:
+        # Configuration des colonnes
         preset_button_frame.grid_columnconfigure(0, weight=1)
         preset_button_frame.grid_columnconfigure(1, weight=1)
         preset_button_frame.grid_columnconfigure(2, weight=1)
-        # -----------------------------------------------------------
 
-        
+        # --- RESTE DE L'INTERFACE (SONS) ---
         sound_label = tk.Label(main_frame, text="Sonnerie:", bg="#ecf0f1", font=("Arial", 12, "bold"))
         sound_label.pack(anchor="w", pady=(10, 5))
         
         sound_frame = tk.Frame(main_frame, bg="#ecf0f1")
         sound_frame.pack(fill=tk.X)
         
-        # Choix de la sonnerie (Radio buttons)
         for sound_id, name in SIMPLE_SOUND_CHOICES.items():
             rb = tk.Radiobutton(sound_frame, 
                                 text=name, 
@@ -504,14 +516,13 @@ class TimerManagerWindow(tk.Toplevel):
                                 bg="#ecf0f1", 
                                 font=("Arial", 11),
                                 activebackground="#ecf0f1",
-                                indicatoron=0, # Rendre le bouton plus "plat"
+                                indicatoron=0, 
                                 selectcolor="#2ecc71", 
                                 bd=2, relief=tk.RAISED)
             rb.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
 
         tk.Button(main_frame, text="Tester le Son", command=self.test_sound, 
                   bg="#1abc9c", fg="white", font=("Arial", 12)).pack(fill=tk.X, pady=(10, 5))
-
 
         tk.Button(main_frame, text="Annuler / Fermer", command=self.on_close, 
                   bg="#bdc3c7", fg="#333", font=("Arial", 12)).pack(fill=tk.X, pady=(20, 5))

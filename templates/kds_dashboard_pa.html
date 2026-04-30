@@ -2,20 +2,66 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 {% endblock %}
 
+<div class="col-12 mb-4 no-print">
+    <label class="text-white mb-2 d-block fw-bold" style="letter-spacing: 1px; font-size: 0.9rem; opacity: 0.8;">STYLE D'AFFICHAGE KDS</label>
+    
+    <div class="theme-nav-wrapper">
+        <button class="nav-arrow left" onclick="scrollThemes(-200)">
+            <i class="fas fa-chevron-left text-white"></i> ❮
+        </button>
+
+        <div class="theme-slider-container" id="themeContainer">
+            <div class="theme-slider">
+                <div class="theme-dot" onclick="changeTheme('theme-classic')" title="Classique" style="background: #f1c40f;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-modern')" title="Moderne" style="background: #3498db;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-dark-red')" title="Rouge" style="background: #e74c3c;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-forest')" title="Forêt" style="background: #2ecc71;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-neon')" title="Néon" style="background: #00d2ff;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-purple')" title="Violet" style="background: #9b59b6;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-high-contrast')" title="Contraste" style="background: #ffffff; border: 2px solid #000;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-midnight')" title="Midnight" style="background: #2c3e50; border-color: #3498db;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-emerald-dark')" title="Émeraude" style="background: #093028; border-color: #10ac84;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-ocean-deep')" title="Océan" style="background: linear-gradient(#141e30, #243b55);"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-coffee')" title="Coffee" style="background: #2c1e12; border-color: #d35400;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-graphite')" title="Graphite" style="background: #34495e; border-color: #bdc3c7;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-lava')" title="Lava" style="background: #ff4b2b;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-frozen')" title="Frozen" style="background: #81ecec;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-retro-terminal')" title="Terminal" style="background: #32ff7e; border: 2px solid #000;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-deep-purple')" title="Deep Purple" style="background: #6c5ce7;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-sunset')" title="Sunset" style="background: #ff4b5c;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-military')" title="Military" style="background: #596139;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-carbon')" title="Carbon" style="background: #333333; border-color: #00d2ff;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-royal')" title="Royal" style="background: #0a0e29; border-color: #f39c12;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-pink-neon')" title="Pink Neon" style="background: #fd79a8;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-industrial')" title="Industrial" style="background: #dfe6e9;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-blood-moon')" title="Blood Moon" style="background: #630000; border-color: #d63031;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-mint')" title="Mint" style="background: #55efc4;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-titanium')" title="Titanium" style="background: #bdc3c7;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-electric-blue')" title="Electric" style="background: #0984e3;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-mars')" title="Mars" style="background: #e67e22;"></div>
+            </div>
+        </div>
+
+        <button class="nav-arrow right" onclick="scrollThemes(200)">
+            <i class="fas fa-chevron-right text-white"></i> ❯
+        </button>
+    </div>
+</div>
+
 {% block content %}
 <div class="container-fluid mt-2">
     
     <div class="row" id="kds-ajax-zone">
     {% for bid, item in pa_list.items() %}
     {# MODIFICATION ICI : Ajout de l'ID dynamique pour que JS trouve la carte #}
-    <div class="kds-column order-wrapper" id="order-{{ item.data.id }}" style="display: block;">
-        
-        <div class="card bg-dark text-white card-pulse-yellow" style="border: 2px solid #f1c40f;">
-            <div class="card-header bg-warning text-dark fw-bold">
+    <div class="kds-column order-wrapper theme-classic" id="order-{{ item.data.id }}" style="display: block;">
+        <div class="card text-white card-pulse-yellow">
+            <div class="card-header fw-bold">
                 COMMANDE PA : {{ item.data.table_number }}
             </div>
             
             <div class="card-body">
+                
                 
                 {# --- BLOC MODALS (Heure, Ustensiles, Note) --- #}
                 <div class="d-flex flex-column mt-2 mb-3">
@@ -26,18 +72,26 @@
                             {{ item.extras.desired_time if item.extras.desired_time else 'HEURE' }}
                         </div>
 
-                        <div id="btn-ust-{{ item.data.id }}" 
-                             class="extra-box {% if item.extras.utensils != 'UST' %}extra-selected{% endif %}" 
-                             onclick="showUtensilPicker('{{ item.data.id }}')">
-                            {{ item.extras.utensils if item.extras.utensils else 'UST' }}
-                        </div>
 
                         <div id="btn-note-{{ item.data.id }}" 
                              class="extra-box {% if item.extras.custom_note != 'NOTE' %}extra-selected{% endif %}" 
                              onclick="showNoteModal('{{ item.data.id }}')">
                             {{ item.extras.custom_note if item.extras.custom_note else 'NOTE' }}
                         </div>
-                    </div>
+
+                        <button id="btn-donner-{{ item.data.id }}" 
+                            class="btn {% if item.data.status == 'Traitée' %}btn-danger btn-donner-active{% else %}btn-outline-warning{% endif %} w-100 fw-bold mt-2 py-3 fs-2"
+                            onclick="openPAModal('{{ item.data.id }}')">
+                        
+                        {% if item.data.status == 'Traitée' %}
+                            ✅ DONNER
+                        {% else %}
+                            🔔 DONNER
+                        {% endif %}
+                    </button>
+                        </div>
+
+                    
 
                     <button id="ok-{{ item.data.id }}" class="btn btn-success w-100 mt-2 fw-bold" 
                             style="display:none; height: 50px; font-size: 1.2rem;" 
@@ -49,18 +103,28 @@
                 <ul class="list-group list-group-flush mb-3">
                     {% for raw_it in item.data['items'] %}
                         {% set it = raw_it | from_json %}
-                        <li class="list-group-item bg-dark text-white border-secondary">
-                            {% if it is mapping and it.main_item is defined %}
-                                <div class="item-main fw-bold">{{ it.main_item }}</div>
-                                {% if it.sub_items %}
-                                    <ul class="sub-items-list text-muted">
-                                        {% for sub in it.sub_items %}<li>• {{ sub }}</li>{% endfor %}
-                                    </ul>
+                        
+                        {# Nom de l'item pour le filtrage #}
+                        {% set item_name = it.main_item if it is mapping else it %}
+
+                        {# FILTRE : Masquer "POUR EMPORTER" #}
+                        {% if "POUR EMPORTER" not in item_name|upper %}
+                            <li class="list-group-item bg-pizzeria-pro text-white border-secondary py-3">
+                                {% if it is mapping and it.main_item is defined %}
+                                    {# Couleur jaune appliquée ici #}
+                                    <div class="item-main fw-bold text-yellow-kds">{{ it.main_item }}</div>
+                                    {% if it.sub_items %}
+                                        <ul class="sub-items-list mt-1">
+                                            {% for sub in it.sub_items %}
+                                                <li class="text-light">• {{ sub }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="item-main fw-bold text-yellow-kds">{{ it }}</div>
                                 {% endif %}
-                            {% else %}
-                                <div class="item-main">{{ it }}</div>
-                            {% endif %}
-                        </li>
+                            </li>
+                        {% endif %}
                     {% endfor %}
                 </ul>
             </div>
@@ -70,42 +134,31 @@
 </div>
 
 
-
-<div id="modal-utensils" style="display:none; position:fixed; z-index:9999; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%; ">
-    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:25px; border-radius:30px; min-width:500px; box-shadow: 0 0 50px rgba(0, 210, 255, 0.2);">
+<div id="paModalOverlay" class="pa-modal-overlay">
+    <div class="pa-modal-content">
+        <div class="pa-modal-header">NUMÉRO DU PA (3 CHIFFRES)</div>
         
-        <h2 class="text-white text-center mb-4" style="font-weight: 800; letter-spacing: 2px;">EXTRAS LIVRAISON</h2>
-
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 25px;">
-            <div class="extra-option" onclick="selectType('ASSIETTE UST BEURRE', this)">ASSIETTE UST BEURRE</div>
-            <div class="extra-option" onclick="selectType('ASSIETTE UST', this)">ASSIETTE UST</div>
-            <div class="extra-option" onclick="selectType('ASS', this)">ASS</div>
-            <div class="extra-option active" onclick="selectType('UST', this)">UST</div>
-            <div class="extra-option" onclick="selectType('BEURRE', this)">BEURRE</div>
-            <div class="extra-option" onclick="selectType('VERRE', this)">VERRE</div>
+        <div id="paDisplay" class="pa-display">___</div>
+        
+        <div class="numpad-grid">
+            <button type="button" onclick="addNumber('1')">1</button>
+            <button type="button" onclick="addNumber('2')">2</button>
+            <button type="button" onclick="addNumber('3')">3</button>
+            <button type="button" onclick="addNumber('4')">4</button>
+            <button type="button" onclick="addNumber('5')">5</button>
+            <button type="button" onclick="addNumber('6')">6</button>
+            <button type="button" onclick="addNumber('7')">7</button>
+            <button type="button" onclick="addNumber('8')">8</button>
+            <button type="button" onclick="addNumber('9')">9</button>
+            <button type="button" class="btn-clear" onclick="clearNumber()">C</button>
+            <button type="button" onclick="addNumber('0')">0</button>
+            <button type="button" id="btnValiderPA" class="btn-valider" onclick="validerPA()" disabled>✔</button>
         </div>
 
-        <div class="d-flex align-items-center justify-content-center gap-4 mb-4" style="background: #000; padding: 20px; border-radius: 20px; border: 1px solid #333;">
-            <button class="btn-qty" onclick="changeQty(-1)">-</button>
-            <div style="text-align: center;">
-                <input type="number" id="utensil-qty" value="1" min="1" max="50" readonly
-                    style="width: 100px; text-align: center; font-size: 3.5rem; background: none; color: #00d2ff; border: none; font-weight: 900;">
-                <div style="color: #666; font-size: 0.8rem; text-transform: uppercase;">Maximum 50</div>
-            </div>
-            <button class="btn-qty" onclick="changeQty(1)">+</button>
-        </div>
-
-        <input type="hidden" id="selected-type" value="UST">
-
-        <div class="d-flex gap-3">
-            <button class="btn btn-primary btn-lg w-100 touch-element-xxl" onclick="saveUtensils()" 
-                style="background: #00d2ff !important; border: none; font-size: 1.6rem; border-radius: 20px;">
-                VALIDER
-            </button>
-            <button class="btn btn-danger btn-close-large" onclick="document.getElementById('modal-utensils').style.display='none'">X</button>
-        </div>
+        <button type="button" class="btn-annuler" onclick="closePAModal()">ANNULER / FERMER</button>
     </div>
 </div>
+
 
 <div id="modal-time" style="display:none; position:fixed; z-index:10002; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%;">
     <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:30px; border-radius:30px; min-width:380px; box-shadow: 0 0 50px rgba(0, 210, 255, 0.3);">
@@ -178,6 +231,20 @@
     let isModalOpen = false;
     let timeTargetBid = null;
     let assignTargetBid = null;
+    let isNumpadOpen = false; // Variable de contrôle
+    let currentTimeInput = ""; // Stocke les chiffres saisis
+    
+    const ALL_THEMES = [
+        'theme-classic', 'theme-modern', 'theme-dark-red', 'theme-forest', 
+        'theme-neon', 'theme-purple', 'theme-high-contrast', 'theme-midnight',
+        'theme-slate', 'theme-emerald-dark', 'theme-cyber-orange', 'theme-ocean-deep', 
+        'theme-coffee', 'theme-graphite', 'theme-gold-luxury', 'theme-matrix-soft', 
+        'theme-berry', 'theme-lava', 'theme-frozen', 'theme-retro-terminal', 
+        'theme-deep-purple', 'theme-sunset', 'theme-military', 'theme-carbon', 
+        'theme-royal', 'theme-pink-neon', 'theme-industrial', 'theme-blood-moon', 
+        'theme-mint', 'theme-titanium', 'theme-electric-blue', 'theme-mars'
+    ];
+    
 
     if (!sessionStorage.getItem('session_active')) {
         localStorage.removeItem('delivered_orders');
@@ -187,7 +254,7 @@
 
     function refreshKDS() {
         // 1. DÉTECTION DES MODALES OUVERTES
-        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm'];
+        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm', '#paModalOverlay'];
         const isModalOpen = modals.some(selector => {
             const modal = document.querySelector(selector);
             return modal && modal.style.display === 'block';
@@ -289,9 +356,145 @@
                     deliveredOrders.forEach(bid => {
                         if (typeof applyDeliveredVisual === 'function') applyDeliveredVisual(bid); 
                     });
+                    applySavedTheme();
                 }
             })
             .catch(err => console.error("Erreur refresh KDS:", err));
+    }
+
+    function changeTheme(themeName) {
+        // 1. Appliquer le thème aux factures
+        document.querySelectorAll('.order-wrapper').forEach(card => {
+            ALL_THEMES.forEach(t => card.classList.remove(t));
+            card.classList.add(themeName);
+        });
+
+        // 2. Mettre à jour l'apparence du slider
+        document.querySelectorAll('.theme-dot').forEach(dot => {
+            dot.classList.remove('active-theme');
+            if (dot.getAttribute('onclick').includes(themeName)) {
+                dot.classList.add('active-theme');
+            }
+        });
+
+        // 3. SAUVEGARDE PERSISTANTE
+        localStorage.setItem('kds_selected_theme', themeName);
+    }
+
+    // Fonction de chargement à appeler au démarrage et dans ton refreshKDS
+    function applySavedTheme() {
+        const saved = localStorage.getItem('kds_selected_theme') || 'theme-classic';
+        changeTheme(saved);
+    }
+
+    function scrollThemes(distance) {
+        const container = document.getElementById('themeContainer');
+        container.scrollBy({
+            left: distance,
+            behavior: 'smooth'
+        });
+    }
+
+// Pour permettre aussi le défilement à la molette de souris sur le container
+document.getElementById('themeContainer').addEventListener('wheel', (evt) => {
+    evt.preventDefault();
+    document.getElementById('themeContainer').scrollLeft += evt.deltaY;
+});
+
+// Au chargement de la page, on applique le thème sauvegardé
+    // Se lance dès que la page est prête
+    document.addEventListener('DOMContentLoaded', () => {
+        applySavedTheme();
+    });
+    // Ouvre le modal quand on clique sur le bouton de la carte
+    function openPAModal(orderId) {
+        activeOrderId = orderId;
+        isNumpadOpen = true; // Verrouille le rafraîchissement
+        currentPA = "";
+        updatePADisplay();
+        document.getElementById('paModalOverlay').style.display = 'flex';
+        }
+
+    function closePAModal() {
+        isNumpadOpen = false; // Déverrouille
+        document.getElementById('paModalOverlay').style.display = 'none';
+    }
+
+    function addNumber(num) {
+        if (currentPA.length < 3) {
+            currentPA += num;
+            updatePADisplay();
+        }
+    }
+
+    function clearNumber() {
+        currentPA = "";
+        updatePADisplay();
+    }
+
+    function updatePADisplay() {
+        const display = document.getElementById('paDisplay');
+        display.innerText = currentPA.padEnd(3, "_");
+        document.getElementById('btnValiderPA').disabled = (currentPA.length !== 3);
+    }
+
+    function validerPA() {
+        if (currentPA.length === 3 && activeOrderId) {
+            const numeroSaisi = currentPA;
+            closePAModal();
+            // Appelle ta fonction existante
+            marquerPADonner(activeOrderId, numeroSaisi);
+        }
+    }
+
+    function marquerPADonner(orderId, numeroPA) {
+        const btn = document.getElementById(`btn-donner-${orderId}`);
+        
+        if (btn.disabled) return;
+        btn.disabled = true;
+        const texteOriginal = btn.innerHTML;
+        btn.innerHTML = "⌛ ATTENTE..."; 
+
+        // On envoie le numeroPA dans le JSON
+        fetch(`/mark_pa_donner/${orderId}`, { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ pa_number: numeroPA }) 
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                btn.classList.remove('btn-outline-warning');
+                btn.classList.add('btn-donner-active'); 
+                
+                let secondesRestantes = 30;
+                const timer = setInterval(() => {
+                    btn.innerHTML = `✅ PA #${numeroPA} (${secondesRestantes}s)`;
+                    secondesRestantes--;
+
+                    if (secondesRestantes < 0) {
+                        clearInterval(timer);
+                        btn.disabled = false;
+                        btn.innerHTML = "🔔 DONNER PA";
+                        btn.classList.remove('btn-donner-active');
+                        btn.classList.add('btn-outline-warning');
+                    }
+                }, 1000);
+
+            } else {
+                alert("Erreur : " + (data.message || "Erreur inconnue"));
+                btn.disabled = false;
+                btn.innerHTML = texteOriginal;
+            }
+        })
+        .catch(err => {
+            console.error("Erreur:", err);
+            alert("Impossible de contacter le serveur.");
+            btn.disabled = false;
+            btn.innerHTML = texteOriginal;
+        });
     }
 
     // Fonction helper pour le rendu visuel
@@ -399,6 +602,22 @@
         document.getElementById('ok-' + bid).style.display = 'block';
     }
 
+
+    document.addEventListener('keydown', function(event) {
+        const modal = document.getElementById('modal-time');
+        // On vérifie si la modale est visible avant de capturer les touches
+        if (window.getComputedStyle(modal).display !== 'none') {
+            if (event.key >= '0' && event.key <= '9') {
+                pressKey(event.key);
+            } else if (event.key === 'Backspace') {
+                pressKey('BACK');
+            } else if (event.key === 'Enter') {
+                confirmTime();
+            } else if (event.key === 'Escape') {
+                closeTimeModal();
+            }
+        }
+    });
 
     function openTimePicker(bid) {
         timeTargetBid = bid;

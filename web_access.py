@@ -23,12 +23,72 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 # --- Configuration GLOBALE ---
+
+APP_AUTH_KEY = "MonApplicationUnique123!" # Changez ceci par une clé secrète
+ALLOWED_IPS = ['192.168.5.205', '192.168.5.203', '127.0.0.1']
+ALLOWED_USER_AGENT = "MaSuperAppKDS/2.0" # Le nom de votre application
+
+# --- LISTE DES ROUTES AUTORISÉES (WHITELIST) ---
+# Seules ces routes seront accessibles. Tout le reste sera bloqué.
+WHITELIST_ROUTES = [
+    '/',
+    '/kds',
+    '/kds_livreur',
+    '/kds_pa',
+    '/kds_placeur',
+    '/api/livreurs',
+    '/api/livreurs/add',
+    '/api/livreurs/rename',
+    '/api/livreurs/reorder',
+    '/api/livreurs/delete',
+    '/api/livreurs/check_status',
+    '/mark_pa_donner',
+    '/close_order',
+    '/update_pa_details',
+    '/print_bill',
+    '/update_livraison_details',
+    '/update_order_extra',
+    '/reset_all_commandes',
+    '/reset_livraison',
+    '/toggle_view',
+    '/assign_livreur',
+    '/fermer_livraison',
+    '/kds_cards_html',
+    '/kds_content',
+    '/consultation',
+    '/update_status_livraison',
+    '/update_status',
+    '/delete_bill'
+]
+
+INACTIFS_FILE = "livreurs_inactifs.json"
+
+
+
+# --- Initialisation au démarrage ---
 db_manager = DBManager()
 KDS_REFRESH_RATE = 3 
 livraisons_store = {}
-LIVREURS = ["Chantal", "Mike", "Le King", "Alain" , "Cedrik","Livreur1", "Livreur2", "Livreur3", "Livreur4" , "Livreur5"]
 # Initialisation de Flask (sera utilisée par ServerManager)
 app = Flask(__name__)
+
+def load_config_inactifs():
+    """Charge la liste des livreurs inactifs depuis le fichier JSON."""
+    if os.path.exists(INACTIFS_FILE):
+        try:
+            with open(INACTIFS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Erreur lecture inactifs: {e}")
+    return []
+
+def save_config_inactifs(liste_inactifs):
+    """Sauvegarde la liste des livreurs inactifs dans le fichier JSON."""
+    try:
+        with open(INACTIFS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(liste_inactifs, f)
+    except Exception as e:
+        logger.error(f"Erreur sauvegarde inactifs: {e}")
 
 # ⭐ DÉFINITION ET ENREGISTREMENT DU FILTRE from_json POUR JINJA
 def json_loads_filter(s):
@@ -54,6 +114,45 @@ def json_loads_filter(s):
         return []
 
 app.jinja_env.filters['from_json'] = json_loads_filter
+
+LIVREURS_FILE = 'livreurs.json'
+
+
+def load_livreurs():
+    """Charge les livreurs depuis le JSON ou utilise la liste par défaut."""
+    # Liste par défaut basée sur ton équipe actuelle
+    default_livreurs = [
+        "Chantal", "Mike", "Le King", "Alain", "Cedrik", 
+        "Dylan", "Joey", "Mathis", "Xavier", "Anthony", 
+        "DINER", "SOIR"
+    ]
+    
+    if os.path.exists(LIVREURS_FILE):
+        try:
+            with open(LIVREURS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # On vérifie que c'est bien une liste et qu'elle n'est pas vide
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+        except Exception as e:
+            logger.error(f"Erreur lors de la lecture de {LIVREURS_FILE}: {e}")
+    
+    # Si le fichier n'existe pas ou est corrompu, on crée le fichier par défaut
+    save_livreurs(default_livreurs)
+    return default_livreurs
+
+def save_livreurs(liste):
+    """Sauvegarde la liste dans le fichier JSON."""
+    try:
+        with open(LIVREURS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(liste, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Impossible de sauvegarder les livreurs: {e}")
+
+# Initialisation au démarrage
+LIVREURS = load_livreurs()
+LIVREURS_INACTIFS = load_config_inactifs()
+
 
 def _get_kds_data_and_notes(db_manager):
     global livraisons_store
@@ -88,6 +187,65 @@ def _get_kds_data_and_notes(db_manager):
                     livraisons_store[bid]['data'] = order
     return db_manager.get_all_bill_notes()
 # --- web_access.py (Partie Routes modifiée) ---
+
+
+def is_ip_allowed():
+    """Retourne True si l'IP est dans la liste autorisée."""
+    return request.remote_addr in ALLOWED_IPS
+
+def is_header_valid():
+    """Retourne True si le header secret est correct."""
+    return request.headers.get("X-App-Access") == APP_AUTH_KEY
+
+def is_user_agent_allowed():
+    """Vérifie si le User-Agent correspond à votre application."""
+    user_agent = request.headers.get('User-Agent', '')
+    # On vérifie si notre nom d'app est contenu dans le User-Agent
+    return ALLOWED_USER_AGENT in user_agent
+
+#@app.before_request
+def filtrer_acces_global():
+    """Vérification stricte de l'IP, du Header et de la Route demandée."""
+    
+    # 1. Extraction de la route demandée (ex: /kds)
+    path = request.path
+    
+    # Pour les routes avec paramètres (ex: /reset_livraison/123), 
+    # on ne garde que le début pour comparer avec la whitelist.
+    base_path = "/" + path.split('/')[1] if len(path.split('/')) > 1 else "/"
+    
+    # 2. VÉRIFICATION DE LA ROUTE (Le nouveau blocage que tu as demandé)
+    # On vérifie si le chemin exact OU le chemin de base est dans la liste
+    route_autorisee = False
+    for route in WHITELIST_ROUTES:
+        if path == route or path.startswith(route + "/"):
+            route_autorisee = True
+            break
+            
+    if not route_autorisee:
+        logger.warning(f"🚫 ROUTE NON AUTORISÉE: {path} par {request.remote_addr}")
+        return jsonify({"status": "error", "message": "ACCÈS REFUSÉ : ROUTE INCONNUE"}), 403
+
+    # 3. EXCEPTION : Le shutdown doit être accessible sans header secret (depuis 127.0.0.1)
+    if path == '/shutdown':
+        return
+
+    # 4. VÉRIFICATION DE L'IP (Couche 1)
+    if not is_ip_allowed():
+        logger.warning(f"🚫 IP bloquée: {request.remote_addr}")
+        return "Accès refusé: IP non autorisée.", 403
+
+    # 5. VÉRIFICATION DU USER-AGENT (Couche 2)
+    if not is_user_agent_allowed():
+        logger.warning(f"📱 User-Agent non autorisé de: {request.remote_addr}")
+        return "Accès interdit: Navigateur non autorisé.", 403
+
+    # 6. VÉRIFICATION DU HEADER SECRET (Couche 3)
+    # Obligatoire pour toutes les routes API et KDS
+    if not is_header_valid():
+        logger.warning(f"🔑 Header invalide de: {request.remote_addr}")
+        return "Accès interdit: Application non identifiée.", 403
+
 
 @app.route('/')
 @app.route('/kds')
@@ -185,10 +343,10 @@ def kds_dashboard():
 
 @app.route('/kds_livreur')
 def kds_dashboard_livreur():
-    # 1. On récupère les commandes actives (En attente/En cours) depuis la DB
+    global LIVREURS, LIVREURS_INACTIFS, livraisons_store
     all_orders = db_manager.get_pending_orders()
     
-    # On crée une liste des IDs valides pour le nettoyage
+    # 1. LISTE DES IDS VALIDES POUR LE NETTOYAGE
     active_db_ids = []
     for status in all_orders:
         for o in all_orders[status]:
@@ -215,17 +373,20 @@ def kds_dashboard_livreur():
                 if 'extras' not in livraisons_store[bid]:
                     livraisons_store[bid]['extras'] = {'desired_time': 'HEURE', 'utensils': 'UST', 'custom_note': 'NOTE'}
 
-    # 3. NETTOYAGE
+    # 3. NETTOYAGE DES COMMANDES TERMINÉES
     ids_to_remove = [bid for bid in livraisons_store if bid not in active_db_ids]
     for bid in ids_to_remove:
         del livraisons_store[bid]
 
-    # 4. RECHERCHE ET FILTRAGE COMPLET
+    # 4. PRÉPARATION DU FILTRAGE ET DES STATS
     search_query = request.args.get('search', '').lower()
     show_all = request.args.get('show_all', '0') == '1'
 
     filtered_livraisons = {}
     stats_casiers = {name: 0 for name in LIVREURS}
+    
+    # On définit les livreurs qui apparaissent dans les boutons d'assignation
+    livreurs_disponibles = [l for l in LIVREURS if l not in LIVREURS_INACTIFS]
 
     for bid, item in livraisons_store.items():
         if 'data' not in item:
@@ -235,7 +396,6 @@ def kds_dashboard_livreur():
         extras = item.get('extras', {})
         
         # --- CONSTRUCTION DE LA CHAÎNE DE RECHERCHE TOTALE ---
-        # On regroupe toutes les données possibles dans une seule chaîne
         searchable_text = f"{bid} "
         searchable_text += str(data.get('customer_phone', '')).lower() + " "
         searchable_text += str(data.get('address', '')).lower() + " "
@@ -243,7 +403,7 @@ def kds_dashboard_livreur():
         searchable_text += str(extras.get('custom_note', '')).lower() + " "
         searchable_text += str(extras.get('desired_time', '')).lower() + " "
         
-        # Extraction poussée des items (plats + sous-items)
+        # Extraction des items pour la recherche
         for raw_it in data.get('items', []):
             try:
                 it_data = json.loads(raw_it) if isinstance(raw_it, str) else raw_it
@@ -256,19 +416,20 @@ def kds_dashboard_livreur():
             except:
                 searchable_text += str(raw_it).lower() + " "
 
-        # Calcul des compteurs par livreur
+        # Calcul des compteurs (on compte même les livreurs inactifs s'ils ont une commande en cours)
         current_livreur = item.get('livreur')
         if current_livreur in stats_casiers:
             stats_casiers[current_livreur] += 1
 
-        # Vérification si le texte complet contient la requête
+        # Application du filtre de recherche
         if not search_query or search_query in searchable_text:
             filtered_livraisons[bid] = item
 
     return render_template(
         'kds_dashboard_livreur.html',
         livraisons=filtered_livraisons,
-        livreurs=LIVREURS,
+        livreurs=LIVREURS,              # Liste complète pour l'admin/stats
+        livreurs_actifs=livreurs_disponibles, # Liste filtrée pour les boutons d'assignation
         stats=stats_casiers,
         refresh_rate=KDS_REFRESH_RATE,
         search_query=search_query,
@@ -277,33 +438,47 @@ def kds_dashboard_livreur():
 
 @app.route('/kds_pa')
 def kds_dashboard_pa():
-    # 1. On récupère les commandes actives depuis la DB
-    all_orders = db_manager.get_pending_orders()
+    # 1. On récupère les commandes actives (En attente, En cours) via la fonction existante
+    all_orders = db_manager.get_pa_orders_with_history()
+    
+    # 2. On récupère les commandes traitées (Archives)
+    # Note: On utilise le nom exact de la fonction dans votre db_manager.py
+    try:
+        data_traitee = db_manager.get_orders_by_status_list(['Traitée'])
+        orders_traitees = data_traitee.get('Traitée', [])[-10:] # On prend les 10 dernières
+    except AttributeError:
+        # Sécurité au cas où le nom de la fonction varierait
+        orders_traitees = []
+
     pa_orders = {}
     
-    for status, orders in all_orders.items():
-        for o in orders:
-            # Nettoyage des valeurs pour éviter les erreurs de casse ou d'espaces
+    # Fonction interne pour filtrer et ajouter les commandes de type PA
+    def filtrer_et_ajouter(liste_commandes):
+        for o in liste_commandes:
             t_num = str(o.get('table_number', '')).strip().upper()
-            s_name = str(o.get('serveur_name', '')).strip()
-            
-            if t_num == 'PA' :
+            # On accepte 'PA' seul ou avec un numéro (ex: PA501)
+            if t_num == 'PA' or t_num.startswith('PA'):
                 bid = str(o.get('id'))
                 pa_orders[bid] = {
                     'data': o,
                     'extras': {'custom_note': o.get('note', '')} 
                 }
 
-    # 3. RECHERCHE
+    # On traite les commandes actives
+    for status, orders in all_orders.items():
+        filtrer_et_ajouter(orders)
+    
+    # On ajoute les commandes déjà traitées
+    filtrer_et_ajouter(orders_traitees)
+
+    # 3. LOGIQUE DE RECHERCHE (Recherche par ID, Table ou Serveur)
     search_query = request.args.get('search', '').lower()
     filtered_pa = {}
 
     for bid, item in pa_orders.items():
         data = item['data']
-        # Construction texte recherche
         searchable_text = f"{bid} {str(data.get('table_number', '')).lower()} {str(data.get('serveur_name', '')).lower()} "
         
-        # Items
         items_list = data.get('items', [])
         if isinstance(items_list, list):
             for raw_it in items_list:
@@ -312,13 +487,199 @@ def kds_dashboard_pa():
         if not search_query or search_query in searchable_text:
             filtered_pa[bid] = item
 
-    # 4. Rendu du template
+    # 4. Rendu avec le rafraîchissement automatique
     return render_template(
         'kds_dashboard_pa.html',
         pa_list=filtered_pa,
         refresh_rate=KDS_REFRESH_RATE,
         search_query=search_query
     )
+
+@app.route('/kds_placeur')
+def kds_dashboard_placeur():
+    # 1. Récupération des commandes actives (En attente/En cours)
+    all_orders = db_manager.get_pending_orders()
+    
+    active_db_ids = []
+    for status in all_orders:
+        for o in all_orders[status]:
+            # On considère généralement les livraisons (999) pour le placement
+            if str(o.get('table_number')) == '999':
+                active_db_ids.append(str(o['id']))
+
+    # 2. Mise à jour du store local (Synchronisation avec la mémoire vive)
+    for status, orders in all_orders.items():
+        for o in orders:
+            if str(o.get('table_number')) != '999':
+                continue
+
+            bid = str(o['id'])
+            if bid not in livraisons_store:
+                livraisons_store[bid] = {
+                    'data': o,
+                    'livreur': None,
+                    'collapsed': False,
+                    'extras': {'desired_time': 'HEURE', 'utensils': 'UST', 'custom_note': 'NOTE'}
+                }
+            else:
+                livraisons_store[bid]['data'] = o
+
+    # 3. Nettoyage des commandes qui ne sont plus en attente
+    ids_to_remove = [bid for bid in livraisons_store if bid not in active_db_ids]
+    for bid in ids_to_remove:
+        del livraisons_store[bid]
+
+    # 4. Gestion de la recherche
+    search_query = request.args.get('search', '').lower()
+    filtered_placeur = {}
+
+    for bid, item in livraisons_store.items():
+        data = item.get('data', {})
+        searchable_text = f"{bid} {str(data.get('address', '')).lower()} {str(data.get('customer_name', '')).lower()}"
+        
+        if not search_query or search_query in searchable_text:
+            filtered_placeur[bid] = item
+
+    # 5. Rendu du template spécifique au placeur
+    return render_template(
+        'kds_dashboard_placeur.html',
+        livraisons=filtered_placeur,
+        livreurs=LIVREURS,
+        refresh_rate=KDS_REFRESH_RATE,
+        search_query=search_query
+    )
+    
+@app.route('/api/livreurs', methods=['GET'])
+def get_livreurs():
+    return jsonify(load_livreurs())
+
+@app.route('/api/livreurs/add', methods=['POST'])
+def add_livreur():
+    nom = request.json.get('nom')
+    current = load_livreurs()
+    if nom and nom not in current:
+        current.append(nom)
+        save_livreurs(current)
+        global LIVREURS
+        LIVREURS = current
+        return jsonify(success=True)
+    return jsonify(success=False, error="Nom invalide ou déjà présent")
+
+
+@app.route('/api/livreurs/toggle_status', methods=['POST'])
+def api_toggle_livreur():
+    if request.headers.get("X-App-Access") != APP_AUTH_KEY:
+        return jsonify({"status": "error", "message": "🚫 ACCÈS REFUSÉ"}), 403
+
+    data = request.get_json()
+    nom = data.get('nom', '').strip()
+    
+    global LIVREURS_INACTIFS
+    if nom in LIVREURS_INACTIFS:
+        LIVREURS_INACTIFS.remove(nom)
+        msg = f"✅ {nom.upper()} EST RÉACTIVÉ"
+    else:
+        LIVREURS_INACTIFS.append(nom)
+        msg = f"💤 {nom.upper()} EST DÉSACTIVÉ"
+    
+    # Optionnel: Sauvegarde dans un petit JSON pour garder l'état après redémarrage
+    save_config_inactifs(LIVREURS_INACTIFS) 
+    
+    return jsonify({"status": "success", "message": msg})
+
+@app.route('/api/livreurs/rename', methods=['POST'])
+def api_rename_livreur():
+    # 1. Sécurité
+    if request.headers.get("X-App-Access") != APP_AUTH_KEY:
+        return jsonify({"status": "error", "message": "🚫 SÉCURITÉ : ACCÈS NON AUTORISÉ"}), 403
+
+    data = request.get_json()
+    ancien = data.get('ancien', '').strip()
+    nouveau = data.get('nouveau', '').strip().upper()
+
+    if not nouveau:
+        return jsonify({"status": "error", "message": "⚠️ LE NOM NE PEUT PAS ÊTRE VIDE"}), 400
+
+    try:
+        # 2. VÉRIFICATION : On regarde dans livraisons_store comme pour le delete
+        # On cherche si des commandes sont encore liées à l'ancien nom
+        commandes_actives = [
+            bid for bid, item in livraisons_store.items() 
+            if item.get('livreur') and item.get('livreur').upper() == ancien.upper()
+        ]
+        
+        nb = len(commandes_actives)
+        if nb > 0:
+            # On bloque car si on renomme le livreur, les commandes en cours 
+            # dans livraisons_store deviendraient orphelines.
+            return jsonify({
+                "status": "error",
+                "message": f"🚫 RENOMMAGE IMPOSSIBLE\n\nIl reste {nb} commande(s) dans le casier de {ancien.upper()}.\n\nLivrez-les avant de changer le nom."
+            }), 400
+
+        # 3. SI LE CASIER EST VIDE : On procède au changement dans la liste globale
+        global LIVREURS
+        # On cherche l'index de l'ancien nom pour le remplacer au même endroit
+        if ancien in LIVREURS:
+            idx = LIVREURS.index(ancien)
+            LIVREURS[idx] = nouveau
+            save_livreurs(LIVREURS)
+            return jsonify({
+                "status": "success", 
+                "message": f"✅ NOM MODIFIÉ\n\n{ancien.upper()} est maintenant {nouveau}."
+            }), 200
+        
+        return jsonify({"status": "error", "message": f"⚠️ Le livreur '{ancien}' n'existe pas."}), 404
+
+    except Exception as e:
+        logger.error(f"Erreur lors du renommage : {e}")
+        return jsonify({"status": "error", "message": f"💥 ERREUR SYSTÈME : {str(e)}"}), 500
+
+@app.route('/api/livreurs/reorder', methods=['POST'])
+def api_reorder_livreur():
+    data = request.json
+    idx = data.get('index')
+    direction = data.get('direction')
+    
+    global LIVREURS
+    if direction == 'up' and idx > 0:
+        LIVREURS[idx], LIVREURS[idx-1] = LIVREURS[idx-1], LIVREURS[idx]
+    elif direction == 'down' and idx < len(LIVREURS) - 1:
+        LIVREURS[idx], LIVREURS[idx+1] = LIVREURS[idx+1], LIVREURS[idx]
+    
+    save_livreurs(LIVREURS)
+    return jsonify(success=True)
+    
+@app.route('/mark_pa_donner/<int:order_id>', methods=['POST'])
+def mark_pa_donner(order_id):
+    data = request.get_json()
+    pa_number = data.get('pa_number', '???')
+    
+    # On récupère les extras envoyés par le JS (s'ils existent)
+    # Si le JS n'envoie rien, on met None pour dire "ne pas toucher à la BD"
+    new_note = data.get('custom_note')
+    new_time = data.get('desired_time')
+
+    # Logique : Si c'est 'NOTE' ou 'HEURE' (les textes par défaut), 
+    # on considère que c'est vide et on ne veut pas écraser la BD.
+    if new_note == 'NOTE': new_note = None
+    if new_time == 'HEURE': new_time = None
+
+    # On passe ces valeurs à ta fonction. 
+    # IL FAUDRA QUE db_manager.update_pa_details SOIT PRÊT À RECEVOIR None
+    success = db_manager.update_pa_details(
+        order_id, 
+        new_note,   # Sera None si inchangé
+        new_time,   # Sera None si inchangé
+        'UST',      # À adapter si tu gères les ustensiles aussi
+        donner_au_pc=True, 
+        pa_number=pa_number
+    )
+    
+    if success:
+        return jsonify({'status': 'success', 'pa_number': pa_number})
+    return jsonify({'status': 'error'}), 500
+
 
 @app.route('/close_order/<string:order_id>', methods=['POST'])
 def close_order(order_id):
@@ -706,6 +1067,44 @@ def voir_livraisons():
         "commandes": list(livraisons_store.values())
     })
 
+@app.route('/api/livreurs/delete', methods=['POST'])
+def api_delete_livreur():
+    if request.headers.get("X-App-Access") != APP_AUTH_KEY:
+        return jsonify({"status": "error", "message": "🚫 SÉCURITÉ : ACCÈS NON AUTORISÉ"}), 403
+
+    data = request.get_json()
+    nom_livreur = data.get('nom', '').strip()
+
+    try:
+        # On vérifie dans livraisons_store
+        commandes_actives = [
+            bid for bid, item in livraisons_store.items() 
+            if item.get('livreur') and item.get('livreur').upper() == nom_livreur.upper()
+        ]
+        
+        nb = len(commandes_actives)
+        if nb > 0:
+            # MESSAGE EXPLICITE : On dit pourquoi ET quoi faire.
+            return jsonify({
+                "status": "error",
+                "message": f"🚫 SUPPRESSION IMPOSSIBLE\n\nLe casier de {nom_livreur.upper()} contient encore {nb} commande(s).\n\nVeuillez livrer ou transférer ces commandes avant de retirer ce livreur."
+            }), 400
+
+        global LIVREURS
+        # On cherche le nom exact (sensible à la casse ou non selon ton stockage)
+        if nom_livreur in LIVREURS:
+            LIVREURS.remove(nom_livreur)
+            save_livreurs(LIVREURS)
+            return jsonify({
+                "status": "success", 
+                "message": f"✅ CONFIGURATION MISE À JOUR\n\nLe casier de {nom_livreur.upper()} a été définitivement supprimé."
+            }), 200
+        
+        return jsonify({"status": "error", "message": f"⚠️ Erreur : Le livreur '{nom_livreur}' n'existe pas dans la liste."}), 404
+
+    except Exception as e:
+        logger.error(f"Erreur suppression livreur: {e}")
+        return jsonify({"status": "error", "message": f"💥 ERREUR SYSTÈME : {str(e)}"}), 500
 
 
 # ⭐ NOUVELLE ROUTE : Endpoint pour arrêter le serveur de développement Flask (pour le GUI)

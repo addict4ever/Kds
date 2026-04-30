@@ -252,10 +252,10 @@ class ServeurWindow(tk.Toplevel):
             header = tk.Frame(frame, bg=s_color)
             header.pack(fill=tk.X)
 
-            tk.Label(header, text=f"T-{table_number}", font=("Arial", 16, "bold"), bg=s_color, fg="black").pack(side=tk.LEFT, padx=5)
-            tk.Label(header, text=server_name if server_name else "SERVEUSE", font=("Arial", 14, "bold"), bg=s_color, fg="black").pack(side=tk.LEFT, expand=True)
+            tk.Label(header, text=f"T-{table_number}", font=("Arial", 18, "bold"), bg=s_color, fg="black").pack(side=tk.LEFT, padx=5)
+            tk.Label(header, text=server_name if server_name else "SERVEUSE", font=("Arial", 16, "bold"), bg=s_color, fg="black").pack(side=tk.LEFT, expand=True)
             
-            time_lbl = tk.Label(header, text="0m", font=("Arial", 14, "bold"), bg=s_color, fg="black")
+            time_lbl = tk.Label(header, text="0m", font=("Arial", 16, "bold"), bg=s_color, fg="black")
             time_lbl.pack(side=tk.RIGHT, padx=5)
 
             i_frame = tk.Frame(frame, bg=CARD_BG)
@@ -523,6 +523,7 @@ class KDSGUI:
         self.db_manager = db_manager
         self.reader = reader  # <-- AJOUTEZ CETTE LIGNE : elle stocke le lecteur pour le menu technique
 
+        self.bread_count_mode = 0  # 0 pour Ménage, 1 pour Toast
         self.print_enabled_var = tk.BooleanVar(value=True)
         self.lock = threading.Lock() # Ajout du verrou
         self.last_cleanup_date = None
@@ -533,6 +534,7 @@ class KDSGUI:
         self._setup_signal_handler() 
         self.pa_spam_lock = False
 
+        
 
         self.current_type_filter = "TOUS"  # Par défaut, on affiche tout
 
@@ -603,8 +605,8 @@ class KDSGUI:
                 except Exception as e:
                     logging.error(f"Erreur lors du nettoyage automatique matinal: {e}")
 
-        # 2. Vérification fenêtre après-midi : 14h00 - 14h05
-        elif now.hour == 14 and 0 <= now.minute <= 5:
+        # 2. Vérification fenêtre après-midi : 22h00 - 22h05
+        elif now.hour == 22 and 0 <= now.minute <= 5:
             # Vérification du verrou pour l'après-midi
             if getattr(self, 'last_cleanup_afternoon', None) != now.date():
                 print(f"🕒 {now.strftime('%H:%M')} - Début du nettoyage automatique après-midi...")
@@ -669,6 +671,22 @@ class KDSGUI:
         self.left_tabs_frame = tk.Frame(self.header_frame, bg='#2c3e50')
         self.left_tabs_frame.pack(side=tk.LEFT, padx=10)
 
+        # --- 📊 C. NOUVEAU : DÉCOMPTE ITEMS SPÉCIFIQUES (Mini Spé) ---
+        # On ajoute 'expand=True' pour qu'il prenne l'espace disponible au centre
+        self.mini_spe_frame = tk.Frame(self.header_frame, bg='#2c3e50')
+        self.mini_spe_frame.pack(side=tk.LEFT, expand=True, fill=tk.BOTH) 
+
+        self.lbl_mini_spe_count = tk.Label(
+            self.mini_spe_frame, 
+            text="MÉNAGE BL: 0 | BR: 0", 
+            font=('Arial', 18, 'bold'), 
+            bg='#2c3e50', 
+            fg='#ff7f50',
+            cursor="hand2" # Change le curseur pour montrer que c'est cliquable
+        )
+        self.lbl_mini_spe_count.pack(expand=True)
+        self.lbl_mini_spe_count.bind("<Button-1>", self.toggle_bread_mode)
+
         # Bouton TOUT (Bleu standard)
         self.btn_tout = tk.Button(self.left_tabs_frame, text="TOUT", 
             font=('Arial', 11, 'bold'), bg='#34495e', fg='white', relief='flat', padx=15,
@@ -716,6 +734,75 @@ class KDSGUI:
         self.update_button_counts()
         # Lancement de l'horloge
         self._update_top_clock()
+
+    def update_special_item_count(self):
+        """Compte les Ménages, les Toasts ou les items Midi selon le mode choisi."""
+        count_bl = 0
+        count_br = 0
+        
+        # Définition des mots-clés selon le mode (0=Ménage, 1=Toast, 2=Midi)
+        if self.bread_count_mode == 0:
+            target_bl, target_br = "MENAGE BLANC", "MENAGE BRUN"
+            prefix = "MÉNAGE"
+        elif self.bread_count_mode == 1:
+            target_bl, target_br = "PAIN BLANC", "PAIN BRUN"
+            prefix = "TOAST"
+        else:
+            # Mode Midi : on cherche les deux types d'items
+            target_bl, target_br = "DOIGTS MIDI","DOIGTS MIDI","FISH MIDI"
+            prefix = "MIDI"
+
+        for postit in self.active_postits.values():
+            items = postit.order_data.get('items', [])
+            for item in items:
+                raw_text = item.get('text', '') if isinstance(item, dict) else str(item)
+                text = raw_text.upper() # Gestion minuscule/majuscule
+                
+                # Logique de comptage
+                if self.bread_count_mode == 2:
+                    # En mode MIDI, on compte DOIGTS sous BL et FISH sous BR (par exemple)
+                    # Ou on additionne tout simplement si vous préférez
+                    if "DOIGTS MIDI" in text:
+                        count_bl += 1
+                    elif "FISH MIDI" in text:
+                        count_br += 1
+                else:
+                    # Logique standard pour Ménage et Toast
+                    if target_bl in text:
+                        count_bl += 1
+                    elif target_br in text:
+                        count_br += 1
+
+        # Mise à jour de l'affichage avec votre bel orange
+        if hasattr(self, 'lbl_mini_spe_count'):
+            # On ajuste le texte pour que "MIDI" affiche les bonnes catégories
+            label_text = f"{prefix} DOIGTS: {count_bl} | FISH: {count_br}" if self.bread_count_mode == 2 \
+                         else f"{prefix} BL: {count_bl}  |  BR: {count_br}"
+            
+            self.lbl_mini_spe_count.config(text=label_text)
+
+    def toggle_bread_mode(self, event=None):
+        """
+        Bascule entre le mode Ménage et le mode Toast.
+        Utilise self.root.after pour éviter l'erreur AttributeError.
+        """
+        # Alterne entre 0 et 1 (0: Ménage, 1: Toast)
+        self.bread_count_mode = (self.bread_count_mode + 1) % 3
+        
+        # Couleurs pour le feedback visuel
+        original_color = "#ff9f43"  # Votre joli orange
+        flash_color = "#ffffff"     # Flash blanc (plus visible que le jaune sur l'orange)
+        
+        # Change la couleur immédiatement au clic
+        self.lbl_mini_spe_count.config(fg=flash_color)
+        
+        # Met à jour les chiffres et le texte (MÉNAGE vs TOAST) immédiatement
+        self.update_special_item_count()
+        
+        # Remet la couleur orange après 200ms en utilisant self.root
+        # Cela permet d'éviter l'erreur car la classe KDSGUI n'est pas un widget Tkinter
+        self.root.after(200, lambda: self.lbl_mini_spe_count.config(fg=original_color))
+
     
     def _trigger_pa_flash(self):
         """Action du bouton PA : fait flasher avec anti-spam de 25s."""
@@ -869,6 +956,9 @@ class KDSGUI:
             
         if hasattr(self, 'btn_pa'): 
             self.btn_pa.config(text=f"EMPORTER ({c_pa})")
+
+        self.update_special_item_count()
+
     def _update_top_clock(self):
         """Met à jour le compteur et l'heure à droite en jaune."""
         try:
@@ -1288,12 +1378,12 @@ class KDSGUI:
         ).pack(side=tk.RIGHT, padx=5)
 
         # Bouton de Consultation des Ventes (à droite)
-        #tk.Button(self.status_frame, 
-        #          text="📈 Ventes",
-        #          command=self._open_consultation_window, # Appelle la nouvelle méthode sécurisée
-        #          font=('Segoe UI', 12, 'bold'),
-        #          bg='#2980b9', fg='white', relief=tk.FLAT, bd=0
-        #).pack(side=tk.RIGHT, padx=5)
+        tk.Button(self.status_frame, 
+                  text="📈 Ventes",
+                  command=self._open_consultation_window, # Appelle la nouvelle méthode sécurisée
+                  font=('Segoe UI', 12, 'bold'),
+                  bg='#2980b9', fg='white', relief=tk.FLAT, bd=0
+        ).pack(side=tk.RIGHT, padx=5)
 
         # ⭐ Bouton de Configuration des Plats Principaux (Authentifié)
         tk.Button(self.status_frame, 
@@ -1330,6 +1420,17 @@ class KDSGUI:
         )
         self.print_toggle_button.pack(side=tk.RIGHT, padx=5)
 
+        tk.Button(self.status_frame,
+                  text="🔄 RESET",
+                  command=self._reset_serial_adapters,
+                  font=('Segoe UI', 12, 'bold'),
+                  bg='#e74c3c',  # Rouge pour indiquer une action technique
+                  fg='white', 
+                  relief=tk.FLAT, 
+                  bd=0,
+                  padx=10
+        ).pack(side=tk.RIGHT, padx=5)
+        
         tk.Button(self.status_frame, 
                   text="⏱ Minuteur",
                   command=self._open_timer_manager, 
@@ -1389,16 +1490,7 @@ class KDSGUI:
         )
         self.clean_button.pack(side=tk.RIGHT, padx=5)
 
-        #tk.Button(self.status_frame,
-        #          text="🔄 RESET",
-        #          command=self._reset_serial_adapters,
-        #          font=('Segoe UI', 12, 'bold'),
-        #          bg='#e74c3c',  # Rouge pour indiquer une action technique
-        #          fg='white', 
-        #          relief=tk.FLAT, 
-        #          bd=0,
-        #          padx=10
-        #).pack(side=tk.RIGHT, padx=5)
+        
 
         # Nouveau bouton INGRÉDIENTS à la place du RESET
         tk.Button(self.status_frame,
