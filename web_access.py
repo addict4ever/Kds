@@ -42,6 +42,9 @@ WHITELIST_ROUTES = [
     '/api/livreurs/reorder',
     '/api/livreurs/delete',
     '/api/livreurs/check_status',
+    '/kds_pa_alert',              # Ajouté : Page des alertes PA
+    '/marquer_pa_traitee',        # Ajouté : Action sur alerte PA
+    '/api/livreurs/toggle_status', # Ajouté : Activation/Désactivation livreur
     '/mark_pa_donner',
     '/close_order',
     '/update_pa_details',
@@ -58,7 +61,13 @@ WHITELIST_ROUTES = [
     '/consultation',
     '/update_status_livraison',
     '/update_status',
-    '/delete_bill'
+    '/delete_bill',
+    '/static/css/dashboard.css',
+    '/static/js/Sortable.min.js',
+    '/static/sound/beep_short.ogg',
+    '/favicon.ico',
+    '/livraisons'
+    
 ]
 
 INACTIFS_FILE = "livreurs_inactifs.json"
@@ -203,7 +212,7 @@ def is_user_agent_allowed():
     # On vérifie si notre nom d'app est contenu dans le User-Agent
     return ALLOWED_USER_AGENT in user_agent
 
-#@app.before_request
+@app.before_request
 def filtrer_acces_global():
     """Vérification stricte de l'IP, du Header et de la Route demandée."""
     
@@ -226,14 +235,22 @@ def filtrer_acces_global():
         logger.warning(f"🚫 ROUTE NON AUTORISÉE: {path} par {request.remote_addr}")
         return jsonify({"status": "error", "message": "ACCÈS REFUSÉ : ROUTE INCONNUE"}), 403
 
-    # 3. EXCEPTION : Le shutdown doit être accessible sans header secret (depuis 127.0.0.1)
-    if path == '/shutdown':
+    #3. EXCEPTION : Le shutdown doit être accessible sans header secret (depuis 127.0.0.1)
+
+    
+    if path == '/kds_pa_alert':
+        return
+    if path.startswith('/update_status'):
+        return
+    if path == '/static/sound/beep_short.ogg':
+        return
+    if path == '/favicon.ico':
         return
 
     # 4. VÉRIFICATION DE L'IP (Couche 1)
-    if not is_ip_allowed():
-        logger.warning(f"🚫 IP bloquée: {request.remote_addr}")
-        return "Accès refusé: IP non autorisée.", 403
+    #if not is_ip_allowed():
+    #    logger.warning(f"🚫 IP bloquée: {request.remote_addr}")
+    #    return "Accès refusé: IP non autorisée.", 403
 
     # 5. VÉRIFICATION DU USER-AGENT (Couche 2)
     if not is_user_agent_allowed():
@@ -242,10 +259,41 @@ def filtrer_acces_global():
 
     # 6. VÉRIFICATION DU HEADER SECRET (Couche 3)
     # Obligatoire pour toutes les routes API et KDS
-    if not is_header_valid():
-        logger.warning(f"🔑 Header invalide de: {request.remote_addr}")
-        return "Accès interdit: Application non identifiée.", 403
+    #if not is_header_valid():
+    #    logger.warning(f"🔑 Header invalide de: {request.remote_addr}")
+    #    return "Accès interdit: Application non identifiée.", 403
 
+
+@app.route('/kds_pa_alert')
+def kds_pa_alert():
+    # 1. Récupération de toutes les commandes en attente depuis la base de données
+    all_orders = db_manager.get_pending_orders()
+    pa_alerts = {}
+    
+    # 2. On parcourt TOUTES les catégories (SALLE, LIVRAISON, POUR EMPORTER, etc.)
+    for category in all_orders:
+        for order in all_orders.get(category, []):
+            # On stocke absolument toutes les commandes en attente dans le dictionnaire
+            # C'est le JavaScript du KDS qui filtrera visuellement avec les toggles !
+            pa_alerts[order['bill_id']] = {'data': order}
+
+    # Si c'est une requête AJAX (rafraîchissement automatique), on rend uniquement la liste
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return render_template('partials/kds_order_list.html', pa_list=pa_alerts)
+    
+    # Sinon, on rend la page complète au chargement initial
+    return render_template('kds_alert_pa.html', pa_list=pa_alerts, refresh_rate=5)
+
+@app.route('/marquer_pa_traitee/<bill_id>', methods=['POST'])
+def marquer_pa_traitee(bill_id):
+    # On utilise la méthode existante du DBManager
+    # Elle gère déjà les bill_id avec suffixes UUID grâce au LIKE
+    row_count = db_manager.set_order_status_by_bill_id(bill_id, 'Traitée')
+    
+    if row_count > 0:
+        return jsonify({"status": "success", "message": "Commande marquée comme traitée"}), 200
+    else:
+        return jsonify({"status": "error", "message": "Facture non trouvée"}), 404
 
 @app.route('/')
 @app.route('/kds')
@@ -635,6 +683,20 @@ def api_rename_livreur():
         logger.error(f"Erreur lors du renommage : {e}")
         return jsonify({"status": "error", "message": f"💥 ERREUR SYSTÈME : {str(e)}"}), 500
 
+@app.route('/favicon.ico')
+def favicon():
+    # Code SVG simple et épuré (Écran noir, bordure orange néon, texte KDS blanc)
+    svg_content = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="6" fill="#1a1a1a" stroke="#e67e22" stroke-width="2"/>
+        <text x="50%" y="60%" font-family="Arial, sans-serif" font-weight="bold" font-size="11" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">KDS</text>
+    </svg>"""
+    
+    response = app.make_response(svg_content)
+    response.headers['Content-Type'] = 'image/svg+xml'
+    # Optionnel: Cache de 1 jour pour éviter de surcharger le serveur à chaque clic
+    response.headers['Cache-Control'] = 'public, max-age=86400'
+    return response
+
 @app.route('/api/livreurs/reorder', methods=['POST'])
 def api_reorder_livreur():
     data = request.json
@@ -696,6 +758,7 @@ def close_order(order_id):
     else:
         return jsonify({"success": False, "message": "Erreur lors de la fermeture"}), 500
 
+
 @app.route('/update_pa_details', methods=['POST'])
 def update_pa_details():
     try:
@@ -717,6 +780,8 @@ def update_pa_details():
     except Exception as e:
         logger.error(f"Erreur route update_pa_details: {e}")
         return jsonify(success=False, error=str(e))
+
+
 
 @app.route('/print_bill', methods=['POST'])
 def print_bill():
@@ -1037,17 +1102,28 @@ def update_status_livraison(bill_id):
             
 @app.route('/update_status/<string:bill_id>/<string:new_status>', methods=['POST'])
 def update_status(bill_id, new_status):
+    # Sécurité globale
+    if request.headers.get('X-App-Access') != 'MonApplicationUnique123!':
+        return jsonify({"success": False, "message": "Accès interdit"}), 403
+
+    # CORRECTION DES ACCENTS : Si le JS envoie 'Traitee', on le remet en 'Traitée' pour la DB
+    if new_status == 'Traitee':
+        new_status = 'Traitée'
+
     valid_statuses = ['En cours', 'Traitée', 'Annulée', 'En attente']
     if new_status not in valid_statuses:
         return jsonify({"success": False, "message": f"Statut non valide: {new_status}"}), 400
         
-    row_count = db_manager.set_order_status_by_bill_id(bill_id, new_status)
-    
-    if row_count > 0:
-        logger.info(f"Statut Bill ID {bill_id} mis à jour à '{new_status}'.")
-        return jsonify({"success": True, "message": f"Statut mis à jour pour {bill_id} ({row_count} lignes)."}), 200
-    else:
-        return jsonify({"success": False, "message": f"Bill ID {bill_id} non trouvé ou aucun changement."}), 404
+    try:
+        row_count = db_manager.set_order_status_by_bill_id(bill_id, new_status)
+        
+        if row_count > 0:
+            logger.info(f"Statut Bill ID {bill_id} mis à jour à '{new_status}'.")
+            return jsonify({"success": True, "message": f"Statut mis à jour pour {bill_id}."}), 200
+        else:
+            return jsonify({"success": False, "message": f"Bill ID {bill_id} non trouvé ou aucun changement."}), 404
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur DB: {str(e)}"}), 500
 
 @app.route('/delete_bill/<string:bill_id>', methods=['POST'])
 def delete_bill(bill_id):

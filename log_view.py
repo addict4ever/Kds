@@ -255,18 +255,29 @@ class LogViewWindow(tk.Toplevel):
     def on_select_log(self, event):
         selection = self.log_listbox.curselection()
         if not selection: return
+        
         filename = self.log_listbox.get(selection[0])
+        
+        # --- MODIFICATION ICI : On ajoute le répertoire 'logs' ---
+        filepath = os.path.join("logs", filename)
+        
         try:
-            with open(filename, "r", encoding="utf-8") as f:
+            # On ouvre le 'filepath' (ex: logs/kds_serial_log_...) au lieu de juste le nom
+            with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
-            self.current_opened_file = filename
+            
+            self.current_opened_file = filepath
             self.text_area.config(state=tk.NORMAL)
             self.text_area.delete("1.0", tk.END)
             self.text_area.insert(tk.END, content)
             self.text_area.config(state=tk.DISABLED)
-            if self.auto_scroll.get(): self.text_area.see(tk.END)
+            
+            if self.auto_scroll.get(): 
+                self.text_area.see(tk.END)
+                
         except Exception as e:
-            CustomMsgBox(self, "Erreur", str(e))
+            # Ton CustomMsgBox affichera l'erreur si le fichier est introuvable
+            CustomMsgBox(self, "Erreur", f"Impossible d'ouvrir le log dans /logs/ : {e}")
 
     def apply_filter(self, val):
         self.search_var.set(val)
@@ -283,8 +294,20 @@ class LogViewWindow(tk.Toplevel):
 
     def refresh_logs(self):
         self.log_listbox.delete(0, tk.END)
-        files = sorted(glob.glob("kds_serial_log_*.txt"), key=os.path.getmtime, reverse=True)
-        for f in files: self.log_listbox.insert(tk.END, f)
+        log_dir = "logs" # Ton nouveau répertoire
+        
+        if os.path.exists(log_dir):
+            # On cherche spécifiquement tes fichiers kds_serial_log
+            files = [f for f in os.listdir(log_dir) if f.startswith('kds_serial_log') and f.endswith('.txt')]
+            
+            # Trier pour avoir les plus récents en haut
+            files.sort(reverse=True)
+            
+            for f in files:
+                self.log_listbox.insert(tk.END, f)
+        else:
+            # Optionnel: créer le dossier s'il n'existe pas encore
+            os.makedirs(log_dir)
 
     def _open_virtual_keyboard(self, event):
         if VirtualKeyboard:

@@ -1,0 +1,37 @@
+{
+    "#FF1493": [
+        "BROUILLE",
+        "TOURNE BC",
+        "TOURNE",
+        "MIRROIR",
+        "MIROIR",
+        "*",
+        "DONNER"
+    ],
+    "#D2B48C": [
+        "MENAGE BLANC",
+        "MENAGE BRUN",
+        "BRUN",
+        "BLANC",
+        "BAGUEL BLANC",
+        "BAGUEL BRUN",
+        "BAGUEL",
+        "PAIN"
+    ],
+    "#FFD700": [
+        "TRAD",
+        "FORESTIERE",
+        "DEJEUNER"
+    ],
+    "#2ecc71": [
+        "VEGE",
+        "SALADE",
+        "SANS VIANDE"
+    ],
+    "#A53D57": [
+        "POISSON",
+        "CREVETTE",
+        "FRUIT DE MER",
+        "SAUMON"
+    ]
+}

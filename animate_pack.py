@@ -16,6 +16,8 @@ class CharacterSelector(tk.Toplevel):
         self.geometry(f"+{x}+{y}")
         self.configure(bg="#2c3e50", padx=5, pady=5)
 
+        
+
         self.grab_set() 
 
         # BOUTON ANNULER
@@ -86,7 +88,7 @@ class CharacterSelector(tk.Toplevel):
         self.destroy()
 
 class DesktopPet:
-    def __init__(self, root, char_name="chat_blanc_01"):
+    def __init__(self, root, char_name="RANDOM"):
         self.root = root
         
         # --- CONFIG WINDOW ---
@@ -94,6 +96,13 @@ class DesktopPet:
         self.root.attributes("-topmost", True)
         self.root.attributes("-transparentcolor", "white")
         self.root.config(bg="white")
+
+        # Empêche Alt+F4
+        self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
+        # Empêche Alt+Tab, Alt+Esc, etc. (Windows seulement)
+        self.root.bind("<Alt-F4>", self.disable_event)
+        self.root.bind("<Alt-Tab>", self.disable_event)
+        self.root.bind("<Alt-Escape>", self.disable_event)
 
         self.current_character = char_name #
         # --- ÉTATS ET EXPRESSIONS ---
@@ -159,6 +168,10 @@ class DesktopPet:
         self.check_visibility()
 
 
+    def disable_event(self, event=None):
+        """Fonction qui ne fait rien pour bloquer les tentatives de fermeture."""
+        return "break"
+        
     def load_expressions(self):
         """Charge les expressions depuis le JSON ou utilise une liste par défaut."""
         default_list = ["Bonne cuisine ! 👨‍🍳", "Prêt à livrer !"]

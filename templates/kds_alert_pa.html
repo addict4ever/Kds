@@ -1,0 +1,895 @@
+{% block head_extra %}
+<style>
+    /* DÉFINITION DES VARIABLES POUR LES THÈMES */
+    /* --- AJOUTER AU DÉBUT DE :root POUR DES VALEURS PAR DÉFAUT --- */
+    :root {
+        --kds-bg: #000;
+        --kds-card-bg: #1a1a1a;
+        --kds-header-bg: #f1c40f;
+        --kds-header-text: #000;
+        --kds-border: #f1c40f;
+        --kds-item-main: #e67e22;
+        --kds-item-subs: #ff00ff;
+        /* Valeurs initiales (ton 100% actuel) */
+        --kds-font-main: 2.8rem;
+        --kds-font-subs: 2.2rem;
+    }
+
+    /* ... (garde tes thèmes inchangés) ... */
+
+    /* MODIFICATION DES TAILLES DYNAMIQUES */
+    .item-main { 
+        color: var(--kds-item-main) !important; font-weight: bold; 
+        font-size: var(--kds-font-main) !important; /* Modifié ici */
+        text-transform: uppercase; line-height: 1.1; display: block; margin-bottom: 5px;
+    }
+    .item-subs { 
+        color: var(--kds-item-subs) !important; font-weight: bold; 
+        font-size: var(--kds-font-subs) !important; /* Modifié ici */
+        border-left: 6px solid var(--kds-item-subs); padding-left: 10px; margin-top: 8px;
+    }
+
+    /* --- LES 25 THÈMES --- */
+    .theme-classic { --kds-bg: #000; --kds-card-bg: #1a1a1a; --kds-header-bg: #f1c40f; --kds-header-text: #000; --kds-border: #f1c40f; --kds-item-main: #e67e22; }
+    .theme-modern { --kds-bg: #121417; --kds-card-bg: #2c3e50; --kds-header-bg: #3498db; --kds-header-text: #fff; --kds-border: #3498db; --kds-item-main: #ecf0f1; }
+    .theme-dark-red { --kds-bg: #000; --kds-card-bg: #121212; --kds-header-bg: #c0392b; --kds-header-text: #fff; --kds-border: #e74c3c; --kds-item-main: #ff7675; }
+    .theme-neon { --kds-bg: #000; --kds-card-bg: #000; --kds-header-bg: #00d2ff; --kds-header-text: #000; --kds-border: #00d2ff; --kds-item-main: #00d2ff; }
+    .theme-lava { --kds-bg: #000; --kds-card-bg: #1a0505; --kds-header-bg: #ff4b2b; --kds-header-text: #fff; --kds-border: #ff416c; --kds-item-main: #fab1a0; }
+    .theme-terminal { --kds-bg: #000; --kds-card-bg: #000; --kds-header-bg: #1a1a1a; --kds-header-text: #32ff7e; --kds-border: #32ff7e; --kds-item-main: #32ff7e; }
+    .theme-forest { --kds-bg: #0b1a0e; --kds-card-bg: #142d19; --kds-header-bg: #27ae60; --kds-header-text: #fff; --kds-border: #2ecc71; --kds-item-main: #a29bfe; }
+    .theme-cyber { --kds-bg: #0d0221; --kds-card-bg: #0f084b; --kds-header-bg: #f368e0; --kds-header-text: #fff; --kds-border: #00d2ff; --kds-item-main: #00d2ff; }
+    .theme-midnight { --kds-bg: #0f172a; --kds-card-bg: #1e293b; --kds-header-bg: #334155; --kds-header-text: #f8fafc; --kds-border: #38bdf8; --kds-item-main: #38bdf8; }
+    .theme-gold { --kds-bg: #1a1a1a; --kds-card-bg: #2d2d2d; --kds-header-bg: #d4af37; --kds-header-text: #000; --kds-border: #d4af37; --kds-item-main: #f1c40f; }
+    .theme-purple { --kds-bg: #2d3436; --kds-card-bg: #4834d4; --kds-header-bg: #686de0; --kds-header-text: #fff; --kds-border: #be2edd; --kds-item-main: #fff; }
+    .theme-ocean { --kds-bg: #002b36; --kds-card-bg: #073642; --kds-header-bg: #2aa198; --kds-header-text: #fff; --kds-border: #268bd2; --kds-item-main: #859900; }
+    .theme-sunset { --kds-bg: #2d3436; --kds-card-bg: #635a5f; --kds-header-bg: #ff7675; --kds-header-text: #fff; --kds-border: #fdcb6e; --kds-item-main: #fab1a0; }
+    .theme-matrix { --kds-bg: #000; --kds-card-bg: #000; --kds-header-bg: #003b00; --kds-header-text: #00ff41; --kds-border: #008f11; --kds-item-main: #00ff41; }
+    .theme-coffee { --kds-bg: #2c1e12; --kds-card-bg: #3d2b1f; --kds-header-bg: #6f4e37; --kds-header-text: #fff; --kds-border: #a67b5b; --kds-item-main: #d2b48c; }
+    .theme-vampire { --kds-bg: #1a0000; --kds-card-bg: #2b0000; --kds-header-bg: #800000; --kds-header-text: #fff; --kds-border: #ff0000; --kds-item-main: #b33939; }
+    .theme-ice { --kds-bg: #f0f8ff; --kds-card-bg: #e0ffff; --kds-header-bg: #87ceeb; --kds-header-text: #000; --kds-border: #add8e6; --kds-item-main: #000; }
+    .theme-military { --kds-bg: #353935; --kds-card-bg: #4b5320; --kds-header-bg: #708238; --kds-header-text: #fff; --kds-border: #8a9a5b; --kds-item-main: #fff; }
+    .theme-bubblegum { --kds-bg: #2f3542; --kds-card-bg: #ff9ff3; --kds-header-bg: #f368e0; --kds-header-text: #fff; --kds-border: #ff9ff3; --kds-item-main: #000; }
+    .theme-deep-sea { --kds-bg: #0a3d62; --kds-card-bg: #3c6382; --kds-header-bg: #079992; --kds-header-text: #fff; --kds-border: #60a3bc; --kds-item-main: #fff; }
+    .theme-luxury { --kds-bg: #000; --kds-card-bg: #1a1a1a; --kds-header-bg: #c5a059; --kds-header-text: #000; --kds-border: #8e6d13; --kds-item-main: #fff; }
+    .theme-blood-orange { --kds-bg: #1e272e; --kds-card-bg: #ff3f34; --kds-header-bg: #ef5777; --kds-header-text: #fff; --kds-border: #ff5e57; --kds-item-main: #fff; }
+    .theme-mint { --kds-bg: #1e272e; --kds-card-bg: #05c46b; --kds-header-bg: #0be881; --kds-header-text: #000; --kds-border: #05c46b; --kds-item-main: #fff; }
+    .theme-space { --kds-bg: #000000; --kds-card-bg: #130f40; --kds-header-bg: #30336b; --kds-header-text: #dff9fb; --kds-border: #7ed6df; --kds-item-main: #ffbe76; }
+    .theme-titanium { --kds-bg: #3d3d3d; --kds-card-bg: #4b4b4b; --kds-header-bg: #130f40; --kds-header-text: #fff; --kds-border: #535c68; --kds-item-main: #f9ca24; }
+    
+    body { 
+        background-color: var(--kds-bg); 
+        margin: 0; 
+        font-family: Arial, sans-serif; 
+        color: white; 
+        overflow: hidden; 
+        
+        /* Force le body à faire exactement la hauteur de l'écran */
+        height: 100vh; 
+        min-height: 100vh;
+        max-height: 100vh;
+        
+        /* Aligne la config et la zone de commandes en colonne */
+        display: flex;
+        flex-direction: column;
+        
+        position: relative;
+        border: 15px solid transparent;
+        transition: border-color 0.3s ease-in-out, background-color 0.4s ease;
+        box-sizing: border-box; /* Évite les débordements avec la bordure de 15px */
+    }
+
+    /* LA ZONE AJAX (Conteneur de ta grille de tickets) */
+    #ajax-zone, #kds-ajax-zone {
+        height: 100%;       /* S'étire sur toute la hauteur du parent scrollable */
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start; /* Évite que les billets s'espacent verticalement s'il y en a peu */
+        gap: 10px;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+
+    /* --- STYLE DES BOUTONS DE TEXTE --- */
+    .font-btn-active { 
+        background-color: #2ecc71 !important; /* Vert */
+        color: white !important; 
+    }
+    .font-btn-inactive { 
+        background-color: #555 !important; /* Gris */
+        color: white !important; 
+    }
+
+
+    /* Arrière-plan avec emojis */
+    body::before {
+        content: "😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟 😊 😟";
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        font-size: 5.5rem; opacity: 0.08; z-index: -1; display: flex;
+        flex-wrap: wrap; justify-content: space-around; pointer-events: none; overflow: hidden;
+    }
+
+    
+
+    /* Classes d'alerte pour le cadre */
+    .alert-flash-red { border-color: #ff0000 !important; }
+    .alert-flash-blue { border-color: #0000ff !important; }
+
+    /* Slider de thèmes */
+    .theme-nav-wrapper { 
+        display: flex; align-items: center; gap: 10px; background: #1a1a1a; 
+        padding: 10px; border-radius: 50px; margin: 10px 15px; border: 1px solid #333;
+    }
+    .theme-slider-container { overflow-x: hidden; white-space: nowrap; scroll-behavior: smooth; flex-grow: 1; }
+    .theme-slider { display: flex; gap: 15px; padding: 5px; }
+    .theme-dot { width: 35px; height: 35px; border-radius: 50%; cursor: pointer; border: 3px solid #444; flex-shrink: 0; transition: 0.2s; }
+    .theme-dot:active { transform: scale(0.9); }
+    .nav-arrow { background: none; border: none; color: white; cursor: pointer; font-size: 1.5rem; padding: 0 10px; }
+
+    .kds-controls { background: #1a1a1a; padding: 10px; display: flex; justify-content: center; height: 50px; }
+    #btn-audio-toggle { font-size: 1.2rem; padding: 5px 25px; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; }
+    .audio-on { background-color: #2ecc71 !important; color: white; }
+    .audio-off { background-color: #e74c3c !important; color: white; }
+
+    .kds-scroll-container { 
+        flex: 1 1 0%;       /* 🚀 Prends 100% de la place restante en hauteur */
+        min-height: 0;      /* Crucial pour forcer le scroll à s'activer correctement */
+        overflow-y: auto;   /* Active le scroll vertical de l'écran si ça déborde */
+        padding: 10px; 
+    }    
+    /* MODIFICATION : 3 COLONNES pour laisser de la place au texte géant */
+    .kds-masonry-layout { column-count: 3; column-gap: 15px; width: 100%; }
+
+    /* Cartes dynamiques */
+    .order-wrapper { display: inline-block; width: 100%; margin-bottom: 15px; break-inside: avoid; }
+    .alert-pa-card { 
+        background-color: var(--kds-card-bg) !important; 
+        border: 5px solid var(--kds-border) !important; 
+        border-radius: 12px; overflow: hidden;
+    }
+    .card-header-pa { 
+        background-color: var(--kds-header-bg) !important; 
+        color: var(--kds-header-text) !important; 
+        text-align: center; 
+        font-weight: bold; 
+        padding: 10px; 
+        
+        /* 🚀 MODIFICATION ICI : Prend exactement la même taille que les plats principaux */
+        font-size: var(--kds-font-main) !important; 
+        
+        text-transform: uppercase;
+        line-height: 1.1; /* Ajusté pour éviter que l'entête soit trop haute si le texte est gros */
+    }
+
+    
+    
+    .btn-traiter-giant {
+        font-size: 2.5rem !important; padding: 20px 5px !important; background-color: #e74c3c !important;
+        color: white; font-weight: bold; width: 100%; border: none; cursor: pointer;
+    }
+
+    ::-webkit-scrollbar { width: 30px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #555; border-radius: 15px; border: 5px solid #111; }
+
+    /* Style pour la vue en tableau */
+    .kds-table-view {
+        width: 100%;
+        border-collapse: collapse;
+        display: none; /* Caché par défaut */
+        background-color: var(--kds-card-bg);
+        color: #fff;
+        font-size: 1.5rem;
+    }
+
+    .kds-table-view th, .kds-table-view td {
+        border: 2px solid var(--kds-border);
+        padding: 15px;
+        text-align: left;
+    }
+
+    .kds-table-view th {
+        background-color: var(--kds-header-bg);
+        color: var(--kds-header-text);
+        text-transform: uppercase;
+    }
+
+    .kds-table-view tr:nth-child(even) {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Classe pour forcer l'affichage */
+    .view-active { display: table !important; }
+    .view-hidden { display: none !important; }
+
+     /* Force l'affichage horizontal en grille de 4 */
+    .horizontal-grid-layout {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 15px !important;
+        column-count: auto !important; /* Désactive le mode masonry */
+        width: 100%;
+    }
+
+    /* Chaque commande prend exactement 25% de la largeur (moins le gap) */
+    .horizontal-grid-layout .order-wrapper {
+        flex: 0 0 calc(25% - 15px) !important;
+        width: calc(25% - 15px) !important;
+        display: inline-block;
+        vertical-align: top;
+    }
+
+    /* Ajustement tablette : 2 par ligne */
+    @media (max-width: 1400px) {
+        .horizontal-grid-layout .order-wrapper {
+            flex: 0 0 calc(50% - 15px) !important;
+            width: calc(50% - 15px) !important;
+        }
+    }
+
+    /* Cache complètement l'élément */
+    .view-hidden { 
+        display: none !important; 
+    }
+
+    /* Force l'affichage du tableau en mode table */
+    .view-active-table { 
+        display: table !important; 
+        width: 100%;
+    }
+
+    /* --- STYLES DYNAMIQUES DU PANNEAU DE CONFIGURATION --- */
+    #kds-settings-panel {
+        background: rgba(26, 26, 26, 0.99) !important;
+        border-bottom: 3px solid var(--kds-border);
+        padding: 12px 15px;
+        position: relative;
+        z-index: 9998;
+        box-sizing: border-box;
+    }
+
+    .panel-title-label {
+        margin-left: 5px; 
+        color: #888; 
+        font-weight: bold; 
+        font-size: 0.85rem;
+        display: block;
+        margin-bottom: 5px;
+    }
+
+    /* Conteneur principal flexible */
+    .kds-responsive-controls-container {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 15px;
+        margin-top: 10px;
+        width: 100%;
+    }
+
+    /* Sections génériques */
+    .control-row-section {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .control-label {
+        color: #fff; 
+        font-weight: bold; 
+        font-size: 1.1rem;
+        white-space: nowrap;
+    }
+
+    /* Groupe de boutons de police */
+    .btn-group-responsive {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .btn-group-responsive button, #btn-audio-toggle, #btn-view-toggle {
+        font-size: 1.1rem; 
+        padding: 8px 16px; 
+        font-weight: bold; 
+        border: none; 
+        border-radius: 6px; 
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    /* Boite de Filtres (888, LIV, etc.) */
+    .kds-filter-responsive-box {
+        background: #2c3e50; 
+        padding: 8px 12px; 
+        border-radius: 8px; 
+        display: flex; 
+        align-items: center; 
+        gap: 12px; 
+        border: 1px solid #7f8c8d;
+        flex-grow: 1; /* Prend l'espace restant pour s'aligner proprement */
+    }
+
+    .filters-grid-responsive {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .kds-filter-responsive-box label {
+        font-weight: bold; 
+        cursor: pointer; 
+        display: flex; 
+        align-items: center; 
+        gap: 6px; 
+        font-size: 1.2rem;
+        white-space: nowrap;
+    }
+
+    .kds-filter-responsive-box input[type="checkbox"] {
+        transform: scale(1.5); /* Plus gros et facile à cocher au doigt sur tablette */
+        cursor: pointer;
+        margin: 0;
+    }
+
+    /* 📱 ADAPTATION COMPACTE POUR TABLETTE 10 POUCES (Écrans inférieurs à 1200px) */
+    @media (max-width: 1200px) {
+        #kds-settings-panel {
+            padding: 8px;
+        }
+
+        .kds-responsive-controls-container {
+            flex-direction: column; /* On empile les 3 blocs verticalement pour éviter les débordements */
+            align-items: stroke;    /* Prend toute la largeur de la tablette */
+            gap: 10px;
+        }
+
+        .control-row-section, .kds-filter-responsive-box {
+            width: 100%;
+            justify-content: space-between;
+            box-sizing: border-box;
+        }
+
+        .btn-group-responsive {
+            justify-content: flex-start;
+            gap: 6px;
+        }
+
+        /* Augmente la taille des zones tactiles pour les doigts en cuisine */
+        .btn-group-responsive button, #btn-audio-toggle, #btn-view-toggle {
+            padding: 12px 14px; 
+            font-size: 1.05rem;
+            flex-grow: 1; /* Les boutons prennent une taille égale sur la ligne */
+        }
+
+        .kds-filter-responsive-box {
+            flex-direction: row;
+            justify-content: flex-start;
+            gap: 10px;
+        }
+
+        .filters-grid-responsive {
+            justify-content: space-between;
+            width: 100%;
+            gap: 8px;
+        }
+
+        .kds-filter-responsive-box label {
+            font-size: 1.1rem;
+            background: rgba(0,0,0,0.2);
+            padding: 6px 10px;
+            border-radius: 5px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<link rel="icon" type="image/svg+xml" href="/favicon.ico">
+<!-- Bouton "Sourire" flottant -->
+<div style="position: fixed; top: 10px; right: 20px; z-index: 9999;">
+    <button onclick="toggleSettings()" style="background: none; border: none; font-size: 2.5rem; cursor: pointer; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.5));">😊</button>
+</div>
+
+<div id="kds-settings-panel" class="no-print" style="display: none;">
+    <label class="panel-title-label">25 STYLES KDS DISPONIBLES</label>
+    
+    <div class="theme-nav-wrapper">
+        <button class="nav-arrow" onclick="scrollThemes(-300)">❮</button>
+        <div class="theme-slider-container" id="themeContainer">
+            <div class="theme-slider">
+                <div class="theme-dot" onclick="changeTheme('theme-classic')" title="Classic" style="background: #f1c40f;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-modern')" title="Modern" style="background: #3498db;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-dark-red')" title="Rouge" style="background: #e74c3c;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-neon')" title="Néon" style="background: #00d2ff;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-lava')" title="Lava" style="background: #ff4b2b;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-terminal')" title="Terminal" style="background: #32ff7e; border: 1px solid #000;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-forest')" title="Forest" style="background: #27ae60;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-cyber')" title="Cyber" style="background: #f368e0;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-midnight')" title="Midnight" style="background: #1e293b;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-gold')" title="Gold" style="background: #d4af37;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-purple')" title="Purple" style="background: #4834d4;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-ocean')" title="Ocean" style="background: #2aa198;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-sunset')" title="Sunset" style="background: #ff7675;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-matrix')" title="Matrix" style="background: #003b00; border: 1px solid #00ff41;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-coffee')" title="Coffee" style="background: #6f4e37;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-vampire')" title="Vampire" style="background: #800000;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-ice')" title="Ice" style="background: #87ceeb;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-military')" title="Military" style="background: #4b5320;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-bubblegum')" title="Bubblegum" style="background: #ff9ff3;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-deep-sea')" title="Deep Sea" style="background: #0a3d62;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-luxury')" title="Luxury" style="background: #c5a059;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-blood-orange')" title="Blood Orange" style="background: #ff3f34;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-mint')" title="Mint" style="background: #05c46b;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-space')" title="Space" style="background: #130f40;"></div>
+                <div class="theme-dot" onclick="changeTheme('theme-titanium')" title="Titanium" style="background: #3d3d3d;"></div>
+            </div>
+        </div>
+        <button class="nav-arrow" onclick="scrollThemes(300)">❯</button>
+    </div>
+
+    <div class="kds-responsive-controls-container">
+        
+        <div class="control-row-section">
+            <button id="btn-audio-toggle" onclick="toggleAudio()">CHARGEMENT...</button>
+            <button id="btn-view-toggle" onclick="toggleView()">🖼️ VUE: GRILLE</button>
+        </div>
+        
+        <div class="control-row-section font-controls-box">
+            <span class="control-label">🔎 TEXTE :</span>
+            <div class="btn-group-responsive">
+                <button id="btn-font-micro" onclick="changeFontSize('micro')" style="background-color: #7f8c8d; color: white;">MICRO</button>
+                <button id="btn-font-mini" onclick="changeFontSize('mini')" style="background-color: #95a5a6; color: white;">MINI</button>
+                <button id="btn-font-small" onclick="changeFontSize('small')">PETIT</button>
+                <button id="btn-font-normal" onclick="changeFontSize('normal')">NORMAL</button>
+                <button id="btn-font-large" onclick="changeFontSize('large')">GRAND</button>
+                <button id="btn-font-giant" onclick="changeFontSize('giant')">GÉANT</button>
+            </div>
+        </div>
+        
+        <div class="kds-filter-responsive-box">
+            <span class="control-label">AFFICHER :</span>
+            <div class="filters-grid-responsive">
+                <label style="color: #e74c3c;">
+                    <input type="checkbox" id="toggle-888" checked onchange="appliquerFiltresAffichage()">
+                    <span>888</span>
+                </label>
+
+                <label style="color: #2ecc71;">
+                    <input type="checkbox" id="toggle-liv" onchange="appliquerFiltresAffichage()">
+                    <span>LIV</span>
+                </label>
+
+                <label style="color: #9b59b6;">
+                    <input type="checkbox" id="toggle-999" onchange="always_call_filter_change_if_needed()">
+                    <span>999</span>
+                </label>
+
+                <label style="color: #3498db;">
+                    <input type="checkbox" id="toggle-pa" onchange="appliquerFiltresAffichage()">
+                    <span>PA</span>
+                </label>
+
+                <label style="color: #f1c40f;">
+                    <input type="checkbox" id="toggle-salle" onchange="appliquerFiltresAffichage()">
+                    <span>SALLE</span>
+                </label>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<audio id="alert-beep" src="{{ url_for('static', filename='sound/beep_short.ogg') }}" preload="auto"></audio>
+
+<div class="kds-scroll-container">
+    <div id="kds-ajax-zone" class="horizontal-grid-layout">
+        {% include 'partials/kds_order_list.html' %}
+    </div>
+
+    <table id="kds-table-zone" class="kds-table-view">
+        <thead>
+            <tr>
+                <th style="width: 20%; font-size: calc(var(--kds-font-main) * 0.7) !important;">Table / Commande</th>
+                <th style="width: 70%; font-size: calc(var(--kds-font-main) * 0.7) !important;">Contenu du Ticket</th>
+                <th style="width: 10%; text-align: center; font-size: calc(var(--kds-font-main) * 0.7) !important;">Action</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+        </tbody>
+    </table>
+</div>
+
+
+<script>
+    const body = document.body;
+    const beep = document.getElementById('alert-beep');
+    const audioBtn = document.getElementById('btn-audio-toggle');
+    const ajaxZone = document.getElementById('kds-ajax-zone');
+    const themeContainer = document.getElementById('themeContainer');
+
+    function toggleSettings() {
+        const panel = document.getElementById('kds-settings-panel');
+        // Alterne entre 'none' et 'block'
+        if (panel.style.display === 'none') {
+            panel.style.display = 'block';
+        } else {
+            panel.style.display = 'none';
+        }
+    }
+    // --- GESTION DES THÈMES (Mémoire incluse) ---
+    function changeTheme(themeName) {
+        const allThemes = [
+            'theme-classic', 'theme-modern', 'theme-dark-red', 'theme-neon', 'theme-lava', 
+            'theme-terminal', 'theme-forest', 'theme-cyber', 'theme-midnight', 'theme-gold', 
+            'theme-purple', 'theme-ocean', 'theme-sunset', 'theme-matrix', 'theme-coffee', 
+            'theme-vampire', 'theme-ice', 'theme-military', 'theme-bubblegum', 'theme-deep-sea', 
+            'theme-luxury', 'theme-blood-orange', 'theme-mint', 'theme-space', 'theme-titanium'
+        ];
+        
+        // On retire tous les thèmes existants
+        allThemes.forEach(t => document.body.classList.remove(t));
+        
+        // On applique le nouveau
+        document.body.classList.add(themeName);
+        
+        // Sauvegarde pour le prochain chargement
+        localStorage.setItem('kds_user_theme', themeName);
+    }
+
+    function appliquerFiltresAffichage() {
+        // Récupère l'état coché ou non des boutons (true ou false)
+        const voir888 = document.getElementById('toggle-888').checked;
+        const voirLIV = document.getElementById('toggle-liv').checked;
+        const voir999 = document.getElementById('toggle-999').checked;
+        const voirPA = document.getElementById('toggle-pa').checked;
+        const voirSalle = document.getElementById('toggle-salle').checked;
+
+        // Sélectionne toutes les cartes de commandes actuellement présentes à l'écran
+        const commandes = document.querySelectorAll('.order-wrapper');
+
+        commandes.forEach(card => {
+            const type = card.getAttribute('data-order-type');
+
+            // On vérifie si la commande doit être affichée selon son type exact
+            let doitAfficher = false;
+            if (type === 't888' && voir888) doitAfficher = true;
+            if (type === 'liv' && voirLIV) doitAfficher = true;
+            if (type === 't999' && voir999) doitAfficher = true;
+            if (type === 'pa' && voirPA) doitAfficher = true;
+            if (type === 'salle' && voirSalle) doitAfficher = true;
+
+            // Application du style CSS instantané
+            if (doitAfficher) {
+                card.style.setProperty('display', '', 'important'); 
+            } else {
+                card.style.setProperty('display', 'none', 'important');
+            }
+        });
+    }
+
+    // FORCE LE PREMIER TRAGE AU CHARGEMENT DE LA PAGE
+    document.addEventListener("DOMContentLoaded", function() {
+        appliquerFiltresAffichage();
+    });
+
+
+    function scrollThemes(distance) {
+        themeContainer.scrollBy({ left: distance, behavior: 'smooth' });
+    }
+
+    // --- ALERTES ---
+    function playTripleBeep() {
+        let count = 0;
+        const interval = setInterval(() => {
+            beep.currentTime = 0;
+            beep.play().catch(e => {});
+            count++;
+            if (count >= 3) clearInterval(interval);
+        }, 350);
+    }
+
+    // --- GESTION DE LA TAILLE DES POLICES (Avec mémoire) ---
+    // --- GESTION DE LA TAILLE DES POLICES (Avec mémoire et toggle visuel) ---
+    function changeFontSize(size) {
+        const root = document.documentElement;
+        
+        // On retire la classe active de TOUS les boutons de taille
+        const buttons = [
+            'btn-font-micro', 'btn-font-mini', 'btn-font-small', 
+            'btn-font-normal', 'btn-font-large', 'btn-font-giant'
+        ];
+        buttons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.classList.remove('active'); // ou applique ton style CSS d'activation ici
+        });
+
+        // Application des tailles selon le choix
+        switch(size) {
+            case 'micro':
+                root.style.setProperty('--kds-font-main', '1.4rem'); // Vraiment minuscule
+                root.style.setProperty('--kds-font-subs', '1.1rem');
+                const btnMicro = document.getElementById('btn-font-micro');
+                if (btnMicro) btnMicro.classList.add('active');
+                break;
+            case 'mini':
+                root.style.setProperty('--kds-font-main', '2.0rem'); // Entre micro et petit
+                root.style.setProperty('--kds-font-subs', '1.6rem');
+                const btnMini = document.getElementById('btn-font-mini');
+                if (btnMini) btnMini.classList.add('active');
+                break;
+            case 'small':
+                root.style.setProperty('--kds-font-main', '2.5rem');
+                root.style.setProperty('--kds-font-subs', '2.0rem');
+                const btnSmall = document.getElementById('btn-font-small');
+                if (btnSmall) btnSmall.classList.add('active');
+                break;
+            case 'normal':
+                root.style.setProperty('--kds-font-main', '2.8rem');
+                root.style.setProperty('--kds-font-subs', '2.2rem');
+                const btnNormal = document.getElementById('btn-font-normal');
+                if (btnNormal) btnNormal.classList.add('active');
+                break;
+            case 'large':
+                root.style.setProperty('--kds-font-main', '3.5rem');
+                root.style.setProperty('--kds-font-subs', '2.8rem');
+                const btnLarge = document.getElementById('btn-font-large');
+                if (btnLarge) btnLarge.classList.add('active');
+                break;
+            case 'giant':
+                root.style.setProperty('--kds-font-main', '4.5rem');
+                root.style.setProperty('--kds-font-subs', '3.8rem');
+                const btnGiant = document.getElementById('btn-font-giant');
+                if (btnGiant) btnGiant.classList.add('active');
+                break;
+        }
+        
+        // Mémorise le choix du cuisinier pour le prochain rafraîchissement de la page
+        localStorage.setItem('kds_font_preference', size);
+    }
+
+    // Optionnel : Pour recharger la taille automatiquement à l'allumage du KDS
+    document.addEventListener("DOMContentLoaded", function() {
+        const savedSize = localStorage.getItem('kds_font_preference') || 'micro';
+        changeFontSize(savedSize);
+    });
+
+    function triggerVisualAlert() {
+        body.classList.add('alert-flash-red');
+        setTimeout(() => {
+            body.classList.remove('alert-flash-red');
+            body.classList.add('alert-flash-blue');
+            setTimeout(() => body.classList.remove('alert-flash-blue'), 800);
+        }, 800);
+    }
+
+    function toggleView() {
+        const grid = document.getElementById('kds-ajax-zone');
+        const table = document.getElementById('kds-table-zone');
+        const btn = document.getElementById('btn-view-toggle');
+
+        // On inverse les classes sur les deux éléments
+        // Si l'un est caché, il devient visible, et vice-versa
+        grid.classList.toggle('view-hidden');
+        table.classList.toggle('view-active-table');
+
+        // Mise à jour du bouton et sauvegarde de la préférence
+        if (table.classList.contains('view-active-table')) {
+            btn.innerText = "📋 VUE: TABLEAU";
+            syncTableData(); // On remplit le tableau puisqu'il devient visible
+            localStorage.setItem('kds_view_mode', 'table');
+        } else {
+            btn.innerText = "🖼️ VUE: GRILLE";
+            localStorage.setItem('kds_view_mode', 'grid');
+        }
+    }
+
+    function syncTableData() {
+        const tableBody = document.getElementById('table-body');
+        // On récupère toutes les cartes de commandes (la grille invisible ou visible)
+        const orders = document.querySelectorAll('.order-wrapper');
+        if (!tableBody) return;
+        
+        tableBody.innerHTML = ''; 
+
+        orders.forEach(order => {
+            // IMPORTANT : Si la commande est marquée 'display: none' (déjà traitée), on ne l'affiche pas dans le tableau
+            if (order.style.display === 'none') return;
+
+            const orderId = order.getAttribute('data-order-id');
+            
+            // Récupération du titre (T: 888 | INCONNU)
+            const headerElement = order.querySelector('.card-header-pa');
+            let tableName = headerElement ? headerElement.innerText : "Inconnu";
+            
+            // NETTOYAGE : On enlève le "✕" du bouton du post-it pour ne pas qu'il s'affiche dans le texte du tableau
+            tableName = tableName.replace('✕', '').trim();
+            
+            // Sélection du contenu du ticket
+            const cardBody = order.querySelector('.card-body-pa');
+            let contentHtml = "";
+
+            if (cardBody && cardBody.innerHTML.trim() !== "") {
+                contentHtml = cardBody.innerHTML;
+            } else {
+                // Secours : on cherche les items individuellement
+                const items = order.querySelectorAll('.item-main, .item-subs');
+                if (items.length > 0) {
+                    items.forEach(item => {
+                        contentHtml += item.outerHTML; 
+                    });
+                } else {
+                    contentHtml = "<i style='color: #888;'>Contenu vide ou introuvable</i>";
+                }
+            }
+
+            const row = document.createElement('tr');
+            row.id = `table-row-${orderId}`;
+            
+            // Modification : Génération des 3 colonnes avec le bouton X à droite
+            row.innerHTML = `
+                <td style="font-weight:bold; font-size: 1.6rem; vertical-align: top; color: var(--kds-header-bg); padding: 15px; border-bottom: 1px solid #333; width: 20%;">
+                    ${tableName}
+                </td>
+                <td style="background-color: rgba(255,255,255,0.05); padding: 15px; border-bottom: 1px solid #333; width: 70%;">
+                    <div class="table-ticket-content" style="text-align: left;">
+                        ${contentHtml}
+                    </div>
+                </td>
+                <td style="text-align: center; vertical-align: middle; border-bottom: 1px solid #333; padding: 15px; width: 10%;">
+                    <button onclick="marquerTraite('${orderId}')" 
+                            style="background: #e74c3c; color: white; border: none; border-radius: 5px; 
+                                width: 45px; height: 45px; font-size: 1.4rem; font-weight: bold; 
+                                cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: inline-flex; align-items: center; justify-content: center;">
+                        ✕
+                    </button>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
+    // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
+    function refreshOrders() {
+        fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(response => response.text())
+        .then(html => {
+            // 1. On mémorise les IDs qui étaient VISIBLES à l'écran avant la mise à jour
+            const oldVisibleIds = Array.from(document.querySelectorAll('.order-wrapper'))
+                .filter(el => el.style.display !== 'none')
+                .map(el => el.getAttribute('data-order-id'));
+            
+            // 2. Mise à jour du contenu HTML (la grille de base)
+            ajaxZone.innerHTML = html;
+
+            // 3. Réapplique immédiatement les filtres (masque ou affiche selon les cases cochées)
+            appliquerFiltresAffichage();
+            
+            // Synchronisation de la vue tableau si elle est active
+            const table = document.getElementById('kds-table-zone');
+            if (table && table.classList.contains('view-active-table')) {
+                syncTableData();
+            }
+
+            // 4. DETECTION DU SON CHANGER ICI : On regarde uniquement les nouvelles commandes qui sont VISIBLES
+            const newVisibleIds = Array.from(ajaxZone.querySelectorAll('.order-wrapper'))
+                .filter(el => el.style.display !== 'none') // ⭐ Prend uniquement ce qui passe les filtres !
+                .map(el => el.getAttribute('data-order-id'));
+            
+            // On vérifie si un de ces IDs visibles n'était pas là avant
+            const hasNewArrivalInFilter = newVisibleIds.some(id => !oldVisibleIds.includes(id));
+
+            if (hasNewArrivalInFilter && newVisibleIds.length > 0) {
+                triggerVisualAlert();
+                // Joue le son uniquement si l'option audio est active
+                if (localStorage.getItem('kds_pa_audio') === 'true') {
+                    playTripleBeep();
+                }
+            }
+        })
+        .catch(error => {
+            console.error("Erreur de rafraîchissement KDS :", error);
+        });
+    }
+
+    function toggleAudio() {
+        const newState = !(localStorage.getItem('kds_pa_audio') === 'true');
+        localStorage.setItem('kds_pa_audio', newState);
+        updateAudioUI(newState);
+        if (newState) playTripleBeep();
+    }
+
+    function updateAudioUI(enabled) {
+        audioBtn.innerText = enabled ? "🔔 BIP: ACTIVÉ" : "🔕 BIP: DÉSACTIVÉ";
+        audioBtn.className = enabled ? "audio-on" : "audio-off";
+    }
+
+    // --- INITIALISATION ---
+    window.addEventListener('load', () => {
+        // 1. Restaurer le Thème
+        const savedTheme = localStorage.getItem('kds_user_theme') || 'theme-classic';
+        changeTheme(savedTheme);
+
+        // 2. Restaurer l'Audio
+        updateAudioUI(localStorage.getItem('kds_pa_audio') === 'true');
+
+        // 3. RESTAURER LA VUE (Grille ou Tableau)
+        const savedView = localStorage.getItem('kds_view_mode') || 'grid';
+        const grid = document.getElementById('kds-ajax-zone');
+        const table = document.getElementById('kds-table-zone');
+        const btn = document.getElementById('btn-view-toggle');
+
+        if (savedView === 'table') {
+            // On cache la grille et on affiche le tableau
+            grid.classList.add('view-hidden');
+            table.classList.add('view-active-table');
+            if (btn) btn.innerText = "📋 VUE: TABLEAU";
+            
+            // On remplit le tableau immédiatement avec les données chargées au boot
+            syncTableData();
+        } else {
+            // Mode par défaut : Grille
+            grid.classList.remove('view-hidden');
+            table.classList.remove('view-active-table');
+            if (btn) btn.innerText = "🖼️ VUE: GRILLE";
+        }
+
+        const savedFontPreset = localStorage.getItem('kds_font_preset') || 'normal';
+        changeFontSize(savedFontPreset);
+
+        // 4. Lancer l'intervalle de rafraîchissement Flask
+        const refreshRate = {{ (refresh_rate if refresh_rate else 5) * 1000 }};
+        setInterval(refreshOrders, refreshRate);
+    });
+
+    function marquerTraite(orderId) {
+        // EN CUISINE : On envoie "Traitee" sans accent pour éviter que l'URL casse (404)
+        const newStatus = 'Traitee';
+        console.log(`Envoi au db_manager via /update_status/${orderId}/${newStatus}`);
+
+        fetch(`/update_status/${orderId}/${newStatus}`, {
+            method: 'POST',
+            headers: { 
+                'X-App-Access': 'MonApplicationUnique123!' 
+            }
+        })
+        .then(response => {
+            // Correction du "body stream already read" : On ne lit la réponse qu'une seule fois !
+            return response.json().then(data => {
+                if (!response.ok) {
+                    throw new Error(data.message || `Erreur serveur (${response.status})`);
+                }
+                return data;
+            }).catch(err => {
+                if (err instanceof SyntaxError) {
+                    throw new Error(`Le serveur a renvoyé une réponse invalide (Code ${response.status}).`);
+                }
+                throw err;
+            });
+        })
+        .then(data => {
+            if (data.success) {
+                // Cache de la vue Tableau
+                const row = document.getElementById(`table-row-${orderId}`);
+                if (row) row.style.display = 'none';
+
+                // Cache de la vue Grille (les Post-its)
+                const card = document.querySelector(`.order-wrapper[data-order-id="${orderId}"]`);
+                if (card) card.style.display = 'none';
+                
+                console.log(`Commande ${orderId} archivée avec succès !`);
+            } else {
+                console.error("Erreur KDS :", data.message);
+                alert("Erreur KDS : " + data.message);
+            }
+        })
+        .catch(err => {
+            console.error("Détail de l'erreur :", err.message);
+            alert("Impossible de fermer la commande.\n\n" + err.message);
+        });
+    }
+</script>
+{% endblock %}

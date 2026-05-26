@@ -225,6 +225,39 @@ TEST_MODELS = {
     )
 }
 
+class CustomConfirm:
+    def __init__(self, parent, title, message, on_confirm):
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(title)
+        self.dialog.geometry("450x250")
+        self.dialog.configure(bg="#1c1c1c")
+        self.dialog.resizable(False, False)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Centrage
+        self.dialog.update_idletasks()
+        x = parent.winfo_x() + (parent.winfo_width() // 2) - (self.dialog.winfo_width() // 2)
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - (self.dialog.winfo_height() // 2)
+        self.dialog.geometry(f"+{x}+{y}")
+
+        main_frame = tk.Frame(self.dialog, bg="#2d2d2d", highlightbackground="#f39c12", highlightthickness=2)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        tk.Label(main_frame, text=title.upper(), font=("Impact", 18), bg="#2d2d2d", fg="#f39c12").pack(pady=(15, 5))
+        tk.Label(main_frame, text=message, font=("Arial", 11), bg="#2d2d2d", fg="white", wraplength=400).pack(pady=20)
+
+        btn_frame = tk.Frame(main_frame, bg="#2d2d2d")
+        btn_frame.pack(pady=10)
+
+        # Bouton OUI (Quitter)
+        tk.Button(btn_frame, text="OUI, QUITTER", font=("Arial", 10, "bold"), bg="#e74c3c", fg="white", 
+                  width=15, command=on_confirm).pack(side="left", padx=10)
+
+        # Bouton NON (Rester)
+        tk.Button(btn_frame, text="NON", font=("Arial", 10, "bold"), bg="#7f8c8d", fg="white", 
+                  width=10, command=self.dialog.destroy).pack(side="left", padx=10)
+
 class POSSimulatorGUI:
     def __init__(self, master=None):
         self.master = master if master else tk.Tk()
@@ -232,10 +265,38 @@ class POSSimulatorGUI:
             self.master.title("Simulateur & Diagnostic Série")
             self.master.geometry("750x780")
             self.master.configure(bg="#1c1c1c")
+        
+        # --- SÉCURITÉ MAXIMUM ---
+        # On utilise self.master car self.root n'existe pas dans ta classe
+        self.master.protocol("WM_DELETE_WINDOW", self.disable_event)
+        
+        # Empêche Alt+F4, Alt+Tab, etc.
+        self.master.bind("<Alt-F4>", self.disable_event)
+        self.master.bind("<Alt-Tab>", self.disable_event)
+        self.master.bind("<Alt-Escape>", self.disable_event)
 
         self.ports_config = self._load_ports_json()
         self._setup_ui()
         self.refresh_ports()
+    
+    def disable_event(self):
+        # On crée une alerte personnalisée avec une question
+        # On passe une fonction (callback) qui sera exécutée si on clique sur OUI
+        CustomConfirm(self.master, "QUITTER", "Voulez-vous vraiment fermer le simulateur ?", self.final_quit)
+
+    def final_quit(self):
+        """Ferme proprement la fenêtre de test sans geler le parent."""
+        try:
+            # On utilise self.master (ou self.root selon votre __init__)
+            # Si vous avez 'self.root = root' dans __init__, utilisez self.root
+            # Si vous avez 'self.master = root', utilisez self.master
+            target = getattr(self, 'root', getattr(self, 'master', None))
+            
+            if target:
+                target.grab_release() # Libère le focus pour l'app principale
+                target.destroy()      # Ferme la fenêtre proprement
+        except Exception as e:
+            print(f"Erreur lors de la fermeture : {e}")
 
     def _load_ports_json(self):
         path = 'ports.json'

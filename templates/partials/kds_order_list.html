@@ -1,0 +1,74 @@
+{% for bid, item in pa_list.items() %}
+{% set table_str = (item.data.table_number | string | upper) %}
+{% if "888" in table_str %}
+    {% set order_type = "t888" %}
+{% elif "999" in table_str %}
+    {% set order_type = "t999" %}
+{% elif "LIV" in table_str %}
+    {% set order_type = "liv" %}
+{% elif "PA" in table_str %}
+    {% set order_type = "pa" %}
+{% else %}
+    {% set order_type = "salle" %}
+{% endif %}
+
+<div class="order-wrapper" id="order-{{ item.data.id }}" data-order-id="{{ item.data.id }}" data-order-type="{{ order_type }}">
+    <div class="card alert-pa-card">
+        <div class="card-header-pa" style="position: relative; padding-right: 45px;">
+            T: {{ item.data.table_number }} | {{ item.data.serveuse_name }}
+
+            <button onclick="event.stopPropagation(); marquerTraite('{{ item.data.id }}')" 
+                    style="position: absolute; 
+                           right: 8px; 
+                           top: 50%; 
+                           transform: translateY(-50%); 
+                           background-color: #e74c3c; 
+                           color: white; 
+                           border: none; 
+                           border-radius: 4px; 
+                           width: 32px; 
+                           height: 32px; 
+                           font-size: 1.2rem; 
+                           font-weight: bold; 
+                           cursor: pointer; 
+                           display: flex; 
+                           align-items: center; 
+                           justify-content: center;
+                           box-shadow: 0 2px 4px rgba(0,0,0,0.3); 
+                           z-index: 10;">
+                ✕
+            </button>
+        </div>
+        
+        <div class="card-body d-flex flex-column p-2" style="background-color: #34495e;">
+            <ul class="list-group list-group-flush mb-2" style="background: transparent;">
+                {% for raw_it in item.data['items'] %}
+                    {% set it = raw_it if raw_it is mapping else raw_it | from_json %}
+                    {# On extrait le texte pour vérifier si c'est strictement l'heure de la commande #}
+                    {% set text_verif = (it.main_item if it is mapping else it) | string | upper %}
+                    
+                    <li class="list-group-item bg-transparent border-0 px-0 py-1">
+                        {% if "HEURE" in text_verif %}
+                            {# --- UNIQUMENT L'HEURE : EN ROUGE VIF --- #}
+                            <div class="item-main" style="color: #ff3333 !important;">{{ it.main_item if it is mapping else it }}</div>
+                            {% if it is mapping and it.sub_items %}
+                            <div class="item-subs" style="color: #ff3333 !important;">
+                                {% for sub in it.sub_items %}<div>→ {{ sub }}</div>{% endfor %}
+                            </div>
+                            {% endif %}
+                        {% else %}
+                            {# --- TOUT LE RESTE (NOURRITURE, MIN, ETC.) : ORANGE NORMAL --- #}
+                            <div class="item-main">{{ it.main_item if it is mapping else it }}</div>
+                            {% if it is mapping and it.sub_items %}
+                            <div class="item-subs">
+                                {% for sub in it.sub_items %}<div>→ {{ sub }}</div>{% endfor %}
+                            </div>
+                            {% endif %}
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endfor %}

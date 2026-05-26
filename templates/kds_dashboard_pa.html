@@ -165,7 +165,7 @@
         
         <h2 class="text-white text-center mb-4" style="font-weight: 800;">HEURE DÉSIRÉE</h2>
         
-        <div id="time-display" class="display-time">____</div>
+        <div id="time-display" class="display-time" style="font-size: 2.8rem; min-height: 70px; color: #00d2ff; text-shadow: 0 0 10px rgba(0, 210, 255, 0.5);">____</div>
 
         <div class="numpad-container">
             <div class="numpad-btn" onclick="pressKey('1')">1</div>
@@ -177,19 +177,18 @@
             <div class="numpad-btn" onclick="pressKey('7')">7</div>
             <div class="numpad-btn" onclick="pressKey('8')">8</div>
             <div class="numpad-btn" onclick="pressKey('9')">9</div>
-            <div class="numpad-btn" onclick="pressKey('.')">.</div>
+            <div class="numpad-btn" style="background: #222; color: #444;">.</div>
             <div class="numpad-btn" onclick="pressKey('0')">0</div>
             <div class="numpad-btn btn-del" onclick="pressKey('BACK')">⌫</div>
         </div>
 
         <div class="d-flex gap-3 mt-4">
             <button class="btn btn-primary btn-lg w-100 touch-element-xxl" onclick="confirmTime()" 
-                style="background: #00d2ff !important; border: none; font-size: 1.6rem;">VALIDER</button>
+                style="background: #00d2ff !important; border: none; font-size: 1.6rem; font-weight: bold;">VALIDER</button>
             <button class="btn btn-danger btn-close-large" onclick="closeTimeModal()">X</button>
         </div>
     </div>
 </div>
-
 
 <div id="modal-note" style="display:none; position:fixed; z-index:10001; background: rgba(0,0,0,0.85); top:0; left:0; width:100%; height:100%; ">
     <div style="position:absolute; top:45%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:30px; border-radius:25px; text-align:center; min-width:550px; box-shadow: 0 0 40px rgba(0, 210, 255, 0.3);">
@@ -628,44 +627,112 @@ document.getElementById('themeContainer').addEventListener('wheel', (evt) => {
     }
 
     function pressKey(key) {
-        if (key === 'BACK') {
-            timeInputBuffer = timeInputBuffer.slice(0, -1);
-        } else if (key === '.') {
-            // Optionnel : on peut ignorer le point ou l'utiliser comme séparateur
-            if (timeInputBuffer.length === 2 && !timeInputBuffer.includes(':')) {
-                timeInputBuffer += ":";
-            }
+    let digitsOnly = timeInputBuffer.replace(/\D/g, '');
+
+    if (key === 'BACK') {
+        // Gère la suppression des blocs de formatage
+        if (timeInputBuffer.endsWith(' - ')) {
+            timeInputBuffer = timeInputBuffer.slice(0, -3);
+        } else if (timeInputBuffer.endsWith(':')) {
+            timeInputBuffer = timeInputBuffer.slice(0, -1); // On enlève juste le :
         } else {
-            // Limite à 4 chiffres
-            if (timeInputBuffer.replace(':', '').length < 4) {
-                timeInputBuffer += key;
-                // Ajoute automatiquement le ":" après les 2 premiers chiffres (HH:MM)
-                if (timeInputBuffer.length === 2) {
-                    timeInputBuffer += ":";
-                }
+            timeInputBuffer = timeInputBuffer.slice(0, -1);
+        }
+    } else {
+        // On autorise jusqu'à 8 chiffres (ex: 10001015)
+        if (digitsOnly.length < 8) {
+            timeInputBuffer += key;
+            
+            let currentDigits = timeInputBuffer.replace(/\D/g, '');
+
+            // Formatage automatique pendant la saisie
+            if (currentDigits.length === 2 && !timeInputBuffer.includes(':')) {
+                timeInputBuffer += ":";
+            } 
+            else if (currentDigits.length === 4 && !timeInputBuffer.includes(' - ')) {
+                timeInputBuffer += " - ";
+            } 
+            else if (currentDigits.length === 6 && timeInputBuffer.split(' - ')[1] && !timeInputBuffer.split(' - ')[1].includes(':')) {
+                // Ajoute le deuxième ":" pour la deuxième heure
+                let parts = timeInputBuffer.split(' - ');
+                timeInputBuffer = parts[0] + " - " + parts[1].slice(0,2) + ":" + parts[1].slice(2);
             }
         }
-        
-        // Mise à jour de l'affichage
-        let display = timeInputBuffer;
-        while (display.length < 5) {
-            display += (display.length === 2) ? ":" : "_";
-        }
-        document.getElementById('time-display').innerText = display;
+    }
+    
+    const display = document.getElementById('time-display');
+    if (display) {
+        display.innerText = timeInputBuffer || "____";
+    }
+}
+
+    function resetTimeBuffer() {
+        timeInputBuffer = "";
+        document.getElementById('time-display').innerText = "____";
     }
 
     function confirmTime() {
-        // Validation simple du format HH:MM
-        if (timeInputBuffer.length === 5) {
-            updateLocalExtra(timeTargetBid, 'desired_time', timeInputBuffer);
-            closeTimeModal();
-        } else {
-            // Effet visuel d'erreur si incomplet
-            const disp = document.getElementById('time-display');
-            disp.style.color = 'red';
-            setTimeout(() => disp.style.color = '#00d2ff', 500);
+        if (timeTargetBid) {
+            const formattedTime = formatTimeInput(timeInputBuffer);
+            const currentCard = document.getElementById(`order-${timeTargetBid}`);
+            
+            // Sécurisation de la récupération du numéro de livraison
+            let rawNo = currentCard ? currentCard.getAttribute('data-livraison-no') : null;
+            let match = rawNo ? rawNo.match(/\d+/) : null;
+            let currentNo = match ? match[0] : "N/A";
+
+            const allCards = document.querySelectorAll('.kds-card');
+            let matchingBids = [];
+
+            // On ne cherche des doublons que si on a un numéro valide
+            if (currentNo !== "N/A") {
+                allCards.forEach(card => {
+                    let cardRawNo = card.getAttribute('data-livraison-no') || "";
+                    let cardMatch = cardRawNo.match(/\d+/);
+                    let cardNo = cardMatch ? cardMatch[0] : "";
+                    
+                    if (cardNo === currentNo) {
+                        matchingBids.push(card.id.replace('order-', ''));
+                    }
+                });
+            }
+
+            if (matchingBids.length > 1) {
+                pendingTimeData = {
+                    time: formattedTime,
+                    bids: matchingBids,
+                    livraisonNo: currentNo,
+                    targetBid: timeTargetBid 
+                };
+                
+                const groupDisplay = document.getElementById('display-group-no');
+                if (groupDisplay) groupDisplay.innerText = currentNo;
+                
+                const groupModal = document.getElementById('confirmGroupModal');
+                if (groupModal) groupModal.style.display = 'flex';
+            } else {
+                // Utilisation de updateLocalExtra pour refléter le changement sur l'interface
+                updateLocalExtra(timeTargetBid, 'desired_time', formattedTime);
+                closeTimeModal();
+            }
         }
     }
+
+    function formatTimeInput(val) {
+        if (!val) return "";
+        // Si l'utilisateur a tapé 4 chiffres (ex: 1830)
+        if (val.length === 4) {
+            return val.substring(0, 2) + ":" + val.substring(2, 4);
+        }
+        // Si l'utilisateur a tapé 3 chiffres (ex: 930)
+        if (val.length === 3) {
+            return "0" + val.substring(0, 1) + ":" + val.substring(1, 3);
+        }
+        return val; // Retourne tel quel si format inconnu
+    }
+
+    
+
 
     function closeTimeModal() {
         document.getElementById('modal-time').style.display = 'none';

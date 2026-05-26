@@ -31,10 +31,11 @@ KDS_CONFIG: Dict[str, Any] = {
         "En attente": "#3498db", "En cours": "#f1c40f", "Traitée": "#2ecc71", 
         "Annulée": "#e74c3c", "Archivée": "#7f8c8d"
     },
-    "BG_MAIN": "#2c3e50", "CARD_BG": "#34495e", "MAX_CARDS_PER_ROW": 5, "SCROLL_PAGE_SIZE": 1, 
+    "BG_MAIN": "#2c3e50", "CARD_BG": "#34495e", "MAX_CARDS_PER_ROW": 7, "SCROLL_PAGE_SIZE": 1, 
     "COLOR_TEXT": "#ecf0f1", "COLOR_ACCENT": "#3498db", "COLOR_WARNING": "#f1c40f", 
     "COLOR_NOTE": "#f1c40f", "H_SCROLLBAR_HEIGHT": 15, "CARD_WIDTH": 300, 
-    "CARD_BORDER_WIDTH": 5, "CARD_PADDING": 5, "H_MARGIN": 5, 
+    "CARD_BORDER_WIDTH": 1, "CARD_PADDING": 1, "H_MARGIN": 1,
+    "SUB_ITEM_POLICE": 14,"MAIN_ITEM_POLICE": 15,"animation_personnage": True, 
     "SERVICE_TYPES": ["COMMANDE"], "SERVICE_SPLIT_MARKER": "AUTRE", 
     "REFRESH_RATE_MS": 3000, "TRUNCATE_LEN": 40, "ORDER_STATUS_PENDING": "En attente", 
     "BAUD_RATE": 9600, "SERIAL_TIMEOUT": 0.5, 
@@ -99,7 +100,14 @@ CONFIG_MAP: Dict[str, Dict[str, Any]] = {
     "SCROLL_PAGE_SIZE": {"label": "Taille de Défilement (rangées)", "section": "Dimensions", "type": "int"},
     "H_SCROLLBAR_HEIGHT": {"label": "Hauteur Barre Défilement H (px)", "section": "Dimensions", "type": "int"},
     "TRUNCATE_LEN": {"label": "Longueur Max. Texte Tronqué", "section": "Dimensions", "type": "int"},
+
+    # 🚀 AJOUTS : POLICES DE L'INTERFACE LOCAL (TKINTER)
+    "MAIN_ITEM_POLICE": {"label": "Taille Police Plat Principal", "section": "Dimensions", "type": "int"},
+    "SUB_ITEM_POLICE": {"label": "Taille Police Options / Sous-items", "section": "Dimensions", "type": "int"},
     
+    # --- ANIMATIONS / EFFETS ---
+    "animation_personnage": {"label": "Activer l'animation du personnage", "section": "Technique & Perf.", "type": "bool"},
+
     # --- STATUTS ET SERVICES ---
     "ORDER_STATUS_PENDING": {"label": "Statut Initial de Commande", "section": "Statuts & Services", "type": "string"},
     "TICKET_STATUS_COMPLETED": {"label": "Statut de Fin de Ticket", "section": "Statuts & Services", "type": "string"},
@@ -710,10 +718,48 @@ class ConfigMenu(tk.Toplevel):
                 elif widget_type == 'color':
                     self._create_color_picker(frame, key, label, internal_row)
                 
+                # 🚀 AJOUT : Prise en charge automatique des valeurs Vrai/Faux (True/False)
+                elif widget_type == 'bool':
+                    self._create_boolean_checkbox(frame, key, label, internal_row)
+                
                 internal_row += 1
 
         # Ajout de l'éditeur de couleurs des Statuts (Séparé)
         self._create_status_color_section(self.scrollable_frame_config, row_counter)
+    
+    def _create_boolean_checkbox(self, parent_frame, key, label_text, row):
+        """ Crée dynamiquement une case à cocher pour les configurations de type booléen. """
+        # Label à gauche
+        lbl = tk.Label(parent_frame, text=label_text, bg="#34495e", fg="#ecf0f1", font=("Arial", 10))
+        lbl.grid(row=row, column=0, sticky="w", padx=10, pady=5)
+        
+        # Variable Tkinter liée à la configuration globale
+        # On crée une variable stockée dans self pour pouvoir la suivre au besoin
+        if not hasattr(self, 'bool_vars'):
+            self.bool_vars = {}
+            
+        # Récupère la valeur actuelle (True par défaut)
+        initial_value = KDS_CONFIG.get(key, True)
+        self.bool_vars[key] = tk.BooleanVar(value=initial_value)
+        
+        # Fonction locale pour mettre à jour la config en temps réel quand on coche
+        def on_checkbox_toggle():
+            KDS_CONFIG[key] = self.bool_vars[key].get()
+            
+        # Case à cocher à droite
+        chk = tk.Checkbutton(
+            parent_frame, 
+            text="", 
+            variable=self.bool_vars[key],
+            command=on_checkbox_toggle,
+            bg="#34495e", 
+            fg="#ecf0f1",
+            selectcolor="#2c3e50",
+            activebackground="#34495e",
+            activeforeground="#ecf0f1"
+        )
+        chk.grid(row=row, column=1, sticky="w", padx=10, pady=5)
+
 
     
     def _create_section_frame_flat(self, master: ttk.Frame, row: int):

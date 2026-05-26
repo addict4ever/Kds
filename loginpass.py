@@ -113,6 +113,12 @@ class DialUnlockDialog(tk.Toplevel):
             messagebox.showerror("Erreur de Sécurité", "Configuration de sécurité manquante ou corrompue. Impossible de continuer.")
             self.destroy()
             return
+        self.master.protocol("WM_DELETE_WINDOW", self.disable_event)
+        
+        # Empêche Alt+F4, Alt+Tab, etc.
+        self.master.bind("<Alt-F4>", self.disable_event)
+        self.master.bind("<Alt-Tab>", self.disable_event)
+        self.master.bind("<Alt-Escape>", self.disable_event)
 
         self.parent = parent
         self.action_name = action_name
@@ -171,6 +177,11 @@ class DialUnlockDialog(tk.Toplevel):
         self._refresh_key_mode_ui() 
 
         self.bind("<Escape>", lambda e: self._on_cancel())
+    
+    def disable_event(self, event=None):
+        """Fonction qui ne fait rien pour bloquer les tentatives de fermeture."""
+        return "break"
+        
 
     def _create_widgets(self):
         self.header_var = tk.StringVar(value=self.action_name)

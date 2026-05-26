@@ -133,6 +133,7 @@ class DBManager:
             return []
         finally:
             conn_const.close()
+    
 
     def get_main_dishes_with_prices(self):
         """Récupère les noms et prix depuis kds_constants.db."""
@@ -191,7 +192,7 @@ class DBManager:
     def set_order_status_by_bill_id(self, bill_id: str, new_status: str) -> int:
         """
         Met à jour le statut d'une commande. 
-        Recherche par correspondance partielle car bill_id contient un suffixe UUID.
+        Recherche par l'ID numérique de la table (id) OU par correspondance textuelle (bill_id).
         """
         conn = self._get_connection()
         if not conn: return 0
@@ -201,21 +202,20 @@ class DBManager:
             cursor = conn.cursor()
             clean_bid = str(bill_id).strip()
             
-            # On utilise LIKE car vos IDs en DB ressemblent à "106-a1b2c3d4"
-            # On cherche tout ce qui commence par l'ID fourni suivi du tiret
+            # REQUÊTE MODIFIÉE : On ajoute la condition 'id = ?' pour attraper les numéros de ligne
             cursor.execute("""
                 UPDATE orders 
                 SET status = ? 
-                WHERE bill_id = ? OR bill_id LIKE ?
-            """, (new_status, clean_bid, f"{clean_bid}-%"))
+                WHERE id = ? OR bill_id = ? OR bill_id LIKE ?
+            """, (new_status, clean_bid, clean_bid, f"{clean_bid}-%"))
             
             conn.commit()
             row_count = cursor.rowcount
             
             if row_count > 0:
-                logger.info(f"✅ Succès : {row_count} ligne(s) mise(s) à jour pour l'ID {clean_bid}")
+                logger.info(f"✅ Succès : {row_count} ligne(s) mise(s) à jour pour l'ID/Bill_ID '{clean_bid}'")
             else:
-                logger.warning(f"⚠️ Échec : Aucune facture commençant par {clean_bid} n'a été trouvée.")
+                logger.warning(f"⚠️ Échec : Aucune facture trouvée avec id ou bill_id commençant par '{clean_bid}'.")
                 
         except sqlite3.Error as e:
             logger.error(f"❌ Erreur SQL : {e}")
@@ -862,6 +862,40 @@ class DBManager:
         except Exception as e:
             logger.error(f"Erreur lors du marquage automatique : {e}")
             return 0
+    
+    def mark_specific_types_as_done_all(self):
+        """Marque les commandes par service_type comme 'Traitée'."""
+        try:
+            # Les 4 types que tu veux traiter
+            types_to_process = ('POUR EMPORTER', 'LIVRAISON', 'COMMANDE', 'LIVREUR')
+            
+            # On génère dynamiquement le bon nombre de "?" (ici il en faut 4)
+            placeholders = ', '.join(['?'] * len(types_to_process))
+            
+            query = f"""
+                UPDATE orders 
+                SET status = 'Traitée' 
+                WHERE service_type IN ({placeholders}) 
+                AND status != 'Traitée'
+            """
+            
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            # Maintenant, query contient "... IN (?, ?, ?, ?)"
+            cursor.execute(query, types_to_process)
+            
+            count = cursor.rowcount
+            conn.commit()
+            conn.close()
+            
+            if count > 0:
+                logger.info(f"NETTOYAGE AUTO: {count} commandes ({types_to_process}) traitées.")
+            return count
+        except Exception as e:
+            logger.error(f"Erreur lors du marquage automatique : {e}")
+            return 0
+
 
     def mark_specific_types_as_done(self):
         """Marque les commandes par service_type comme 'Traitée'."""

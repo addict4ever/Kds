@@ -13,6 +13,8 @@ import json
 import threading
 import math
 import textwrap  # Pour le retour à la ligne automatique
+import re
+import time
 
 
 
@@ -33,6 +35,21 @@ try:
 except ImportError:
     winsound = None
 
+# --- CHARGEMENT DU FICHIER DE CONFIGURATION GLOBALE ---
+CONFIG_FILE = "config_gui.json"
+KDS_CONFIG = {}
+
+try:
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            KDS_CONFIG = json.load(f)
+        print("Configuration config_gui.json chargée avec succès.")
+    else:
+        print(f"Attention : {CONFIG_FILE} introuvable, utilisation de valeurs vides.")
+except Exception as e:
+    print(f"Erreur lors de la lecture de config_gui.json : {e}")
+
+
 try:
     from log_view import LogViewWindow
 except ImportError:
@@ -43,6 +60,12 @@ try:
 except ImportError:
     DesktopPet = None
     print("⚠️ animate_pack.py non trouvé, le compagnon ne sera pas chargé.")
+
+try:
+    # On importe la fonction main qu'on a créée plus haut
+    from salade_game import main as start_salade  
+except ImportError:
+    start_salade = None
 
 
 
@@ -81,6 +104,21 @@ except ImportError:
         def __init__(self): logging.warning("MainDishDBManager simulé.")
         pass
 
+# ⭐ Importation du module de configuration (Edit Config)
+try:
+    from edit_config import ProConfigManager
+except ImportError:
+    def ProConfigManager(*args, **kwargs): 
+        logging.error("ProConfigManager non disponible. Vérifiez edit_config.py.")
+
+# ⭐ Importation du module d'outils de commande (CMD Tool)
+try:
+    # On importe la classe principale du module Ultra Windows Booster
+    from cmd_tool import UltraWindowsBoosterTactile 
+except ImportError:
+    def UltraWindowsBoosterTactile(*args, **kwargs): 
+        logging.error("UltraWindowsBoosterTactile non disponible. Vérifiez cmd_tool.py.")
+
 # ⭐ Importation du module de consultation des ventes
 try:
     from consultation import ConsultationWindow 
@@ -100,6 +138,11 @@ except ImportError:
     def check_access_password(action_name: str) -> bool: 
         logging.error(f"Module 'loginpass.py' non disponible. Authentification pour '{action_name}' désactivée.")
         return True # Permet l'accès par défaut si le module est manquant
+
+try:
+    from popit import main as start_popit # On importe la fonction main de popit
+except ImportError:
+    start_popit = None
 
 # NÉCESSITE OrderPostIt, PostitSelector, TotalWidget et constantes 
 from postit_widget import OrderPostIt, PostitSelector 
@@ -138,6 +181,8 @@ BG_MAIN = "#2c3e50"
 CARD_BG = "#34495e"
 COLOR_TEXT = "#ecf0f1"
 SCREEN_2_GEOMETRY_FULLSCREEN = "1920x1080+1920+0"
+
+
 
 import tkinter as tk
 from tkinter import ttk
@@ -523,6 +568,29 @@ class KDSGUI:
         self.db_manager = db_manager
         self.reader = reader  # <-- AJOUTEZ CETTE LIGNE : elle stocke le lecteur pour le menu technique
 
+        # --- SÉCURITÉ MAXIMUM ---
+        # Empêche Alt+F4
+        self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
+        # Empêche Alt+Tab, Alt+Esc, etc. (Windows seulement)
+        self.root.bind("<Alt-F4>", self.disable_event)
+        self.root.bind("<Alt-Tab>", self.disable_event)
+        self.root.bind("<Alt-Escape>", self.disable_event)
+
+        self.default_modes = [
+            {"prefix": "MÉNAGE", "targets": ["MENAGE BLANC", "MENAGE BRUN"], "labels": ["BL", "BR"]},
+            {"prefix": "TOAST", "targets": ["PAIN BLANC", "PAIN BRUN"], "labels": ["BL", "BR"]},
+            {"prefix": "MIDI", "targets": ["DOIGTS MIDI", "FISH MIDI"], "labels": ["DOIGTS", "FISH"]},
+            {"prefix": "CUISINE", "targets": ["BR. POULET", "SOLE MEUNIERE"], "labels": ["POULET", "SOLE"]}
+        ]
+        self.default_regles = {"SUPER SAND": 2}
+        
+        # Valeurs par défaut immédiates pour éviter l'AttributeError
+        self.modes_comptage = self.default_modes
+        self.regles_speciales = self.default_regles
+        
+        # Chargement du fichier JSON (écrase les défauts si le fichier existe)
+        self.load_mini_kds_config()
+
         self.bread_count_mode = 0  # 0 pour Ménage, 1 pour Toast
         self.print_enabled_var = tk.BooleanVar(value=True)
         self.lock = threading.Lock() # Ajout du verrou
@@ -546,10 +614,18 @@ class KDSGUI:
         }
         self.all_selected = True
 
+        
+
+        # 🚀 VÉRIFICATION DE LA CONFIGURATION POUR LE COMPAGNON
         if DesktopPet:
-            # On crée une nouvelle fenêtre par-dessus pour le compagnon
-            pet_window = tk.Toplevel(self.root)
-            self.desktop_pet = DesktopPet(pet_window)
+            # On va chercher la valeur dans KDS_CONFIG (ou sa valeur par défaut True si absente)
+            if KDS_CONFIG.get("animation_personnage", True):
+                logger.info("Configuration : Animation personnage ACTIVÉE.")
+                pet_window = tk.Toplevel(self.root)
+                self.desktop_pet = DesktopPet(pet_window)
+            else:
+                logger.info("Configuration : Animation personnage DÉSACTIVÉE.")
+                self.desktop_pet = None
         
         # Initialisation du gestionnaire des plats principaux
         try:
@@ -572,6 +648,8 @@ class KDSGUI:
         self.db_manager, 
         print_forwarding_state=self.print_enabled_var
         )
+
+        
         
         # 3. Démarrer le thread
         self.serial_reader.daemon = True
@@ -583,8 +661,38 @@ class KDSGUI:
         self.root.after(1000, self._open_serveur_window) # On attend 1s pour que le reste soit prêt
         self.check_auto_cleanup()
         self._schedule_auto_cleanup()
+
         
     
+    def disable_event(self, event=None):
+        """Fonction qui ne fait rien pour bloquer les tentatives de fermeture."""
+        return "break"
+        
+    def load_mini_kds_config(self):
+        """Charge le fichier JSON ou garde les valeurs par défaut."""
+        import json
+        import os
+        
+        path = "mini_kds.json"
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # On met à jour seulement si les clés existent dans le JSON
+                    self.modes_comptage = data.get("modes_comptage", self.default_modes)
+                    
+                    # Transformation simple du dictionnaire de règles pour la logique
+                    regles_raw = data.get("regles_speciales", {})
+                    if regles_raw:
+                        # On extrait juste le multiplicateur pour simplifier le code plus bas
+                        self.regles_speciales = {k: v.get("multiplicateur", 1) 
+                                                for k, v in regles_raw.items()}
+                print("Configuration mini_kds.json chargée avec succès.")
+            except Exception as e:
+                print(f"Erreur de lecture JSON, utilisation des valeurs par défaut: {e}")
+        else:
+            print("Fichier mini_kds.json absent, utilisation des valeurs par défaut.")
+
     def _schedule_auto_cleanup(self):
         # Récupération de l'heure actuelle
         now = datetime.now()
@@ -735,77 +843,83 @@ class KDSGUI:
         # Lancement de l'horloge
         self._update_top_clock()
 
-    def update_special_item_count(self):
-        """Compte les Ménages, les Toasts ou les items Midi selon le mode choisi."""
-        count_bl = 0
-        count_br = 0
-        
-        # Définition des mots-clés selon le mode (0=Ménage, 1=Toast, 2=Midi)
-        if self.bread_count_mode == 0:
-            target_bl, target_br = "MENAGE BLANC", "MENAGE BRUN"
-            prefix = "MÉNAGE"
-        elif self.bread_count_mode == 1:
-            target_bl, target_br = "PAIN BLANC", "PAIN BRUN"
-            prefix = "TOAST"
-        else:
-            # Mode Midi : on cherche les deux types d'items
-            target_bl, target_br = "DOIGTS MIDI","DOIGTS MIDI","FISH MIDI"
-            prefix = "MIDI"
 
+    def update_special_item_count(self):
+        """Extraction intelligente utilisant les données chargées en mémoire."""
+        import re
+
+        # Vérification de sécurité pour l'index du mode[cite: 1]
+        if self.bread_count_mode >= len(self.modes_comptage):
+            return
+            
+        current_cfg = self.modes_comptage[self.bread_count_mode]
+        target_1, target_2 = current_cfg["targets"]
+        
+        count_1 = 0
+        count_2 = 0
+
+        def extract_quantity(text):
+            numbers = re.findall(r'(\d+)', text)
+            return int(numbers[-1]) if numbers else 1
+
+        # Analyse des commandes actives
         for postit in self.active_postits.values():
             items = postit.order_data.get('items', [])
             for item in items:
                 raw_text = item.get('text', '') if isinstance(item, dict) else str(item)
-                text = raw_text.upper() # Gestion minuscule/majuscule
-                
-                # Logique de comptage
-                if self.bread_count_mode == 2:
-                    # En mode MIDI, on compte DOIGTS sous BL et FISH sous BR (par exemple)
-                    # Ou on additionne tout simplement si vous préférez
-                    if "DOIGTS MIDI" in text:
-                        count_bl += 1
-                    elif "FISH MIDI" in text:
-                        count_br += 1
-                else:
-                    # Logique standard pour Ménage et Toast
-                    if target_bl in text:
-                        count_bl += 1
-                    elif target_br in text:
-                        count_br += 1
+                text = raw_text.upper().strip()
 
-        # Mise à jour de l'affichage avec votre bel orange
+                # Application des règles (ex: SUPER SAND)[cite: 1]
+                qty = 1
+                found_special = False
+                for item_special, multiplicateur in self.regles_speciales.items():
+                    if item_special in text:
+                        qty = multiplicateur
+                        found_special = True
+                        break
+                
+                if not found_special:
+                    qty = extract_quantity(text)
+
+                # Incrémentation
+                if target_1 in text:
+                    count_1 += qty
+                elif target_2 in text:
+                    count_2 += qty
+
+        # Mise à jour du Label (Interface tactile)[cite: 1]
         if hasattr(self, 'lbl_mini_spe_count'):
-            # On ajuste le texte pour que "MIDI" affiche les bonnes catégories
-            label_text = f"{prefix} DOIGTS: {count_bl} | FISH: {count_br}" if self.bread_count_mode == 2 \
-                         else f"{prefix} BL: {count_bl}  |  BR: {count_br}"
-            
+            label_text = f"{current_cfg['prefix']} {current_cfg['labels'][0]}: {count_1}  |  {current_cfg['labels'][1]}: {count_2}"
             self.lbl_mini_spe_count.config(text=label_text)
 
     def toggle_bread_mode(self, event=None):
-        """
-        Bascule entre le mode Ménage et le mode Toast.
-        Utilise self.root.after pour éviter l'erreur AttributeError.
-        """
-        # Alterne entre 0 et 1 (0: Ménage, 1: Toast)
-        self.bread_count_mode = (self.bread_count_mode + 1) % 3
+        """Bascule dynamiquement entre les modes disponibles dans la configuration."""
         
-        # Couleurs pour le feedback visuel
-        original_color = "#ff9f43"  # Votre joli orange
-        flash_color = "#ffffff"     # Flash blanc (plus visible que le jaune sur l'orange)
+        # 1. Calculer le nombre de modes disponibles
+        num_modes = len(self.modes_comptage)
         
-        # Change la couleur immédiatement au clic
-        self.lbl_mini_spe_count.config(fg=flash_color)
-        
-        # Met à jour les chiffres et le texte (MÉNAGE vs TOAST) immédiatement
-        self.update_special_item_count()
-        
-        # Remet la couleur orange après 200ms en utilisant self.root
-        # Cela permet d'éviter l'erreur car la classe KDSGUI n'est pas un widget Tkinter
-        self.root.after(200, lambda: self.lbl_mini_spe_count.config(fg=original_color))
+        # Sécurité : si la liste est vide pour une raison quelconque
+        if num_modes == 0:
+            return
 
+        # 2. Basculer vers le mode suivant (modulo le nombre réel de modes)
+        self.bread_count_mode = (self.bread_count_mode + 1) % num_modes
+        
+        # Feedback visuel : Orange vif
+        original_color = "#ff9f43"
+        flash_color = "#ffffff"
+        
+        if hasattr(self, 'lbl_mini_spe_count'):
+            self.lbl_mini_spe_count.config(fg=flash_color)
+            
+            # Mise à jour immédiate des compteurs
+            self.update_special_item_count()
+            
+            # Retour à la couleur originale après 200ms
+            self.root.after(200, lambda: self.lbl_mini_spe_count.config(fg=original_color))
     
     def _trigger_pa_flash(self):
-        """Action du bouton PA : fait flasher avec anti-spam de 25s."""
+        """Action du bouton PA : fait flasher avec anti-spam de 25s et bip Bluetooth."""
         # Si le verrou est actif, on ne fait rien
         if getattr(self, 'pa_spam_lock', False):
             self.update_status("Veuillez patienter (Anti-spam 25s)", "orange")
@@ -821,12 +935,91 @@ class KDSGUI:
 
             # 3. Lancer le flash sur la fenêtre serveur
             self.serveur_window.flash_screen()
+
+            # 🚀 3.5 JOUER UN FICHIER MP3 SUR L'ENCEINTE BLUETOOTH PAR DÉFAUT VIA L'API NATIVE WINDOWS
+            # 🚀 3.5 JOUER UN FICHIER MP3 SUR L'ENCEINTE BLUETOOTH PAR DÉFAUT VIA L'API NATIVE WINDOWS
+            def run_mp3_sound():
+                try:
+                    import ctypes
+                    import os
+                    import sys
+                    
+                    # 🛠️ GESTION PYINSTALLER : Trouve le dossier "sound" qu'il soit compilé ou non
+                    if hasattr(sys, '_MEIPASS'):
+                        # Si l'application tourne depuis l'exécutable PyInstaller
+                        base_dir = sys._MEIPASS
+                    else:
+                        # Si l'application tourne normalement en mode développement Python
+                        base_dir = os.path.dirname(os.path.abspath(__file__))
+                        
+                    mp3_path = self.get_current_sound_path()
+                    if KDS_CONFIG.get("selected_sound") == "Aucun":
+                        return # Ne rien jouer
+                    
+                    if os.path.exists(mp3_path):
+                        winmm = ctypes.windll.winmm
+                        
+                        # On ferme l'alias s'il était déjà resté ouvert par erreur
+                        winmm.mciSendStringW('close pa_sound', None, 0, 0)
+                        
+                        # 1. Ouvrir le fichier MP3
+                        winmm.mciSendStringW(f'open "{mp3_path}" type mpegvideo alias pa_sound', None, 0, 0)
+                        # 2. Rebobiner au début
+                        winmm.mciSendStringW('seek pa_sound to start', None, 0, 0)
+                        # 3. Jouer le MP3
+                        winmm.mciSendStringW('play pa_sound', None, 0, 0)
+                        
+                        # Laisse le temps au MP3 de jouer avant de fermer l'alias
+                        def close_alias():
+                            try:
+                                ctypes.windll.winmm.mciSendStringW('close pa_sound', None, 0, 0)
+                            except:
+                                pass
+                        self.root.after(10000, close_alias)
+                        
+                    else:
+                        self.root.bell()
+                        if 'logger' in globals():
+                            logger.warning(f"Fichier introuvable à l'emplacement : {mp3_path}")
+                except Exception as e:
+                    if 'logger' in globals():
+                        logger.error(f"Erreur lecture MP3 Bluetooth : {e}")
+                    try:
+                        self.root.bell()
+                    except:
+                        pass
+
+            # Exécution dans un thread pour que l'interface de la cuisine reste instantanée
+            import threading
+            threading.Thread(target=run_mp3_sound, daemon=True).start()
             
-            # 4. Correction de l'erreur : on utilise self.root.after
-            # Si votre variable de fenêtre principale s'appelle autrement (ex: self.master), adaptez-le.
-            self.root.after(15000, self._reset_pa_lock)
+            # 4. Déverrouillage après le délai de 25 secondes (25000 ms)
+            self.root.after(25000, self._reset_pa_lock)
         else:
             self.update_status("Fenêtre Serveur non ouverte", "red")
+    
+    def save_sound_config(self, sound_name):
+        """Sauvegarde le nom du son dans le fichier JSON de config."""
+        KDS_CONFIG["selected_sound"] = sound_name
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(KDS_CONFIG, f)
+        self.update_status(f"Son défini sur : {sound_name}", "#2ecc71")
+
+    def get_current_sound_path(self):
+        """Retourne le chemin complet du son choisi."""
+        sound_name = KDS_CONFIG.get("selected_sound", "alerte") # 'alerte' par défaut
+        # Construction du chemin dynamique
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        # Dictionnaire de correspondance (extension selon le nom)
+        sounds = {
+            "beep": "beep.wav",
+            "beepbeep": "beepbeep.mp3",
+            "code50": "code50.wav",
+            "notification_beep": "notification_beep.mp3",
+            "alerte": "alerte.mp3"
+        }
+        return os.path.join(base_dir, "sound", sounds.get(sound_name, "alerte.mp3"))
+
 
     def custom_confirm(self, title, message, color="#f39c12"):
         """Affiche une boîte de confirmation adaptée au TOUCHSCREEN."""
@@ -1165,43 +1358,322 @@ class KDSGUI:
             bg_color = '#7f8c8d' # Gris
             
         self.sound_button.config(text=text, bg=bg_color)
+
+    def _start_sound_timer(self, event):
+        # Lance un timer de 3 secondes (3000 ms)
+        self._sound_timer_id = self.root.after(3000, lambda: self._show_sound_presets_menu(event))
+
+    def _stop_sound_timer(self, event):
+        # Si on relâche avant 3s, on annule le menu et on fait juste le toggle normal
+        if hasattr(self, '_sound_timer_id'):
+            self.root.after_cancel(self._sound_timer_id)
+
+    def _show_sound_presets_menu(self, event):
+        """Menu tactile qui reste au top et bloque le KDS tant qu'il est ouvert."""
+        top = tk.Toplevel(self.root)
+        top.overrideredirect(True)
+        top.attributes("-topmost", True)
+        
+        # --- IMPORTANT : Capture tous les événements ---
+        top.grab_set() 
+        
+        main_color = "#2ecc71"
+        top.configure(bg='#1a1a1a', highlightbackground=main_color, highlightthickness=3)
+
+        menu_width, menu_height = 350, 720
+        x = event.x_root - (menu_width // 2)
+        y = event.y_root - menu_height - 15
+        if y < 0: y = 10
+        top.geometry(f"{menu_width}x{menu_height}+{x}+{y}")
+
+        # Header
+        header = tk.Frame(top, bg=main_color)
+        header.pack(fill=tk.X)
+        tk.Label(header, text="🔊 CONFIGURATION SONORE", font=('Segoe UI', 12, 'bold'), 
+                 bg=main_color, fg='white', pady=12).pack()
+
+        # Packs
+        packs = [
+            ("🎵 PACK 1 : Classique",    "PRESET 1",  "#34495e"),
+            ("🔊 PACK 2 : Techno Aigu",  "PRESET 2",  "#8e44ad"),
+            ("🎸 PACK 3 : Percutant",     "PRESET 3",  "#c0392b"),
+            ("⚡ PACK 4 : Flash",         "PRESET 4",  "#f39c12"),
+            ("🌈 PACK 5 : Mélodique",     "PRESET 5",  "#27ae60"),
+            ("📟 PACK 6 : Rétro Bip",     "PRESET 6",  "#2980b9"),
+            ("🚨 PACK 7 : Urgence",       "PRESET 7",  "#d35400"),
+            ("🥁 PACK 8 : Rythmique",    "PRESET 8",  "#16a085"),
+            ("🌌 PACK 9 : Spatial/Zen",  "PRESET 9",  "#4b0082"),
+            ("🏢 PACK 10 : Bureau",      "PRESET 10", "#7f8c8d"),
+        ]
+
+        container = tk.Frame(top, bg='#1a1a1a')
+        container.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+
+        for text, mode, color in packs:
+            is_current = self.current_sound_preset.get() == mode
+            btn_text = f"● {text}" if is_current else text
+            
+            # Utilisation de m=mode pour capturer la valeur correctement
+            def make_cmd(m=mode):
+                if m:
+                    self.current_sound_preset.set(m)
+                    self.update_status(f"Pack sonore : {m}", "#2ecc71")
+                    if winsound: winsound.Beep(1000, 100)
+                top.grab_release() # Libère le contrôle avant de détruire
+                top.destroy()
+
+            btn = tk.Button(container, text=btn_text, command=make_cmd,
+                            font=('Segoe UI', 10, 'bold'),
+                            bg=color, fg='white',
+                            activebackground='white', activeforeground=color,
+                            relief=tk.FLAT, height=2, bd=0)
+            btn.pack(fill=tk.X, pady=4)
+            
+            if is_current:
+                btn.config(highlightbackground="white", highlightthickness=2)
+
+        # Bouton Fermer
+        tk.Frame(top, bg='#333', height=1).pack(fill=tk.X, pady=5)
+        
+        def close_menu():
+            top.grab_release() # Très important de libérer ici aussi
+            top.destroy()
+
+        close_btn = tk.Button(top, text="❌ FERMER", command=close_menu,
+                             font=('Segoe UI', 10, 'bold'),
+                             bg='#1a1a1a', fg='#e74c3c', 
+                             activebackground='#e74c3c', activeforeground='white',
+                             relief=tk.FLAT, bd=0, pady=10)
+        close_btn.pack(fill=tk.X)
+
+        # On NE bind PLUS le <FocusOut> pour qu'il reste ouvert
+        top.focus_set()
         
     def _play_new_order_sound(self, order_data=None):
-        """Joue un des 4 sons spécifiques selon le numéro de table."""
-        if not self.sound_enabled.get() or not winsound:
+        if not self.sound_enabled.get():
             return
             
         table_num = str(order_data.get('table_number', '')).upper() if order_data else ""
+        preset = self.current_sound_preset.get()
 
-        # --- 0. EXCLUSION ---
-        if table_num == "999":
-            return # Pas de son pour les 999
+        # 🚀 FORCE LE BIP SUR LE PÉRIPHÉRIQUE MATÉRIEL NON-BLUETOOTH VIA CTYPES / WINMM
+        def windows_hardware_beep(frequency, duration):
+            def run_direct_sound():
+                try:
+                    import ctypes
+                    import struct
+                    import time
+                    import math
+
+                    # Structure Windows pour inspecter les descriptions des cartes de son
+                    class WAVEOUTCAPS(ctypes.Structure):
+                        _fields_ = [
+                            ("wMid", ctypes.c_ushort), ("wPid", ctypes.c_ushort),
+                            ("vDriverVersion", ctypes.c_ulong), ("szPname", ctypes.c_char * 32),
+                            ("dwFormats", ctypes.c_ulong), ("wChannels", ctypes.c_ushort),
+                            ("wReserved1", ctypes.c_ushort), ("dwSupport", ctypes.c_ulong)
+                        ]
+
+                    winmm = ctypes.windll.winmm
+                    num_devices = winmm.waveOutGetNumDevs()
+                    target_device_id = -1  # Par défaut, on cherche
+
+                    # 1. On scanne les périphériques physiques pour éliminer le Bluetooth
+                    for i in range(num_devices):
+                        caps = WAVEOUTCAPS()
+                        if winmm.waveOutGetDevCapsA(i, ctypes.byref(caps), ctypes.sizeof(caps)) == 0:
+                            dev_name = caps.szPname.decode('ansi', errors='ignore').lower()
+                            
+                            # On cible la carte locale (Realtek / Haut-parleurs) et on évite le Bluetooth
+                            if ("realtek" in dev_name or "speaker" in dev_name or "haut-parleur" in dev_name or "audio" in dev_name) and "bluetooth" not in dev_name:
+                                target_device_id = i
+                                break
+
+                    # Si aucun mot-clé ne concorde mais qu'il y a des cartes, on prend l'index 0 (carte mère standard)
+                    if target_device_id == -1 and num_devices > 0:
+                        target_device_id = 0
+
+                    # 2. Génération des échantillons audio (Onde PCM 8-bit, 8000 Hz)
+                    sample_rate = 8000
+                    num_samples = int(sample_rate * (duration / 1000.0))
+                    audio_data = bytearray()
+                    
+                    for t in range(num_samples):
+                        # Génération d'une oscillation pure à la fréquence exacte du Preset
+                        value = int(127 + 127 * math.sin(2 * math.pi * frequency * t / sample_rate))
+                        audio_data.append(value)
+
+                    # Structure Wave Format (PCM, Mono, 8000Hz, 8-bit)
+                    wave_format = struct.pack("<HHIIHHH", 1, 1, sample_rate, sample_rate, 1, 8, 0)
+                    
+                    h_waveout = ctypes.c_void_p()
+                    
+                    # 3. Ouverture EXPLICITE du canal matériel choisi (target_device_id)
+                    if winmm.waveOutOpen(ctypes.byref(h_waveout), target_device_id, wave_format, 0, 0, 0) == 0:
+                        
+                        class WAVEHDR(ctypes.Structure):
+                            _fields_ = [
+                                ("lpData", ctypes.c_char_p), ("dwBufferLength", ctypes.c_ulong),
+                                ("dwBytesRecorded", ctypes.c_ulong), ("dwUser", ctypes.c_void_p),
+                                ("dwFlags", ctypes.c_ulong), ("dwLoops", ctypes.c_ulong),
+                                ("lpNext", ctypes.c_void_p), ("reserved", ctypes.c_void_p)
+                            ]
+                        
+                        raw_buffer = ctypes.c_char_p(bytes(audio_data))
+                        header = WAVEHDR(raw_buffer, len(audio_data), 0, 0, 0, 0, 0, 0)
+                        
+                        winmm.waveOutPrepareHeader(h_waveout, ctypes.byref(header), ctypes.sizeof(header))
+                        winmm.waveOutWrite(h_waveout, ctypes.byref(header), ctypes.sizeof(header))
+                        
+                        # Laisse le temps à la carte de son de jouer le bip avant de fermer
+                        time.sleep(duration / 1000.0 + 0.05)
+                        
+                        winmm.waveOutUnprepareHeader(h_waveout, ctypes.byref(header), ctypes.sizeof(header))
+                        winmm.waveOutClose(h_waveout)
+                    else:
+                        # Si l'accès direct échoue, appel Kernel standard en secours
+                        ctypes.windll.kernel32.Beep(frequency, duration)
+
+                except Exception:
+                    # Sécurité ultime pour ne jamais faire planter l'affichage des commandes
+                    try:
+                        self.root.bell()
+                    except:
+                        pass
+            
+            # Lancé dans un thread pour que le KDS de cuisine reste parfaitement fluide
+            threading.Thread(target=run_direct_sound, daemon=True).start()
 
         try:
-            # --- 1. LES 888 (Son Grave et Saccadé) ---
-            if "888" in table_num:
-                # 3 bips graves lents
-                for _ in range(3):
-                    winsound.Beep(600, 250)
-                    self.root.after(100)
+            # --- PACK 1 : CLASSIQUE (Optimisé Agressif) ---
+            if preset == "PRESET 1":
+                if "999" in table_num:
+                    [windows_hardware_beep(2200, 80) for _ in range(5)]
+                elif "888" in table_num: 
+                    [windows_hardware_beep(1500, 150) for _ in range(4)]
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(1200, 200); windows_hardware_beep(1600, 200); windows_hardware_beep(2000, 200)
+                elif "PA" in table_num: 
+                    windows_hardware_beep(2200, 100); windows_hardware_beep(2200, 100); windows_hardware_beep(2200, 100)
+                else: 
+                    windows_hardware_beep(1400, 200); windows_hardware_beep(1400, 200)
 
-            # --- 2. LES LIVRAISONS (Son d'Alerte) ---
-            elif "LIV" in table_num:
-                # Bip long montant
-                winsound.Beep(800, 400)
-                winsound.Beep(1000, 200)
+            # --- PACK 2 : TECHNO (Rafale Rapide) ---
+            elif preset == "PRESET 2":
+                if "999" in table_num:
+                    windows_hardware_beep(2500, 60); windows_hardware_beep(3000, 60); windows_hardware_beep(2500, 60); windows_hardware_beep(3000, 60)
+                elif "888" in table_num: 
+                    windows_hardware_beep(800, 80); windows_hardware_beep(1200, 80); windows_hardware_beep(1600, 80); windows_hardware_beep(2000, 150)
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(2500, 80); windows_hardware_beep(2000, 80); windows_hardware_beep(2500, 80)
+                elif "PA" in table_num: 
+                    [windows_hardware_beep(3200, 60) for _ in range(5)]
+                else: 
+                    windows_hardware_beep(1800, 80); windows_hardware_beep(1800, 80); windows_hardware_beep(1800, 80)
 
-            # --- 3. LES PA / POUR EMPORTER (Son Rapide) ---
-            elif "PA" in table_num:
-                # Triple bip très aigu et sec
-                winsound.Beep(1800, 80)
-                winsound.Beep(1800, 80)
+            # --- PACK 3 : PERCUTANT (Fréquences Lourdes) ---
+            elif preset == "PRESET 3":
+                if "999" in table_num:
+                    windows_hardware_beep(2000, 150); windows_hardware_beep(2000, 150); windows_hardware_beep(2000, 150)
+                elif "888" in table_num: 
+                    windows_hardware_beep(1000, 400); windows_hardware_beep(1000, 400)
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(1500, 150); windows_hardware_beep(1200, 150); windows_hardware_beep(900, 300)
+                elif "PA" in table_num: 
+                    windows_hardware_beep(1800, 100); windows_hardware_beep(1200, 100); windows_hardware_beep(1800, 100)
+                else: 
+                    windows_hardware_beep(1300, 350)
 
-            # --- 4. LE RESTE (Tables Normales / Salle) ---
-            else:
-                # Double bip standard original
-                winsound.Beep(1200, 200)
-                self.root.after(150, lambda: winsound.Beep(1200, 200))
+            # --- PACK 4 : ALERTES FLASH ---
+            elif preset == "PRESET 4":
+                if "999" in table_num:
+                    [windows_hardware_beep(2800, 50) for _ in range(6)]
+                elif "888" in table_num: 
+                    [windows_hardware_beep(2400, 70) for _ in range(6)]
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(1600, 300); windows_hardware_beep(2200, 300)
+                elif "PA" in table_num: 
+                    windows_hardware_beep(2600, 60); windows_hardware_beep(2600, 60); windows_hardware_beep(2600, 60)
+                else: 
+                    windows_hardware_beep(1500, 100); windows_hardware_beep(1500, 100)
+
+            # --- PACK 5 : MÉLODIQUE ---
+            elif preset == "PRESET 5":
+                if "999" in table_num:
+                    windows_hardware_beep(2200, 100); windows_hardware_beep(1500, 100); windows_hardware_beep(2200, 100)
+                elif "888" in table_num: 
+                    windows_hardware_beep(1200, 150); windows_hardware_beep(1700, 150); windows_hardware_beep(1200, 150)
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(1800, 150); windows_hardware_beep(1300, 150); windows_hardware_beep(1800, 150)
+                elif "PA" in table_num: 
+                    windows_hardware_beep(2100, 150); windows_hardware_beep(1900, 150); windows_hardware_beep(2100, 150)
+                else: 
+                    windows_hardware_beep(1100, 150); windows_hardware_beep(1500, 150)
+
+            # --- PACK 6 : RÉTRO BIPS ---
+            elif preset == "PRESET 6":
+                if "999" in table_num:
+                    windows_hardware_beep(4000, 60); windows_hardware_beep(3500, 60); windows_hardware_beep(3000, 60)
+                elif "888" in table_num: 
+                    windows_hardware_beep(1400, 200); windows_hardware_beep(1400, 200); windows_hardware_beep(1400, 200)
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(1800, 80); windows_hardware_beep(1600, 80); windows_hardware_beep(1400, 80)
+                elif "PA" in table_num: 
+                    windows_hardware_beep(3500, 120); windows_hardware_beep(3500, 120)
+                else: 
+                    windows_hardware_beep(1200, 150); windows_hardware_beep(1000, 150)
+
+            # --- PACK 7 : URGENCE ---
+            elif preset == "PRESET 7":
+                if "999" in table_num:
+                    [windows_hardware_beep(4200, 40) for _ in range(10)]
+                elif "888" in table_num: 
+                    windows_hardware_beep(3200, 250); windows_hardware_beep(3200, 250); windows_hardware_beep(3200, 250)
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(2800, 400); windows_hardware_beep(3500, 200)
+                elif "PA" in table_num: 
+                    [windows_hardware_beep(3800, 40) for _ in range(8)]
+                else: 
+                    windows_hardware_beep(3000, 150); windows_hardware_beep(3000, 150)
+
+            # --- PACK 8 : RYTHMIQUE ---
+            elif preset == "PRESET 8":
+                if "999" in table_num:
+                    windows_hardware_beep(1800, 80); time.sleep(0.02); windows_hardware_beep(1800, 150)
+                elif "888" in table_num: 
+                    windows_hardware_beep(1100, 100); windows_hardware_beep(1100, 100); time.sleep(0.05); windows_hardware_beep(1600, 300)
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(1400, 100); windows_hardware_beep(1400, 100); windows_hardware_beep(1100, 200)
+                elif "PA" in table_num: 
+                    windows_hardware_beep(2000, 80); windows_hardware_beep(2000, 80); time.sleep(0.04); windows_hardware_beep(2000, 120)
+                else: 
+                    windows_hardware_beep(1500, 150); windows_hardware_beep(1500, 80); windows_hardware_beep(1500, 80)
+
+            # --- PACK 9 : SPATIAL ---
+            elif preset == "PRESET 9":
+                if "999" in table_num:
+                    windows_hardware_beep(2000, 200); windows_hardware_beep(2500, 200)
+                elif "888" in table_num: 
+                    windows_hardware_beep(900, 300); windows_hardware_beep(1800, 400)
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(1700, 200); windows_hardware_beep(2100, 200); windows_hardware_beep(1700, 200)
+                elif "PA" in table_num: 
+                    windows_hardware_beep(2400, 100); windows_hardware_beep(2800, 100); windows_hardware_beep(2400, 100)
+                else: 
+                    windows_hardware_beep(1600, 350)
+
+            # --- PACK 10 : BUREAU ---
+            elif preset == "PRESET 10":
+                if "999" in table_num:
+                    [windows_hardware_beep(2000, 60) for _ in range(4)]
+                elif "888" in table_num: 
+                    windows_hardware_beep(1300, 150); windows_hardware_beep(1100, 150); windows_hardware_beep(1500, 200)
+                elif "LIV" in table_num: 
+                    windows_hardware_beep(1400, 150); windows_hardware_beep(1700, 150); windows_hardware_beep(1400, 150)
+                elif "PA" in table_num: 
+                    windows_hardware_beep(1900, 80); windows_hardware_beep(1900, 80); windows_hardware_beep(1900, 80); windows_hardware_beep(1900, 80)
+                else: 
+                    windows_hardware_beep(1300, 150); windows_hardware_beep(1300, 150)
 
         except Exception as e:
             logging.error(f"Erreur sonore: {e}")
@@ -1385,40 +1857,19 @@ class KDSGUI:
                   bg='#2980b9', fg='white', relief=tk.FLAT, bd=0
         ).pack(side=tk.RIGHT, padx=5)
 
-        # ⭐ Bouton de Configuration des Plats Principaux (Authentifié)
-        tk.Button(self.status_frame, 
-                  text="⚙️-P",
-                  command=self._authenticate_and_open_maindish_config, # Authentification OBLIGATOIRE
-                  font=('Segoe UI', 12, 'bold'),
-                  bg='#9b59b6', fg='white', relief=tk.FLAT, bd=0
-        ).pack(side=tk.RIGHT, padx=5)
-
-        tk.Button(self.status_frame, 
-                  text="⚙️-K",
-                  command=self._authenticate_and_open_konstant_manager, # Commande ajoutée en étape 1
-                  font=('Segoe UI', 12, 'bold'),
-                  bg='#8e44ad', fg='white', relief=tk.FLAT, bd=0 # Nouvelle couleur
-        ).pack(side=tk.RIGHT, padx=5)
-
-        tk.Button(self.status_frame,
-            text="⚙️-G", # Changé pour être plus pertinent au menu
-            command=self._open_config_menu, 
-            font=('Segoe UI', 12, 'bold'),
-            bg='#8e44ad', fg='white', relief=tk.FLAT, bd=0 # Orange/Ambre
-        ).pack(side=tk.RIGHT, padx=5)
-
-        # Bouton d'accès aux réglages et logs
-        self.print_toggle_button = tk.Button(
-            self.status_frame,
-            text="⚙️-L", 
-            command=self._open_log_viewer,
-            font=('Segoe UI', 12, 'bold'),
-            bg='#8e44ad',
-            fg='white',
-            bd=0,
-            relief=tk.FLAT
+        # Un seul bouton pour regrouper tous les réglages
+        self.master_settings_btn = tk.Button(
+            self.status_frame, 
+            text="⚙️ SETTINGS", 
+            font=('Segoe UI', 11, 'bold'),
+            bg='#8e44ad', fg='white', 
+            relief=tk.FLAT, bd=0,
+            padx=10, pady=5
         )
-        self.print_toggle_button.pack(side=tk.RIGHT, padx=5)
+        self.master_settings_btn.pack(side=tk.RIGHT, padx=5)
+
+        # On lie le clic gauche au menu popup
+        self.master_settings_btn.bind("<Button-1>", self._show_config_popup)
 
         tk.Button(self.status_frame,
                   text="🔄 RESET",
@@ -1465,32 +1916,38 @@ class KDSGUI:
                 relief=tk.FLAT, bd=0
         )
         self.btn_print_toggle.pack(side=tk.RIGHT, padx=5)
+
+        self.current_sound_preset = tk.StringVar(value="PRESET 1") # Pack par défaut
         
         # Positionnement (ajustez side/padx/pady selon l'agencement souhaité)
-        self.print_toggle_button.pack(side=tk.RIGHT, padx=5, pady=5)
 
         self.sound_button = tk.Button(self.status_frame,
-                  text="", # Laissez le texte initial vide, il sera défini par la méthode ci-dessous
+                  text="", 
                   command=self._toggle_sound, 
                   font=('Segoe UI', 12, 'bold'),
-                  # La couleur sera gérée par la méthode _update_sound_button_text
-                  bg='#27ae60', fg='white', relief=tk.FLAT, bd=0 
-        )
+                  bg='#27ae60', fg='white', relief=tk.FLAT, bd=0)
         self.sound_button.pack(side=tk.RIGHT, padx=5)
 
-        # Bouton Nettoyage Manuel (Livraison/Emporter)
-        self.clean_button = tk.Button(self.status_frame,
-                  text="🧹 NETTOYER", 
-                  command=self._manual_clean_types, 
-                  font=('Segoe UI', 12, 'bold'),
-                  bg='#2980b9', # Bleu
-                  fg='white', 
-                  relief=tk.FLAT, 
-                  bd=0 
+        # Liaison pour l'appui long (3 secondes)
+        self.sound_button.bind("<ButtonPress-1>", self._start_sound_timer)
+        self.sound_button.bind("<ButtonRelease-1>", self._stop_sound_timer)
+
+        self.clean_button = tk.Button(
+            self.status_frame,
+            text="🧹 NETTOYER", 
+            font=('Segoe UI', 12, 'bold'),
+            bg='#2980b9', # Bleu original
+            fg='white', 
+            relief=tk.FLAT, 
+            bd=0 
         )
         self.clean_button.pack(side=tk.RIGHT, padx=5)
 
+        self._press_time = 0
         
+        self.clean_button.bind("<ButtonPress-1>", self._on_press)
+        self.clean_button.bind("<ButtonRelease-1>", self._on_release)
+ 
 
         # Nouveau bouton INGRÉDIENTS à la place du RESET
         tk.Button(self.status_frame,
@@ -1521,6 +1978,9 @@ class KDSGUI:
         )
         self.btn_flash_pa.pack(side=tk.RIGHT, padx=5)
 
+        self.btn_flash_pa.bind("<ButtonPress-1>", self._on_pa_press)
+        self.btn_flash_pa.bind("<ButtonRelease-1>", self._on_pa_release)
+
         
         # 🔑 CRUCIAL: Appelez cette méthode immédiatement pour définir le texte initial ("🔔 Son ON") et la couleur.
         self._update_sound_button_text()
@@ -1534,7 +1994,204 @@ class KDSGUI:
         )
         self.postit_selector.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self._update_top_clock()
+    
+    
 
+    def _on_pa_press(self, event):
+        # On initialise un drapeau pour savoir si le menu a été ouvert
+        self.menu_opened = False
+        
+        # On définit une fonction qui sera appelée si on dépasse 5 secondes
+        def open_popup():
+            self.menu_opened = True
+            self._show_sound_config_popup(event)
+
+        # Lancement du timer
+        self.pa_timer = self.root.after(5000, open_popup)
+
+    def _on_pa_release(self, event):
+        if hasattr(self, 'pa_timer'):
+            # On annule le timer au relâchement
+            self.root.after_cancel(self.pa_timer)
+        
+        # Si le menu n'a PAS été ouvert, alors on effectue l'action normale du bouton PA
+        if not getattr(self, 'menu_opened', False):
+            self._trigger_pa_flash() # Remplacez par votre fonction d'action normale du PA
+        
+        # On réinitialise l'état
+        self.menu_opened = False
+
+    def _on_press(self, event):
+        self._press_time = time.time()
+        # On change la couleur immédiatement pour montrer que l'appui est détecté
+        self.clean_button.config(bg='#34495e') # Gris foncé/Bleu nuit pendant l'appui
+
+    def _on_release(self, event):
+        duration = time.time() - self._press_time
+        
+        if duration >= 3.0:
+            # ACTION LONGUE + FLASH DE CONFIRMATION
+            self._trigger_flash_and_action()
+        else:
+            # ACTION COURTE + RETOUR COULEUR NORMALE
+            self.clean_button.config(bg='#2980b9')
+            self._manual_clean_types()
+
+    def _trigger_flash_and_action(self):
+        """Fait flasher le bouton et lance l'action spéciale après confirmation."""
+        
+        # --- AJOUT DE LA CONFIRMATION ---
+        # On demande confirmation avant de tout effacer
+        if not self.custom_confirm("CONFIRMATION TOTALE", "Voulez-vous vraiment traiter TOUTES les commandes ?"):
+            self._reset_button_style() # On remet le bouton en bleu si annulé
+            return
+            
+        # Couleur de confirmation (Vert émeraude)
+        self.clean_button.config(bg='#27ae60', text="✅ ACTIVÉ")
+        
+        # Lancer l'action réelle ici
+        self._action_long_press()
+
+        # Remettre le bouton à son état normal après 2 secondes
+        self.clean_button.after(2000, self._reset_button_style)
+
+    def _reset_button_style(self):
+        """Remet le bouton dans son état initial."""
+        self.clean_button.config(bg='#2980b9', text="🧹 NETTOYER")
+
+    
+
+    def _authenticate_and_open_edit_config(self):
+        """Authentifie l'utilisateur avant d'ouvrir l'éditeur de configuration externe."""
+        if check_access_password("Éditeur de Configuration"):
+            self._open_edit_config_file()
+        else:
+            self.update_status("Accès à edit_config.py refusé (Authentification échouée).", 'red')
+
+    def _authenticate_and_open_cmd_tool(self):
+        """Authentifie l'utilisateur avant d'ouvrir l'éditeur de configuration externe."""
+        if check_access_password("CMD_TOOLS"):
+            self._open_edit_cmd_tool()
+        else:
+            self.update_status("Accès à edit_config.py refusé (Authentification échouée).", 'red')
+
+    def _open_edit_cmd_tool(self):
+        """Ouvre l'outil CMD par import direct."""
+        try:
+            self.update_status("Ouverture de l'outil système...", "green")
+            cmd_win = tk.Toplevel(self.root)    # Crée une sous-fenêtre
+            UltraWindowsBoosterTactile(cmd_win) # Initialise la classe dedans
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir l'outil CMD : {e}")
+    
+    def _authenticate_and_launch_popit(self):
+        """Authentifie avant d'importer et lancer le jeu."""
+        if check_access_password("PopIt Option"):
+            self._open_popit_game_internal()
+        else:
+            self.update_status("Accès PopIt refusé.", 'red')
+            
+    def _open_popit_game_internal(self):
+        """Lance le jeu PopIt dans un thread séparé en forçant le réveil de l'audio."""
+        if start_popit is None:
+            messagebox.showerror("Erreur", "Le module popit.py est introuvable.")
+            return
+
+        try:
+            import pygame
+            import os
+            
+            # 1. Si le KDS a verrouillé l'audio en 'dummy', on bascule sur un pilote Windows valide
+            if os.environ.get('SDL_AUDIODRIVER') == 'dummy':
+                # On essaie 'directsound' qui est plus moderne et mieux supporté que 'waveout'
+                os.environ['SDL_AUDIODRIVER'] = 'directsound'
+            
+            # 2. On force une réinitialisation propre du mixer
+            try:
+                if pygame.mixer.get_init():
+                    pygame.mixer.quit()
+                
+                # Essai 1 : Avec le pilote configuré (directsound)
+                pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
+                pygame.mixer.init()
+            except Exception as audio_err:
+                logging.warning(f"Échec directsound ({audio_err}), essai en mode auto par défaut...")
+                try:
+                    # Essai 2 : Si directsound bloque, on nettoie la variable et on laisse Windows décider
+                    if 'SDL_AUDIODRIVER' in os.environ:
+                        del os.environ['SDL_AUDIODRIVER']
+                    pygame.mixer.init()
+                except Exception as final_err:
+                    logging.error(f"Impossible de réveiller la carte son : {final_err}")
+
+            # 3. On lance le thread du jeu
+            game_thread = threading.Thread(target=start_popit, daemon=True)
+            game_thread.start()
+            
+            self.update_status("PopIt Ultra lancé (Audio forcé).", '#2ecc71')
+        except Exception as e:
+            logging.error(f"Erreur lors du lancement de PopIt : {e}")
+            self.update_status("Erreur de lancement PopIt.", 'red')
+    
+    def _authenticate_and_launch_salade(self):
+        """Authentifie avant d'importer et lancer le jeu de Salade."""
+        # On utilise "Salade Option" ou un autre libellé pour votre système de mot de passe
+        if check_access_password("Salade Option"):
+            self._open_salade_game_internal()
+        else:
+            self.update_status("Accès Salade refusé.", 'red')
+
+    def _open_salade_game_internal(self):
+        """Lance le jeu de Salade dans un thread séparé en forçant le réveil de l'audio."""
+        if start_salade is None:
+            messagebox.showerror("Erreur", "Le module salade_game.py est introuvable.")
+            return
+
+        try:
+            import pygame
+            import os
+            
+            # 1. Si le KDS a verrouillé l'audio en 'dummy', on bascule sur un pilote valide
+            if os.environ.get('SDL_AUDIODRIVER') == 'dummy':
+                # On force 'directsound' pour contourner le blocage du KDS
+                os.environ['SDL_AUDIODRIVER'] = 'directsound'
+            
+            # 2. Réinitialisation propre du mixer Pygame pour accrocher la carte son
+            try:
+                if pygame.mixer.get_init():
+                    pygame.mixer.quit()
+                
+                # Essai 1 : Avec le pilote directsound
+                pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
+                pygame.mixer.init()
+            except Exception as audio_err:
+                logging.warning(f"Échec directsound pour le jeu de Salade ({audio_err}), essai en mode auto...")
+                try:
+                    # Essai 2 : Si directsound coince, on laisse Windows choisir librement
+                    if 'SDL_AUDIODRIVER' in os.environ:
+                        del os.environ['SDL_AUDIODRIVER']
+                    pygame.mixer.init()
+                except Exception as final_err:
+                    logging.error(f"Impossible de réveiller la carte son pour la salade : {final_err}")
+
+            # 3. Le jeu se lancera maintenant avec l'audio prêt dans son thread
+            game_thread = threading.Thread(target=start_salade, daemon=True)
+            game_thread.start()
+            
+            self.update_status("Jeu de Salade lancé (Audio forcé).", '#2ecc71')
+        except Exception as e:
+            logging.error(f"Erreur Salade : {e}")
+            self.update_status("Erreur de lancement du jeu de Salade.", 'red')
+
+    def _open_edit_config_file(self):
+        """Lance l'éditeur de configuration dans une nouvelle fenêtre."""
+        try:
+            # Création d'une fenêtre de second niveau
+            config_win = tk.Toplevel(self.root)
+            # Initialisation de la classe avec la nouvelle fenêtre comme root
+            ProConfigManager(config_win)
+        except Exception as e:
+            logging.error(f"Erreur lors de l'ouverture de l'éditeur : {e}")
 
     def _show_burger_recipes(self):
         """Affiche le guide des recettes en chargeant TOUT depuis menu_config.json."""
@@ -1643,6 +2300,27 @@ class KDSGUI:
         try:
             # 1. Effectuer l'opération en base de données
             count = self.db_manager.mark_specific_types_as_done_manual()
+            
+            if count > 0:
+                self.update_status(f"Succès: {count} commandes traitées.", "#2ecc71")
+                
+                # 2. SÉCURITÉ : Utiliser 'after' pour forcer la mise à jour 
+                # dans le thread principal de Tkinter (évite les conflits graphiques)
+                self.root.after(0, self._refresh_ui_safely)
+                
+            else:
+                self.update_status("Aucune commande Livraison/Emporter à traiter.", "#f1c40f")
+                self.update_button_counts()
+                
+        except Exception as e:
+            logging.error(f"Erreur lors du nettoyage manuel : {e}")
+            self.update_status("Erreur lors du nettoyage.", "#e74c3c")
+
+    def _action_long_press(self):
+        """Déclenche manuellement le marquage des commandes spécifiques comme traitées."""
+        try:
+            # 1. Effectuer l'opération en base de données
+            count = self.db_manager.mark_specific_types_as_done_all()
             
             if count > 0:
                 self.update_status(f"Succès: {count} commandes traitées.", "#2ecc71")
@@ -1782,7 +2460,115 @@ class KDSGUI:
     # ----------------------------------------------------------
     
     
-                    
+    def _show_sound_config_popup(self, event):
+        top = tk.Toplevel(self.root)
+        top.overrideredirect(True)
+        top.attributes("-topmost", True)
+        
+        # Design propre et professionnel
+        menu_w, menu_h = 300, 480
+        x = event.x_root - (menu_w // 2)
+        y = event.y_root - menu_h - 20
+        top.geometry(f"{menu_w}x{menu_h}+{max(0, x)}+{max(0, y)}")
+        
+        # Fond uni pour un aspect plus sobre
+        top.configure(bg='#2c3e50', highlightbackground="#3498db", highlightthickness=2)
+
+        # Titre
+        lbl = tk.Label(top, text="🎵 SÉLECTION SON", bg='#2c3e50', fg='#ecf0f1', 
+                    font=('Segoe UI', 14, 'bold'), pady=20)
+        lbl.pack(fill=tk.X)
+
+        sounds = ["Aucun", "beep", "beepbeep", "code50", "notification_beep", "alerte"]
+
+        # Style des boutons pour tactile
+        btn_style = {
+            'font': ('Segoe UI', 12),
+            'bg': '#34495e',
+            'fg': 'white',
+            'activebackground': '#3498db', # Feedback visuel tactile
+            'activeforeground': 'white',
+            'relief': tk.FLAT,
+            'height': 2
+        }
+
+        # Liste des boutons
+        for s in sounds:
+            btn = tk.Button(top, text=s, **btn_style,
+                            command=lambda s=s: [self.save_sound_config(s), top.destroy()])
+            btn.pack(fill=tk.X, padx=20, pady=5)
+
+        # Bouton ANNULER en ROUGE
+        tk.Button(top, text="ANNULER", bg='#e74c3c', fg='white', relief=tk.FLAT,
+                font=('Segoe UI', 11, 'bold'), height=2,
+                command=top.destroy).pack(fill=tk.X, padx=20, pady=20)
+
+        # Permet de fermer si on clique ailleurs
+        top.bind("<FocusOut>", lambda e: top.destroy())
+        top.focus_set()
+    def _show_config_popup(self, event):
+        """Version adaptée au tactile : Fenêtre agrandie pour 7 options."""
+        # Créer une fenêtre flottante sans bordures
+        top = tk.Toplevel(self.root)
+        top.overrideredirect(True)  # Enlève la barre de titre
+        top.attributes("-topmost", True) # Reste au-dessus du KDS
+        top.configure(bg='#2c3e50', highlightbackground="#8e44ad", highlightthickness=2)
+
+        # --- AJUSTEMENT TAILLE ---
+        # Largeur 280 (plus large pour le texte) x Hauteur 450 (pour caser les 7 boutons)
+        menu_width = 280
+        menu_height = 660
+        
+        # Calcul de la position : On place le menu au dessus du bouton (y - menu_height)
+        x = event.x_root - (menu_width // 2)
+        y = event.y_root - menu_height - 10 
+        
+        # Sécurité : Si le menu sort de l'écran par le haut
+        if y < 0: y = 10
+        
+        top.geometry(f"{menu_width}x{menu_height}+{x}+{y}")
+
+        # Style des boutons : Plus de padding pour les gros doigts
+        btn_style = {
+            'font': ('Segoe UI', 11, 'bold'),
+            'bg': '#34495e',
+            'fg': 'white',
+            'activebackground': '#8e44ad',
+            'activeforeground': 'white',
+            'relief': tk.FLAT,
+            'height': 2, 
+            'pady': 8
+        }
+
+        # Tes 7 options
+        options = [
+            ("🎮 PopIt Ultra (P)", self._authenticate_and_launch_popit), # Ajout de l'option PopIt
+            ("🥗 Jeu de Salade (S)", self._authenticate_and_launch_salade),
+            ("🍳 Plats Principaux (P)", self._authenticate_and_open_maindish_config),
+            ("📝 Édition Config (C)", self._authenticate_and_open_edit_config),
+            ("🛠️ Outil Commande (T)", self._authenticate_and_open_cmd_tool),
+            ("📊 Konstant Manager (K)", self._authenticate_and_open_konstant_manager),
+            ("⚙️ Menu Général (G)", self._open_config_menu),
+            ("📋 Logs Système (L)", self._open_log_viewer),
+            ("❌ FERMER LE MENU", top.destroy)
+        ]
+
+        # Création des boutons
+        for text, cmd in options:
+            # On utilise une fonction de capture pour éviter les erreurs de callback
+            def make_cmd(c=cmd):
+                top.destroy()
+                if c != top.destroy: # Si ce n'est pas le bouton fermer
+                    c()
+                
+            btn = tk.Button(top, text=text, command=make_cmd, **btn_style)
+            # Ajout d'un petit espacement entre les boutons (pady=3)
+            btn.pack(fill=tk.X, padx=5, pady=3)
+
+        # Focus et fermeture automatique
+        top.bind("<FocusOut>", lambda e: top.destroy())
+        top.focus_set()
+
     def _open_log_viewer(self):
         """
         Demande le mot de passe puis propose d'ouvrir les Logs, Simulateurs ou gérer les Ports COM.

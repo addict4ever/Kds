@@ -3,15 +3,29 @@ import sys
 import shutil
 import cv2 # --- NOUVEAU : OpenCV ---
 import numpy as np # --- NOUVEAU : NumPy ---
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QLabel, QLineEdit, QPushButton, QFileDialog, QListWidget, 
-                             QListWidgetItem, QCheckBox, QProgressBar, QSplitter, 
-                             QFrame, QMessageBox, QAbstractItemView, QTreeView, 
-                             QMenu, QInputDialog) # QFileSystemModel a été retiré d'ici
-from PyQt6.QtGui import QPixmap, QIcon, QAction, QCursor, QFileSystemModel # Il est ICI
-from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal
-from PIL import Image, ImageOps, ImageFilter, ImageDraw
 
+# --- Imports PyQt6 regroupés ---
+from PyQt6.QtWidgets import (
+    QApplication, QSpinBox, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+    QLabel, QLineEdit, QPushButton, QFileDialog, QListWidget, 
+    QListWidgetItem, QCheckBox, QProgressBar, QSplitter, 
+    QFrame, QMessageBox, QAbstractItemView, QTreeView, 
+    QMenu, QInputDialog, QScrollArea, QColorDialog
+)
+
+from PyQt6.QtGui import (
+    QPixmap, QIcon, QAction, QCursor, QFileSystemModel,
+    QPainter, QColor, QPen, QImage, QShortcut, QKeySequence,
+    QTransform  # <--- AJOUTÉ pour la rotation 90°
+)
+
+from PyQt6.QtCore import (
+    Qt, QSize, QThread, pyqtSignal, QPoint, 
+    QRect       # <--- AJOUTÉ pour la gestion des zones de dessin
+)
+
+# --- Traitement d'image ---
+from PIL import Image, ImageOps, ImageFilter, ImageDraw
 # --- TES FONCTIONS DE TRAITEMENT (ORIGINALES) ---
 
 def get_content_ranges(data, min_size=5):
@@ -70,6 +84,262 @@ def find_sprite_locations_opencv(pil_img, min_area=500):
     return all_sprites
 
 # --- WORKER THREAD POUR LE TRAITEMENT ---
+
+from PyQt6.QtWidgets import QScrollArea, QColorDialog
+from PyQt6.QtGui import QPainter, QColor, QPen, QImage, QPixmap
+from PyQt6.QtCore import Qt, QPoint
+import os
+
+class ClickableLabel(QLabel):
+    def __init__(self, parent_editor):
+        super().__init__()
+        self.editor = parent_editor
+        self.setMouseTracking(True)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.editor.save_to_history()
+            self.editor.draw_at_pixel(event.pos())
+        elif event.button() == Qt.MouseButton.RightButton:
+            self.editor.pick_color(event.pos())
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self.editor.draw_at_pixel(event.pos())
+
+class SpriteEditor(QMainWindow):
+    def __init__(self, image_path):
+        super().__init__()
+        self.image_path = image_path
+        self.image = QImage(image_path).convertToFormat(QImage.Format.Format_ARGB32)
+        self.setWindowTitle(f"Éditeur Pixel Pro - {os.path.basename(image_path)}")
+        
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(int(screen.width() * 0.8), int(screen.height() * 0.8))
+
+        # --- PARAMÈTRES ---
+        self.zoom = 20
+        self.brush_size = 4
+        self.brush_color = QColor(255, 255, 255)
+        self.is_erasing = True
+        self.show_grid = True
+        self.history = []
+        self.save_to_history()
+
+        self.init_editor_ui()
+        self.setup_shortcuts()
+
+    def init_editor_ui(self):
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.main_layout = QVBoxLayout(self.central_widget)
+
+        # --- BARRE D'OUTILS ---
+        toolbar = QHBoxLayout()
+        
+        # Outils de base
+        btn_pencil = QPushButton("✏️")
+        btn_pencil.setToolTip("Crayon")
+        btn_pencil.clicked.connect(self.set_pencil)
+        
+        btn_eraser = QPushButton("🧽")
+        btn_eraser.setToolTip("Gomme")
+        btn_eraser.clicked.connect(self.set_eraser)
+
+        # Taille
+        toolbar.addWidget(QLabel(" Taille:"))
+        self.size_spin = QSpinBox()
+        self.size_spin.setRange(1, 20)
+        self.size_spin.setValue(self.brush_size)
+        self.size_spin.valueChanged.connect(self.set_brush_size)
+        toolbar.addWidget(self.size_spin)
+
+        # Couleur
+        self.color_preview = QPushButton()
+        self.update_color_preview()
+        self.color_preview.clicked.connect(self.choose_color)
+        toolbar.addWidget(self.color_preview)
+
+        toolbar.addSpacing(10)
+
+        # --- ZOOM ET UNDO (RÉINTÉGRÉS) ---
+        btn_undo = QPushButton("↩️")
+        btn_undo.setToolTip("Annuler (Ctrl+Z)")
+        btn_undo.clicked.connect(self.undo)
+
+        btn_z_in = QPushButton("➕")
+        btn_z_in.setToolTip("Zoom Avant")
+        btn_z_in.clicked.connect(lambda: self.adjust_zoom(5))
+
+        btn_z_out = QPushButton("➖")
+        btn_z_out.setToolTip("Zoom Arrière")
+        btn_z_out.clicked.connect(lambda: self.adjust_zoom(-5))
+
+        # --- OUTILS DE TRANSFORMATION ---
+        btn_flip_v = QPushButton("↕️")
+        btn_flip_v.clicked.connect(self.flip_vertical)
+
+        btn_rotate = QPushButton("🔄")
+        btn_rotate.clicked.connect(self.rotate_90)
+
+        btn_invert = QPushButton("🌈")
+        btn_invert.clicked.connect(self.invert_colors)
+
+        btn_clear = QPushButton("🗑️")
+        btn_clear.clicked.connect(self.clear_all)
+
+        btn_center = QPushButton("🎯")
+        btn_center.clicked.connect(lambda: self.set_zoom(20))
+
+        self.grid_check = QCheckBox("🏁")
+        self.grid_check.setChecked(True)
+        self.grid_check.stateChanged.connect(self.toggle_grid)
+
+        btn_save = QPushButton("💾 SAUVEGARDER")
+        btn_save.setStyleSheet("background-color: #2E7D32; color: white; font-weight: bold; padding: 5px 15px;")
+        btn_save.clicked.connect(self.save_image)
+        
+        # Ajout à la barre
+        for w in [btn_pencil, btn_eraser, btn_undo, btn_z_in, btn_z_out, btn_flip_v, 
+                   btn_rotate, btn_invert, btn_clear, btn_center, self.grid_check]:
+            toolbar.addWidget(w)
+        
+        toolbar.addStretch()
+        toolbar.addWidget(btn_save)
+        self.main_layout.addLayout(toolbar)
+
+        # Zone de dessin
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scroll_area.setStyleSheet("background-color: #050505;")
+
+        self.canvas = ClickableLabel(self)
+        self.canvas.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scroll_area.setWidget(self.canvas)
+        self.main_layout.addWidget(self.scroll_area)
+
+        self.refresh_canvas()
+
+    def draw_at_pixel(self, pos):
+        # Calcul précis du pixel central sous la souris
+        center_x = pos.x() // self.zoom
+        center_y = pos.y() // self.zoom
+        
+        target_color = QColor(0, 0, 0, 0) if self.is_erasing else self.brush_color
+        
+        # Précision de l'effacement/dessin selon la taille
+        half = self.brush_size // 2
+        changed = False
+
+        for dx in range(-half, self.brush_size - half):
+            for dy in range(-half, self.brush_size - half):
+                x, y = center_x + dx, center_y + dy
+                if 0 <= x < self.image.width() and 0 <= y < self.image.height():
+                    if self.image.pixelColor(x, y) != target_color:
+                        self.image.setPixelColor(x, y, target_color)
+                        changed = True
+        if changed:
+            self.refresh_canvas()
+
+    def pick_color(self, pos):
+        x, y = pos.x() // self.zoom, pos.y() // self.zoom
+        if 0 <= x < self.image.width() and 0 <= y < self.image.height():
+            picked = self.image.pixelColor(x, y)
+            if picked.alpha() > 0:
+                self.brush_color = picked
+                self.is_erasing = False
+                self.update_color_preview()
+
+    def rotate_90(self):
+        self.save_to_history()
+        self.image = self.image.transformed(QTransform().rotate(90))
+        self.refresh_canvas()
+
+    def flip_vertical(self):
+        self.save_to_history()
+        self.image = self.image.mirrored(False, True)
+        self.refresh_canvas()
+
+    def invert_colors(self):
+        self.save_to_history()
+        self.image.invertPixels(QImage.InvertMode.InvertRgb)
+        self.refresh_canvas()
+
+    def clear_all(self):
+        if QMessageBox.question(self, "Confirmer", "Vider tout le sprite ?") == QMessageBox.StandardButton.Yes:
+            self.save_to_history()
+            self.image.fill(QColor(0, 0, 0, 0))
+            self.refresh_canvas()
+
+    def adjust_zoom(self, delta):
+        new_zoom = self.zoom + delta
+        if 2 <= new_zoom <= 100:
+            self.zoom = new_zoom
+            self.refresh_canvas()
+
+    def set_zoom(self, val):
+        self.zoom = val
+        self.refresh_canvas()
+
+    def set_brush_size(self, val): self.brush_size = val
+    def set_pencil(self): self.is_erasing = False
+    def set_eraser(self): self.is_erasing = True
+    def toggle_grid(self): self.show_grid = self.grid_check.isChecked(); self.refresh_canvas()
+
+    def update_color_preview(self):
+        self.color_preview.setStyleSheet(f"background-color: {self.brush_color.name()}; border: 2px solid white; min-width: 30px;")
+
+    def refresh_canvas(self):
+        w, h = self.image.width() * self.zoom, self.image.height() * self.zoom
+        pixmap = QPixmap(w, h)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(pixmap)
+        # Damier de transparence
+        d_size = self.zoom
+        for i in range(0, w, d_size*2):
+            for j in range(0, h, d_size*2):
+                painter.fillRect(i, j, d_size, d_size, QColor(25, 25, 25))
+                painter.fillRect(i+d_size, j+d_size, d_size, d_size, QColor(25, 25, 25))
+        
+        painter.drawImage(pixmap.rect(), self.image)
+
+        if self.show_grid and self.zoom > 4:
+            painter.setPen(QPen(QColor(100, 100, 100, 50), 1))
+            for x in range(0, w + 1, self.zoom): painter.drawLine(x, 0, x, h)
+            for y in range(0, h + 1, self.zoom): painter.drawLine(0, y, w, y)
+        painter.end()
+        self.canvas.setPixmap(pixmap)
+
+    def save_to_history(self):
+        if len(self.history) > 30: self.history.pop(0)
+        self.history.append(QImage(self.image))
+
+    def undo(self):
+        if len(self.history) > 1:
+            self.history.pop()
+            self.image = QImage(self.history[-1])
+            self.refresh_canvas()
+
+    def choose_color(self):
+        color = QColorDialog.getColor(self.brush_color, self, "Couleur")
+        if color.isValid():
+            self.brush_color = color
+            self.is_erasing = False
+            self.update_color_preview()
+
+    def save_image(self):
+        # Sauvegarde le sprite en PNG
+        if self.image.save(self.image_path, "PNG"):
+            # Produit un petit son système pour confirmer la réussite
+            QApplication.beep()
+
+    def setup_shortcuts(self):
+        QShortcut(QKeySequence("Ctrl+Z"), self).activated.connect(self.undo)
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self.save_image)
+        QShortcut(QKeySequence("Ctrl++"), self).activated.connect(lambda: self.adjust_zoom(5))
+        QShortcut(QKeySequence("Ctrl+-"), self).activated.connect(lambda: self.adjust_zoom(-5))
 
 class ProcessorThread(QThread):
     progress = pyqtSignal(int)
@@ -249,6 +519,8 @@ class SpriteManagerApp(QMainWindow):
         self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
+        # Connecter le double-clic à l'ouverture de l'éditeur
+        self.list_widget.itemDoubleClicked.connect(self.open_in_editor)
 
         # Panneau de réglages de découpe
         slice_panel = QFrame()
@@ -298,6 +570,34 @@ class SpriteManagerApp(QMainWindow):
             self.list_widget.addItem(item)
 
     # --- MENU CLIC-DROIT (FONCTIONS DE GESTION) ---
+
+    def open_in_editor(self, item):
+        path = item.data(Qt.ItemDataRole.UserRole)
+        
+        # 1. Vérification de l'existence du fichier
+        if not path or not os.path.exists(path):
+            return
+
+        # 2. Vérification de l'extension (pour ignorer .json, .py, etc.)
+        valid_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.webp')
+        if not path.lower().endswith(valid_extensions):
+            QMessageBox.warning(self, "Format non supporté", 
+                                "Ce fichier n'est pas une image éditable.")
+            return
+
+        # 3. Tentative d'ouverture sécurisée
+        try:
+            # On vérifie si l'image est lisible par QImage avant d'ouvrir la fenêtre
+            test_img = QImage(path)
+            if test_img.isNull():
+                raise ValueError("L'image semble corrompue ou illisible.")
+
+            # Si tout est OK, on lance l'éditeur
+            self.editor = SpriteEditor(path)
+            self.editor.show()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur d'ouverture", f"Impossible d'ouvrir l'éditeur : {str(e)}")
 
     def show_context_menu(self, pos):
         items = self.list_widget.selectedItems()

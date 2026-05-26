@@ -63,7 +63,7 @@
         <div class="kds-column order-wrapper" data-livreur="{{ item.livreur if item.livreur else '' }}"
              style="display: {{ 'block' if (not item.livreur or show_all) else 'none' }};">
             
-            <div class="kds-card {{ 'assigned' if item.livreur }}  {{ 'pulse-red' if item.is_new }}" 
+            <div class="kds-card collapsed {{ 'assigned' if item.livreur }}  {{ 'pulse-red' if item.is_new }}" 
                 id="order-{{ bid }}" 
                 data-livraison-no="{{ ns.found_no }}"
                 ondblclick="handleDblClick('{{ bid }}')">
@@ -90,7 +90,41 @@
                         <div style="margin-bottom: 8px;">
                             <strong style="font-size: 1.4rem; color: #0f31f1;">LIVRAISON : {{ ns.found_no if ns.found_no != "" else "???" }}</strong>
                         </div>
+                        <div class="d-flex flex-column mt-2 mb-3">
+                            <div class="extras-row d-flex justify-content-between mb-2">
+                                {# Heure #}
+                                {% if item.extras.desired_time and item.extras.desired_time != 'HEURE' %}
+                                <div id="btn-heure-{{ bid }}" class="extra-box extra-selected">
+                                    {{ item.extras.desired_time }}
+                                </div>
+                                {% endif %}
 
+                                {# Ustensiles #}
+                                {% if item.extras.utensils and item.extras.utensils != 'UST' %}
+                                <div id="btn-ust-{{ bid }}" class="extra-box extra-selected">
+                                    {{ item.extras.utensils }}
+                                </div>
+                                {% endif %}
+
+                                {# Note #}
+                                {% if item.extras.custom_note and item.extras.custom_note != 'NOTE' %}
+                                <div id="btn-note-{{ bid }}" class="extra-box extra-selected">
+                                    {{ item.extras.custom_note }}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            {# Sauces #}
+                            {% if item.extras.sauces and item.extras.sauces != 'SAUCES' %}
+                            <div class="sauce-row mb-2">
+                                <div id="btn-sauce-{{ bid }}" 
+                                    class="extra-box w-100 extra-selected-sauce" 
+                                    style="text-align: center; justify-content: center;">
+                                    {{ item.extras.sauces }}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
                         {# 3. Affichage du bloc Info Client (Adresse + Tél) #}
                         {% for raw_it in item.data['items'] %}
                             {% set it = raw_it | from_json %}
@@ -124,40 +158,6 @@
                         
 
                         <div class="d-flex flex-column mt-2 mb-3">
-                            <div class="extras-row d-flex justify-content-between mb-2">
-                                {# Heure : masqué si 'HEURE' ou vide #}
-                                {% if item.extras.desired_time and item.extras.desired_time != 'HEURE' %}
-                                <div id="btn-heure-{{ bid }}" class="extra-box extra-selected">
-                                    {{ item.extras.desired_time }}
-                                </div>
-                                {% endif %}
-
-                                {# Ustensiles : masqué si 'UST' ou vide #}
-                                {% if item.extras.utensils and item.extras.utensils != 'UST' %}
-                                <div id="btn-ust-{{ bid }}" class="extra-box extra-selected">
-                                    {{ item.extras.utensils }}
-                                </div>
-                                {% endif %}
-
-                                {# Note : masqué si 'NOTE' ou vide #}
-                                {% if item.extras.custom_note and item.extras.custom_note != 'NOTE' %}
-                                <div id="btn-note-{{ bid }}" class="extra-box extra-selected">
-                                    {{ item.extras.custom_note }}
-                                </div>
-                                {% endif %}
-                            </div>
-
-                            {# Sauces : masqué si 'SAUCES' ou vide #}
-                            {% if item.extras.sauces and item.extras.sauces != 'SAUCES' %}
-                            <div class="sauce-row mb-2">
-                                <div id="btn-sauce-{{ item.bid }}" 
-                                    class="extra-box w-100 extra-selected-sauce" 
-                                    style="text-align: center; justify-content: center;">
-                                    {{ item.extras.sauces }}
-                                </div>
-                            </div>
-                            {% endif %}
-
                             
                             
                             {% if item.livreur %}
@@ -246,6 +246,18 @@
     </div>
 </div>
 
+<div id="kds-alert-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:25000; align-items:center; justify-content:center;">
+    <div style="background:#1a1a1a; border:3px solid #e74c3c; padding:40px; border-radius:25px; max-width:550px; width:90%; text-align:center; color:white; box-shadow: 0 0 50px rgba(231, 76, 60, 0.3);">
+        <div id="kds-alert-icon" style="font-size: 70px; margin-bottom: 20px;">❌</div>
+        <h2 id="kds-alert-title" style="font-weight: 900; font-size: 2.5rem; text-transform: uppercase; color: #e74c3c;">Action Impossible</h2>
+        <p id="kds-alert-message" style="font-size: 22px; margin-bottom: 35px; white-space: pre-line; line-height: 1.4; color: #ecf0f1;"></p>
+        <div style="display: flex; justify-content: center;">
+            <button id="kds-alert-close-btn" class="btn btn-danger" style="min-width: 200px; height: 80px; font-size: 1.8rem; font-weight: 800; border-radius: 15px; background-color: #e74c3c !important; border: none;">
+                D'ACCORD
+            </button>
+        </div>
+    </div>
+</div>
 
 <div id="modal-livreur" style="display:none; position:fixed; z-index:10005; background: rgba(0,0,0,0.9); top:0; left:0; width:100%; height:100%; ">
     <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #f1c40f; padding:30px; border-radius:30px; min-width:450px; box-shadow: 0 0 50px rgba(241, 196, 15, 0.2);">
@@ -362,13 +374,92 @@
             <h5 class="text-info mb-3" style="font-weight: 900; font-size: 1.5rem;">➕ NOUVEAU LIVREUR</h5>
             <div class="input-group" style="height: 100px;">
                 <input type="text" id="new-livreur-name" 
-                       class="form-control bg-dark text-white" 
-                       placeholder="NOM DU LIVREUR" 
-                       style="font-size: 2.5rem; font-weight: 900; border: 3px solid #555; padding-left: 25px;"
-                       onkeypress="if(event.key === 'Enter') addNewLivreur()">
+                    class="form-control bg-dark text-white" 
+                    placeholder="NOM DU LIVREUR" 
+                    style="font-size: 2.5rem; font-weight: 900; border: 3px solid #555; padding-left: 25px; cursor: pointer;"
+                    onkeypress="if(event.key === 'Enter') addNewLivreur()"
+                    onclick="openVirtualKeyboard()"
+                    readonly>
                 <button class="btn btn-success" onclick="addNewLivreur()" style="width: 200px; font-size: 1.8rem; font-weight: 900; text-transform: uppercase;">
                     AJOUTER
                 </button>
+            </div>
+        </div>
+
+        <div id="html-virtual-keyboard" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20, 20, 20, 0.98); border-top: 4px solid #00bc8c; padding: 20px; z-index: 99999; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); backdrop-filter: blur(5px);">
+            
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span style="color: #00bc8c; font-weight: 900; font-size: 1.3rem; text-transform: uppercase;">Saisie Tactile : Nom du Livreur</span>
+                <button class="btn btn-danger btn-lg" onclick="closeVirtualKeyboard()" style="font-weight: 900; font-size: 1.4rem; padding: 10px 30px; border-radius: 10px;">
+                    ❌ FERMER
+                </button>
+            </div>
+
+            <style>
+                .kbd-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 10px; }
+                .kbd-btn { 
+                    flex: 1; height: 75px; min-width: 50px; max-width: 90px;
+                    background: #2b2b2b; color: white; border: 2px solid #555; 
+                    border-radius: 12px; font-size: 1.8rem; font-weight: 900; 
+                    display: flex; align-items: center; justify-content: center;
+                    user-select: none; cursor: pointer; transition: background 0.1s;
+                }
+                .kbd-btn:active { background: #00bc8c !important; color: black !important; border-color: #fff !important; }
+                .kbd-special { max-width: 160px; background: #3a3a3a; font-size: 1.3rem; text-transform: uppercase; }
+                .kbd-space { max-width: 500px; background: #3a3a3a; }
+                .kbd-enter { background: #28a745; border-color: #20c997; font-size: 1.3rem; max-width: 160px; }
+            </style>
+
+            <div class="keyboard-container">
+                <div class="kbd-row">
+                    <div class="kbd-btn" onclick="pressKbd('1')">1</div>
+                    <div class="kbd-btn" onclick="pressKbd('2')">2</div>
+                    <div class="kbd-btn" onclick="pressKbd('3')">3</div>
+                    <div class="kbd-btn" onclick="pressKbd('4')">4</div>
+                    <div class="kbd-btn" onclick="pressKbd('5')">5</div>
+                    <div class="kbd-btn" onclick="pressKbd('6')">6</div>
+                    <div class="kbd-btn" onclick="pressKbd('7')">7</div>
+                    <div class="kbd-btn" onclick="pressKbd('8')">8</div>
+                    <div class="kbd-btn" onclick="pressKbd('9')">9</div>
+                    <div class="kbd-btn" onclick="pressKbd('0')">0</div>
+                    <div class="kbd-btn kbd-special" style="background: #dc3545;" onclick="pressKbd('BACKSPACE')">⌫ Effacer</div>
+                </div>
+                <div class="kbd-row">
+                    <div class="kbd-btn" onclick="pressKbd('A')">A</div>
+                    <div class="kbd-btn" onclick="pressKbd('Z')">Z</div>
+                    <div class="kbd-btn" onclick="pressKbd('E')">E</div>
+                    <div class="kbd-btn" onclick="pressKbd('R')">R</div>
+                    <div class="kbd-btn" onclick="pressKbd('T')">T</div>
+                    <div class="kbd-btn" onclick="pressKbd('Y')">Y</div>
+                    <div class="kbd-btn" onclick="pressKbd('U')">U</div>
+                    <div class="kbd-btn" onclick="pressKbd('I')">I</div>
+                    <div class="kbd-btn" onclick="pressKbd('O')">O</div>
+                    <div class="kbd-btn" onclick="pressKbd('P')">P</div>
+                    <div class="kbd-btn" onclick="pressKbd('-')">-</div>
+                </div>
+                <div class="kbd-row">
+                    <div class="kbd-btn" onclick="pressKbd('Q')">Q</div>
+                    <div class="kbd-btn" onclick="pressKbd('S')">S</div>
+                    <div class="kbd-btn" onclick="pressKbd('D')">D</div>
+                    <div class="kbd-btn" onclick="pressKbd('F')">F</div>
+                    <div class="kbd-btn" onclick="pressKbd('G')">G</div>
+                    <div class="kbd-btn" onclick="pressKbd('H')">H</div>
+                    <div class="kbd-btn" onclick="pressKbd('J')">J</div>
+                    <div class="kbd-btn" onclick="pressKbd('K')">K</div>
+                    <div class="kbd-btn" onclick="pressKbd('L')">L</div>
+                    <div class="kbd-btn" onclick="pressKbd('M')">M</div>
+                    <div class="kbd-btn" onclick="pressKbd('.')">.</div>
+                </div>
+                <div class="kbd-row">
+                    <div class="kbd-btn" onclick="pressKbd('W')">W</div>
+                    <div class="kbd-btn" onclick="pressKbd('X')">X</div>
+                    <div class="kbd-btn" onclick="pressKbd('C')">C</div>
+                    <div class="kbd-btn" onclick="pressKbd('V')">V</div>
+                    <div class="kbd-btn" onclick="pressKbd('B')">B</div>
+                    <div class="kbd-btn" onclick="pressKbd('N')">N</div>
+                    <div class="kbd-btn kbd-space" onclick="pressKbd(' ')">ESPACE</div>
+                    <div class="kbd-btn kbd-enter" onclick="pressKbd('ENTER')">✔ VALIDER</div>
+                </div>
             </div>
         </div>
 
@@ -471,6 +562,8 @@
             activeEl.isContentEditable
         );
 
+        const savedStates = JSON.parse(localStorage.getItem('kds_collapsed_states') || '{}');
+
         // 3. BLOCAGE DU REFRESH
         if (isModalOpen || isUserTyping || (typeof isEditing !== 'undefined' && isEditing)) {
             console.log("⚠️ Refresh suspendu : Modale ouverte ou saisie en cours...");
@@ -550,14 +643,22 @@
                     document.querySelectorAll('.kds-card').forEach(card => {
                         const bid = card.id.replace('order-', '');
 
-                        // Restaurer Collapsed
-                        if (stateMap[card.id]) {
+                        // --- LOGIQUE DE MÉMOIRE ---
+                        // Si on a un état enregistré, on l'utilise. 
+                        // Sinon (nouvelle commande), on la met en 'collapsed' (réduite) par défaut.
+                        const isCollapsed = (savedStates[bid] !== undefined) ? savedStates[bid] : true;
+
+                        if (isCollapsed) {
                             card.classList.add('collapsed');
                             const headerSpan = card.querySelector('.card-header span:last-child');
                             if (headerSpan) headerSpan.innerText = '➕';
+                        } else {
+                            card.classList.remove('collapsed');
+                            const headerSpan = card.querySelector('.card-header span:last-child');
+                            if (headerSpan) headerSpan.innerText = '➖';
                         }
 
-                        // ⭐ Ré-appliquer le Cadre Rouge si modifiée
+                        // ⭐ Ré-appliquer le Cadre Rouge si modifiée (Ton code existant)
                         if (modifiedOrders.includes(bid)) {
                             card.classList.add('pulse-red');
                         }
@@ -579,6 +680,40 @@
             })
             .catch(err => console.error("Erreur refresh KDS:", err));
     }
+
+    function openVirtualKeyboard() {
+        const kbd = document.getElementById('html-virtual-keyboard');
+        if (kbd) {
+            kbd.style.display = 'block';
+        }
+    }
+
+    function closeVirtualKeyboard() {
+        const kbd = document.getElementById('html-virtual-keyboard');
+        if (kbd) {
+            kbd.style.display = 'none';
+        }
+    }
+
+    function pressKbd(key) {
+        const inputField = document.getElementById('new-livreur-name');
+        if (!inputField) return;
+
+        if (key === 'BACKSPACE') {
+            // Efface le dernier caractère
+            inputField.value = inputField.value.slice(0, -1);
+        } else if (key === 'ENTER') {
+            // Ferme le clavier et déclenche l'action de sauvegarde existante
+            closeVirtualKeyboard();
+            if (typeof addNewLivreur === 'function') {
+                addNewLivreur();
+            }
+        } else {
+            // Ajoute la lettre ou le chiffre cliqué (converti automatiquement en majuscule)
+            inputField.value += key.toUpperCase();
+        }
+    }
+    
 
     function showToast(message, color = "#2ecc71") {
         const toast = document.getElementById('custom-toast');
@@ -746,7 +881,27 @@
         });
     }
 
-    function renameLivreur(ancienNom) {
+    async function renameLivreur(ancienNom) {
+        // 1. BLOCAGE SÉCURITÉ : On cherche toutes les commandes attribuées à ce livreur sur l'écran KDS
+        let commandesAttribuees = document.querySelectorAll(`#kds-ajax-zone [data-livreur="${ancienNom}"]`);
+        let nbCommandes = commandesAttribuees.length;
+
+        // On vérifie également s'il a un casier actif affiché en haut
+        let casierDuHaut = document.getElementById("casier-" + ancienNom);
+        const estActifActuel = (casierDuHaut !== null);
+
+        // 2. Si le livreur est actif ET qu'il a des commandes en cours -> ON COUPE TOUT
+        if (estActifActuel && nbCommandes > 0) {
+            await ouvrirKdsAlerte(
+                "Modification Impossible", 
+                `Impossible de renommer "${ancienNom.toUpperCase()}" car son casier contient encore ${nbCommandes} commande(s) active(s).\n\nVeuillez d'abord vider son casier (livrer ou remettre en attente) avant de modifier son nom.`,
+                "❌",
+                "#e74c3c" // Rouge alerte
+            );
+            return; // On stoppe la fonction ici, la modale de renommage ne s'ouvrira pas
+        }
+
+        // 3. CODE D'ORIGINE : S'exécute uniquement si le casier est vide
         nomActuelPourRename = ancienNom;
         const modal = document.getElementById('modal-rename-livreur');
         const input = document.getElementById('rename-input-field');
@@ -838,27 +993,83 @@
         });
     }
     
-    function toggleLivreurStatus(nom) {
-        fetch('/api/livreurs/toggle_status', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-App-Access': 'MonApplicationUnique123!' // Ta clé de sécurité définie dans web_access.py
-            },
-            body: JSON.stringify({ nom: nom })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                // Optionnel : Afficher le toast avant de recharger
-                const toast = document.getElementById('admin-custom-toast');
+    // Fonction pour ouvrir la boîte de message personnalisée
+function ouvrirKdsAlerte(titre, message, icone = "❌", couleurBord = "#e74c3c") {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('kds-alert-modal');
+        const btnFermer = document.getElementById('kds-alert-close-btn');
+        const box = modal.querySelector('div');
+        
+        document.getElementById('kds-alert-title').innerText = titre;
+        document.getElementById('kds-alert-title').style.color = couleurBord;
+        document.getElementById('kds-alert-message').innerText = message;
+        document.getElementById('kds-alert-icon').innerText = icone;
+        box.style.borderColor = couleurBord;
+        btnFermer.style.backgroundColor = couleurBord;
+
+        // Affichage en mode Flex
+        modal.style.display = 'flex';
+
+        // Événement au clic sur "D'ACCORD"
+        btnFermer.onclick = function() {
+            modal.style.display = 'none';
+            resolve(); // Libère le 'await' dans la fonction principale
+        };
+    });
+}
+
+// Votre fonction principale modifiée en ASYNC
+async function toggleLivreurStatus(nom) {
+    // 1. On cherche toutes les commandes attribuées à ce livreur sur l'écran KDS
+    let commandesAttribuees = document.querySelectorAll(`#kds-ajax-zone [data-livreur="${nom}"]`);
+    let nbCommandes = commandesAttribuees.length;
+
+    // 2. On vérifie également si le livreur cliqué est actuellement actif
+    let casierDuHaut = document.getElementById("casier-" + nom);
+    const estActifActuel = (casierDuHaut !== null);
+
+    // 3. BLOCAGE RÉEL avec la nouvelle Modale
+    if (estActifActuel && nbCommandes > 0) {
+        // L'utilisation de await force le script à attendre le clic sur "D'ACCORD"
+        await ouvrirKdsAlerte(
+            "Action Impossible", 
+            `Le casier de "${nom.toUpperCase()}" possède encore ${nbCommandes} commande(s) active(s) à l'écran.\n\nVeuillez d'abord les remettre en attente ou les livrer.`,
+            "❌",
+            "#e74c3c" // Rouge
+        );
+        return; // On stoppe tout ici, le serveur Python ne sera pas appelé
+    }
+
+    // 4. TA REQUÊTE D'ORIGINE : S'exécute si aucune commande n'est trouvée ou si on réactive le livreur
+    fetch('/api/livreurs/toggle_status', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-App-Access': 'MonApplicationUnique123!' // Clé d'origine
+        },
+        body: JSON.stringify({ nom: nom })
+    })
+    .then(response => response.json())
+    .then(async data => { // Ajout de async ici pour pouvoir utiliser await sur l'erreur serveur
+        if (data.status === 'success') {
+            const toast = document.getElementById('admin-custom-toast');
+            if (toast) {
                 document.getElementById('admin-toast-message').innerText = data.message;
                 toast.style.display = 'block';
-                
-                setTimeout(() => { location.reload(); }, 800);
             }
-        });
-    }
+            
+            setTimeout(() => { location.reload(); }, 800);
+        } else {
+            // Remplacement du alert() en cas d'erreur renvoyée par Python
+            await ouvrirKdsAlerte(
+                "Erreur", 
+                data.message || "Impossible de changer le statut.",
+                "⚠️",
+                "#f1c40f" // Couleur jaune / orange pour l'alerte serveur
+            );
+        }
+    });
+}
 
     function checkAssignGroup(bid, livreurNom) {
         const currentCard = document.getElementById(`order-${bid}`);
@@ -1411,53 +1622,29 @@
         const card = document.getElementById('order-' + bid);
         if (!card) return;
 
-        // 1. Gérer l'animation mauve (Acquittement de la notification)
-        // On vérifie les deux classes possibles (pulse-mauve de votre CSS ou flash-mauve)
+        // 1. Gestion des notifications (votre code existant)
         if (card.classList.contains('pulse-red') || card.classList.contains('flash-mauve')) {
-            card.classList.remove('pulse-red');
-            card.classList.remove('flash-red');
-            card.classList.add('not-new'); // Applique le style standard des commandes lues
-
-            // Retirer du localStorage pour que l'effet ne revienne pas au rafraîchissement local
+            card.classList.remove('pulse-red', 'flash-red');
+            card.classList.add('not-new');
             let modifiedOrders = JSON.parse(localStorage.getItem('modified_orders') || '[]');
-            if (modifiedOrders.includes(bid)) {
-                modifiedOrders = modifiedOrders.filter(id => id !== bid);
-                localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
-            }
-
-            // Optionnel : Envoyer une requête spécifique pour marquer comme "lu" côté serveur
-            // Cela permet de s'assurer que item.is_new passera à False
-            
+            modifiedOrders = modifiedOrders.filter(id => id !== bid);
+            localStorage.setItem('modified_orders', JSON.stringify(modifiedOrders));
         }
 
-        // 2. Bascule visuelle de l'affichage (Ouverture/Fermeture)
-        // Note : Si vous avez supprimé la classe 'collapsed' de votre HTML, 
-        // cette partie gérera l'affichage du contenu interne.
-        const content = card.querySelector('.card-content');
+        // 2. Bascule visuelle
         const isCollapsed = card.classList.toggle('collapsed');
-        
-        if (content) {
-            content.style.display = isCollapsed ? 'none' : 'block';
-        }
-        
-        // 3. Mise à jour de l'icône (➕/➖)
         const headerSpan = card.querySelector('.card-header span:last-child');
         if (headerSpan) {
             headerSpan.innerText = isCollapsed ? '➕' : '➖';
         }
 
-        // 4. Appel serveur pour synchroniser l'état de réduction (collapsed)
-        fetch(`/toggle_view/${bid}`, { method: 'POST' })
-        .then(response => {
-            if (!response.ok) {
-                // En cas d'erreur, on remet l'état visuel précédent
-                card.classList.toggle('collapsed');
-                if (content) content.style.display = card.classList.contains('collapsed') ? 'none' : 'block';
-            }
-        })
-        .catch(err => {
-            console.error("Erreur toggle_view:", err);
-        });
+        // --- ⭐ NOUVEAU : Mémorisation de l'état ---
+        let collapsedStates = JSON.parse(localStorage.getItem('kds_collapsed_states') || '{}');
+        collapsedStates[bid] = isCollapsed; // On stocke true si réduit, false si ouvert
+        localStorage.setItem('kds_collapsed_states', JSON.stringify(collapsedStates));
+
+        // 3. Synchronisation serveur (votre code existant)
+        fetch(`/toggle_view/${bid}`, { method: 'POST' }).catch(err => console.error(err));
     }
     
     function assignLivreur(bid, nom, shouldRefresh) {
