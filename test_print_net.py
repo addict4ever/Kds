@@ -47,7 +47,7 @@ TICKETS_LIBRARY = {
         b'\x1br\x00  27-01-2026\n'
         b'\x1b!2\x1br\x00   TABLE # 302\n'
         b'\x1b!\x12\x1br\x00 \x1b!2  1\x1b!\x12 DEMI LASAGNE\n'
-        b'\x1br\x01   \x1b!2  1\x1b!\x12 VIANDE\x1br\x01\n'
+        b'\x1br\x01   \x1b!2  1\x1b!\x12 BRUN\x1br\x01\n'
         b'\n###############################\n' b'\x1bd\t\x1bi'
     ),
     "Table 32 (Soupe & Lasagne) - ASCII": (
@@ -81,7 +81,8 @@ TICKETS_LIBRARY = {
         b'\x1b!\x12Heure: 16:18:12\n'
         b'\x1b!\x12 8-01-2026\n'
         b'\x1br\x00    POUR EMPORTE #1\n\n'
-        b'\x1b!2 1 * MINI SPECIAL\n'
+        b'\x1b!2 2 MINI SPECIAL\n'
+        b'\x1b!1 POISSON\n'
         b'\x1b!\x12 1 * pas trop croute\n'
         b'\n###############################\n'
         b'\x1bd\t\x1bi'
@@ -133,8 +134,17 @@ class ProfessionalPOSDebugger:
         else:
             self.root = master
 
-        self.root.title("POS ENGINE PRO - V4.0")
+        # --- SÉCURITÉ MAXIMUM ---
+        # Empêche Alt+F4
+        self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
+        # Empêche Alt+Tab, Alt+Esc, etc. (Windows seulement)
+        self.root.bind("<Alt-F4>", self.disable_event)
+        self.root.bind("<Alt-Tab>", self.disable_event)
+        self.root.bind("<Alt-Escape>", self.disable_event)
+
+        self.root.title("Test Impression Réseaux")
         self.root.configure(bg=BG_DARK)
+
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         self.is_running = False
@@ -144,6 +154,10 @@ class ProfessionalPOSDebugger:
         self._setup_styles()
         self._setup_ui()
         self.refresh_interfaces()
+
+    def disable_event(self, event=None):
+        """Fonction qui ne fait rien pour bloquer les tentatives de fermeture."""
+        return "break"
 
     def _setup_styles(self):
         style = ttk.Style()

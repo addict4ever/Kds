@@ -52,6 +52,8 @@ SERIAL_TCP_COMPUTER_PORT_1 = 9200        # Port de l'imprimante cible
 
 MAX_TICKET_SIZE = 1048576
 
+SERIAL_PORT2_SLEEP = 6
+
 ESC_POS_STATUS_QUERIES = [b'\x10\x04\x01', b'\x10\x04\x02', b'\x10\x04\x03', b'\x10\x04\x04']
 # Réponse standard "Prêt / Papier OK / Capot fermé"
 ESC_POS_STATUS_READY = b'\x12'
@@ -61,17 +63,27 @@ BUFFER_SIZE_TCP = 4096
 
 # --- FONCTION DE LOGGING GLOBALE (GARDÉE EN HAUT POUR L'UTILISATION IMMÉDIATE) ---
 def _log_activity(message: str, category: str = "INFO"):
+    # 1. Définir le nom du dossier
+    log_dir = "logs"
+    
+    # 2. Créer le dossier s'il n'existe pas (évite les erreurs de crash)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        
     date_str = datetime.now().strftime('%Y%m%d')
-    log_filename = f"kds_serial_log_{date_str}.txt"
+    # 3. On ajoute le chemin du dossier au nom du fichier
+    log_filename = os.path.join(log_dir, f"kds_serial_log_{date_str}.txt")
+    
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] 
     log_message = f"[{timestamp}] [{category.upper()}] {message}\n"
     
     try:
+        # L'écriture se fait maintenant dans logs/kds_serial_log_YYYYMMDD.txt
         with open(log_filename, 'a', encoding='utf-8') as f:
             f.write(log_message)
     except Exception as e:
-        print(f"[LOG_ERROR] Échec de l'écriture du log: {e} - Message original: {log_message.strip()}")
-
+        # Très important pour débugger tes ports série sans perdre l'erreur
+        print(f"[LOG_ERROR] Échec de l'écriture dans {log_filename}: {e}")
 
 def load_print_filters():
     # Tes paramètres par défaut (si le fichier n'existe pas)
@@ -435,6 +447,8 @@ class SerialReader(threading.Thread):
         self.printer_2_queue = queue.Queue()
         threading.Thread(target=self._worker_printer_2, daemon=True).start()
 
+        SERIAL_PORT2_SLEEP = 6
+
         # --- 2. CONFIGURATION DES PORTS KDS ---
         self.ports_config = {
             1: {"port": SERIAL_PORT,   "attr": "serial_port",   "buffer": "input_buffer"},
@@ -484,18 +498,29 @@ class SerialReader(threading.Thread):
             # On attend qu'un ticket arrive dans la file
             raw_data = self.printer_2_queue.get()
             try:
-                # On envoie à l'imprimante
+                # --- LOGIQUE DE FLUX INTELLIGENTE ---
+                # On regarde combien de tickets attendent derrière celui-ci
+                pending_tickets = self.printer_2_queue.qsize()
+
+                # On envoie d'abord les données à l'imprimante
                 SerialReader._write_to_output_port(
                     raw_data,
                     SERIAL_PORT_PRINTER_2,
                     "Imprimante 2"
                 )
-                # ⭐ ICI : On attend que l'imprimante finisse physiquement d'imprimer
-                # Si une facture prend 14s, on attend 15s pour être sûr.
-                time.sleep(10.0) 
+
+                # Si on a un "rush" (3 tickets ou plus en attente), on applique le délai
+                # pour laisser l'imprimante finir physiquement sans saturer le port.
+                if pending_tickets >= 3:
+                    time.sleep(SERIAL_PORT2_SLEEP)
+                else:
+                    # Sinon, on ne met pas de délai (ou un très court de 0.1s si nécessaire)
+                    pass
+
             except Exception as e:
                 _log_activity(f"Erreur worker Imprimante 2: {e}", "SERIAL_ERROR")
             finally:
+                # Marque la tâche comme terminée pour la file d'attente
                 self.printer_2_queue.task_done()
 
     def _async_process_ticket(self, ticket_bytes, source_name, is_print_enabled):

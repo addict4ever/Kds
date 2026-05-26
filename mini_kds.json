@@ -1,0 +1,47 @@
+{
+  "config_version": "1.0",
+  "modes_comptage": [
+    {
+      "id": 0,
+      "prefix": "MÉNAGE",
+      "targets": ["MENAGE BLANC", "MENAGE BRUN"],
+      "labels": ["BL", "BR"]
+    },
+    {
+      "id": 1,
+      "prefix": "TOAST",
+      "targets": ["PAIN BLANC", "PAIN BRUN"],
+      "labels": ["BL", "BR"]
+    },
+    {
+      "id": 2,
+      "prefix": "MIDI",
+      "targets": ["DOIGTS MIDI", "FISH MIDI"],
+      "labels": ["DOIGTS", "FISH"]
+    },
+    {
+      "id": 3,
+      "prefix": "CUISINE",
+      "targets": ["BR. POULET", "SOLE MEUNIERE"],
+      "labels": ["POULET", "SOLE"]
+    },
+    {
+      "id": 4,
+      "prefix": "SAUCE",
+      "targets": ["BBQ", "BRUNE"],
+      "labels": ["BBQ", "BRUNE"]
+    },
+    {
+      "id": 5,
+      "prefix": "SALADE",
+      "targets": ["CESAR", "CHEF"],
+      "labels": ["CÉSAR", "CHEF"]
+    }
+  ],
+  "regles_speciales": {
+    "SUPER SAND": {
+      "multiplicateur": 2,
+      "description": "Compte pour deux unités de pain"
+    }
+  }
+}

@@ -118,7 +118,7 @@ class PizzeriaApp(QMainWindow):
         self.tabs.addTab(tab, " ⌨️ CLAVIER D'ENVOI ")
 
     def create_web_tab(self, url, title):
-        """Navigateur Web plein écran avec contrôles tactiles."""
+        """Navigateur Web plein écran avec contrôles tactiles et User-Agent personnalisé."""
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -127,8 +127,8 @@ class PizzeriaApp(QMainWindow):
         nav_bar.setContentsMargins(10, 10, 10, 10)
         
         btn_refresh = QPushButton(f" 🔄 {title} ")
-        btn_refresh.setMinimumHeight(20) # Hauteur réduite
-        btn_refresh.setMinimumWidth(200) # Largeur fixe pour éviter qu'il prenne tout l'écran
+        btn_refresh.setMinimumHeight(20) 
+        btn_refresh.setMinimumWidth(200) 
         btn_refresh.setStyleSheet("""
             background-color: #333; color: white; font-weight: bold; 
             font-size: 16px; border-radius: 10px; border: 1px solid #555;
@@ -142,11 +142,18 @@ class PizzeriaApp(QMainWindow):
         browser = QWebEngineView()
         browser.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         
+        # --- CONFIGURATION DU USER-AGENT ---
+        # On définit l'identifiant personnalisé pour passer la sécurité de web_access.py
+        custom_agent = "MaSuperAppKDS/2.0"
+        browser.page().profile().setHttpUserAgent(custom_agent)
+        
         settings = browser.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         
+        # Chargement de l'URL après avoir configuré le User-Agent
         browser.setUrl(QUrl(url))
+        
         btn_refresh.pressed.connect(browser.reload)
         
         layout.addWidget(browser)

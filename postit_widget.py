@@ -17,6 +17,7 @@ import re
 # -----------------------------------------------
 # 🎯 Fichier de configuration global
 CONFIG_FILE = 'config_gui.json'
+COLOR_KEYWORDS_FILE = 'color_keywords.json'
 
 MAX_ITEM_DISPLAY_HEIGHT = 300 # Hauteur maximale en pixels pour l'affichage des items avant troncature
 CONFIRM_BG = '#34495e'
@@ -25,6 +26,26 @@ BUTTON_COLOR_YES = '#2ecc71'
 BUTTON_COLOR_NO = '#e74c3c'
 SUB_ITEM_POLICE = 13
 MAIN_ITEM_POLICE = 12
+
+def _load_color_keywords():
+    """ Charge les dictionnaires de couleurs (Hex) et leurs mots-clés associés. """
+    # On utilise maintenant les codes Hex comme clés pour correspondre à la boucle dynamique
+    defaults = {
+        "#FF1493": ["BROUILLE", "TOURNE BC", "TOURNE", "MIRROIR", "MIROIR", "*", "DONNER"],
+        "#D2B48C": ["MENAGE BLANC", "MENAGE BRUN", "BRUN", "BLANC", "BAGUEL BLANC", "BAGUEL BRUN", "BAGEUL", "PAIN"],
+        "#FFD700": ["TRAD", "FORESTIERE", "DEJEUNER"]
+    }
+    
+    if os.path.exists(COLOR_KEYWORDS_FILE):
+        try:
+            with open(COLOR_KEYWORDS_FILE, 'r', encoding='utf-8') as f:
+                # Le JSON chargé remplacera les defaults s'il existe
+                return json.load(f)
+        except Exception as e:
+            print(f"Erreur lors du chargement du fichier de couleurs : {e}")
+            
+    return defaults
+
 
 def _load_config() -> dict:
     """
@@ -80,6 +101,8 @@ def _load_config() -> dict:
 
 # 🚀 APPEL CRITIQUE: Déclaration de la variable globale qui contient toute la configuration
 KDS_CONFIG = _load_config() 
+# On charge les mots-clés une seule fois au démarrage
+KEYWORDS = _load_color_keywords()
 
 # ----------------------------------------------------------------------------------
 # OPTIONNEL: Si vous souhaitez déclarer chaque constante individuellement pour l'ancien code:
@@ -821,7 +844,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         self.postit_frame = tk.Frame(self.column_frame, bg=CARD_BG, padx=CARD_PADDING, pady=CARD_PADDING, bd=0, 
                                         width=CARD_WIDTH, highlightthickness=0, highlightbackground=CARD_BG)
         
-        self.border_frame = tk.Frame(self.postit_frame, bg=STATUS_COLORS.get(self.status, BG_MAIN), bd=0)
+        self.border_frame = tk.Frame(self.postit_frame, bg=header_color, bd=0)
         self.border_frame.pack(fill=tk.BOTH, expand=True)
         self.content_frame = tk.Frame(self.border_frame, bg=CARD_BG, padx=1, pady=1)
         self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=2, pady=2)
@@ -837,7 +860,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
 
         # On utilise ici header_color au lieu de COLOR_TEXT
         self.header_label = tk.Label(header_frame, text=header_text,
-                                        font=('Segoe UI', 18, 'bold'), fg=header_color, bg=CARD_BG)
+                                        font=('Segoe UI', 14, 'bold'), fg=header_color, bg=CARD_BG)
         self.header_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # LIAISON DE LA LONGUE PRESSION (inchangé)
@@ -955,22 +978,17 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
             full_ticket_items_content += f"{item_data['main_item']}\n"
 
             for sub_item in item_data.get('sub_items', []):
-                # 1. Nettoyage et mise en majuscules pour la comparaison
                 sub_upper = sub_item.upper()
-
-                # Rose : Cuissons
-                mots_rose = ["BROUILLE", "TOURNE BC", "TOURNE", "MIRROIR", "MIROIR", "*", "DONNER"]
                 
-                # Brun Pâle : Pains
-                mots_brun = ["MENAGE BLANC", "MENAGE BRUN", "BRUN", "BLANC", "BAGUEL BLANC", "BAGUEL BRUN", "BAGEUL" , "PAIN"]
+                # Par défaut, on utilise la couleur standard
+                sub_fg = COLOR_TEXT 
 
-                # --- LOGIQUE DE COULEUR ---
-                if any(mot in sub_upper for mot in mots_rose):
-                    sub_fg = "#FF1493"  # Rose
-                elif any(mot in sub_upper for mot in mots_brun):
-                    sub_fg = "#D2B48C"  # Brun pâle (Tan)
-                else:
-                    sub_fg = COLOR_TEXT  # Couleur par défaut
+                # --- DÉTECTION DYNAMIQUE DES COULEURS ---
+                # On boucle sur chaque couleur définie dans le JSON
+                for color_hex, keywords in KEYWORDS.items():
+                    if any(mot in sub_upper for mot in keywords):
+                        sub_fg = color_hex
+                        break  # On a trouvé la couleur, on arrête de chercher pour ce sous-item
 
                 # 3. Création du Label
                 sub_item_label = tk.Label(
@@ -984,12 +1002,13 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 )
                 sub_item_label.pack(fill=tk.X, padx=15)
                 
-                # Sauvegarde la couleur pour ne pas la perdre quand on raye l'item
+                # Sauvegarde la couleur pour la gestion de la rature (clic gauche)
                 sub_item_label.original_fg = sub_fg
                 
-                # Lier le clic pour rayer
+                # Liaison du clic pour rayer l'item
                 sub_item_label.bind("<Button-1>", lambda e, w=sub_item_label: self._toggle_single_strike(w))
                 
+                # Archivage
                 self.item_widgets_map[item_index]['sub_item_labels'].append(sub_item_label)
                 full_ticket_items_content += f"  → {sub_item}\n"
         

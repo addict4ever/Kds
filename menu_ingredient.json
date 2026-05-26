@@ -1,12 +1,33 @@
 {
     "couleurs_tags": {
-        "sauce": {"color": "#ff9f43", "keywords": ["MAYONNAISE", "SAUCE", "PESTO", "ITALIENNE", "VINAIGRETTE", "MAYO", "CÉSAR", "TARTARE"]},
-        "jaune": {"color": "#f1c40f", "keywords": ["FROMAGE", "FETA", "SUISSE", "FONDU", "CHEDDAR", "PARMESAN", "BEURRE", "AIL"]},
-        "viande": {"color": "#ff7675", "keywords": ["STEAK", "BACON", "PEPPERONI", "JAMBON", "MIGNON", "FILET"]},
-        "mer": {"color": "#00d2d3", "keywords": ["CREVETTES", "LANGOUSTINES", "SOLE", "POISSON", "FISH", "MER"]},
-        "legume": {"color": "#55efc4", "keywords": ["SALADE", "TOMATE", "OIGNON", "PIMENT", "OLIVE", "CHAMPIGNON", "LAITUE", "CORNICHON", "ORIGAN", "CONCOMBRE", "CHOU", "BETTERAVE", "LUZERNE", "CITRON", "CÂPRES"]},
-        "gris": {"color": "#dfe6e9", "keywords": ["RIZ", "FRITES", "CROÛTONS", "LÉGUMES"]},
-        "brun": {"color": "#ccae62", "keywords": ["PATATE", "ANCIENNES"]}
+        "sauce": {
+            "color": "#ff9f43", 
+            "keywords": ["MAYONNAISE", "SAUCE", "PESTO", "ITALIENNE", "VINAIGRETTE", "MAYO", "CÉSAR", "TARTARE", "SALSA", "BLANCHE", "COTES LEVEES", "SPAGHETTI"]
+        },
+        "jaune": {
+            "color": "#f1c40f", 
+            "keywords": ["FROMAGE", "FETA", "SUISSE", "FONDU", "CHEDDAR", "PARMESAN", "BEURRE", "AIL", "MOZZARELLA", "COGRUENT", "NOIX DE CAJOUX"]
+        },
+        "viande": {
+            "color": "#ff7675", 
+            "keywords": ["STEAK", "BACON", "PEPPERONI", "JAMBON", "MIGNON", "FILET", "POULET", "CÔTES LEVÉES"]
+        },
+        "mer": {
+            "color": "#00d2d3", 
+            "keywords": ["CREVETTES", "LANGOUSTINES", "SOLE", "POISSON", "FISH", "MER", "CRABE", "PÉTONCLES"]
+        },
+        "legume": {
+            "color": "#55efc4", 
+            "keywords": ["SALADE", "TOMATE", "OIGNON", "PIMENT", "OLIVE", "CHAMPIGNON", "LAITUE", "CORNICHON", "ORIGAN", "CONCOMBRE", "CHOU", "BETTERAVE", "LUZERNE", "CITRON", "CÂPRES", "5 PIMENT ROUGE", "ANANAS", "ZUCCHINIS", "CŒURS DE PALMIER", "PIMENTS FORTS", "CHOUX FLEUR", "BROCOLI", "CLEMENTINE"]
+        },
+        "gris": {
+            "color": "#dfe6e9", 
+            "keywords": ["RIZ", "FRITES", "CROÛTONS", "LÉGUMES", "RAMEN", "NOUILLE THAÏ", "MACARONI"]
+        },
+        "brun": {
+            "color": "#ccae62", 
+            "keywords": ["PATATE", "ANCIENNES"]
+        }
     },
     "categories": {
         "🍔 BURGERS": {
@@ -15,9 +36,24 @@
             "4 FROMAGES": "MAYONNAISE CITRONNÉE POIVRÉE, Fromages, Salade, Tomates, Oignons",
             "A LA GRECQUE": "MAYONNAISE PESTO, Fromage FETA, Oignons Rouges, Olives Noires, Salade, Tomates"
         },
+        "🍚 RIZ": {
+            "RIZ AU POULET": "Poulet, Champignon, Piment, Riz",
+            "RIZ AUX LÉGUMES": "Champignon, Piment, Choux Fleur, Brocoli, Riz"
+        },
         "🍕 PIZZAS": {
-            "LA GRECQUE": "Sauce Tomate, Fromage, Feta, Olives Noires, Oignons Rouges, Tomates, Origan",
-            "LA GARNIE": "Sauce Tomate, Fromage, Pepperoni, Champignons, Piments Verts"
+            "LA SPÉCIALE": "Sauce Pizza, Sauce Spaghetti, Pepperoni, Fromage, Oignons, Bacon, Piments, Champignons",
+            "LA GARNIE": "Sauce Pizza, Pepperoni, Fromage, Piments, Champignons",
+            "LA VÉGÉTARIENNE": "Sauce Pizza, Zucchinis, Cœurs de Palmier, Tomates, Fromage, Piments, Champignons",
+            "LA FAJITAS": "Sauce Salsa, Poulet, Oignons, Tomates, Fromage, Piments, Champignons",
+            "LA FRUITS DE MER": "Sauce Blanche, Crabe, Crevettes, Pétoncles, Fromage, Champignons",
+            "LA CÔTES LEVÉES": "Sauce Côtes Levées, Morceaux de Côtes Levées, Fromage",
+            "LA GRECQUE": "Sauce Pizza, Fromage Feta, Mozzarella, Olives Noires, Tomates, Oignons",
+            "LA 4 FROMAGES": "Sauce Pizza, Mozzarella, Cogruent (Suisse), Cheddar Jaune, Parmesan",
+            "LA MEXICAINE": "Sauce Salsa, Pepperoni, Fromage, Piments Verts, Piments Forts",
+            "LA CHAMPIGNONS": "Sauce Pizza, Fromage, Champignons",
+            "LA PEPPERONI": "Sauce Pizza, Pepperoni, Fromage",
+            "LA FROMAGE": "Sauce Pizza, Fromage",
+            "L'ANANAS": "Sauce Pizza, Jambon, Fromage, Bacon, Ananas"
         },
         "🥖 SOUS-MARINS": {
             "MAISON": "Jambon, Tomates, Bacon, Pepperoni, Fromage, Salade",
@@ -25,7 +61,11 @@
         },
         "🥗 SALADES": {
             "SALADE CÉSAR": "Laitue Romaine, Croûtons, Bacon, Fromage Parmesan, Câpres, Sauce César",
-            "SALADE DU CHEF": "Laitue, Tomates, Concombres, Oignons, Chou Rouge, Betteraves, Luzerne, 1 pot de Mayonnaise, Vinaigrette Chef"
+            "SALADE DU CHEF": "Laitue, Tomates, Concombres, Oignons, Chou Rouge, Betteraves, Luzerne, 1 pot de Mayonnaise, Vinaigrette Chef",
+            "SALADE VARIÉE AU JAMBON": "Jambon, Salade Patate, Salade Macaroni, Salade de Choux, Salade du Chef",
+            "SALADE VARIÉE AU POULET": "Poulet, Salade Patate, Salade Macaroni, Salade de Choux, Salade du Chef",
+            "SALADE THAÏ AU POULET": "Poulet, Salade Ramen, Noix de Cajoux, Nouille Thaï, Clementine, Ananas, 5 Piment Rouge",
+            "SALADE THAÏ AUX CREVETTES": "Crevettes Panées, Salade Ramen, Noix de Cajoux, Nouille Thaï, Clementine, Ananas, 5 Piment Rouge"
         },
         "🐟 POISSONS": {
             "FILET DE SOLE": "Filet de Sole, Citron, Frites, Légumes, Sauce Tartare, Salade du Chef",
