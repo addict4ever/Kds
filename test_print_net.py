@@ -38,6 +38,7 @@ TICKETS_LIBRARY = {
         b'\x1br\x00   1 FAM. POUTINE         $17.99  FP\n'
         b'\x1br\x00   Frais de livrais       $2.50  FP\n'
         b'\x1br\x00\n      TOT:     $53.44\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\x1b!2\x1br\x00 LIVRAISON #301\n' b'\x1bd\t\x1bi'
     ),
     "Cuisine #302 (Lasagne)": (
@@ -47,6 +48,7 @@ TICKETS_LIBRARY = {
         b'\x1br\x00  27-01-2026\n'
         b'\x1b!2\x1br\x00   TABLE # 302\n'
         b'\x1b!\x12\x1br\x00 \x1b!2  1\x1b!\x12 DEMI LASAGNE\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\x1br\x01   \x1b!2  1\x1b!\x12 BRUN\x1br\x01\n'
         b'\n###############################\n' b'\x1bd\t\x1bi'
     ),
@@ -61,6 +63,7 @@ TICKETS_LIBRARY = {
         b'\x1b!2\x1br\x00  1\x1b!\x12 SOUPE MIDI\n'
         b'\x1br\x00    \x1b!\x12 -> *LEGUMES\n'
         b'\x1br\x00    \x1b!\x12 -> menage blanc\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n' b'\x1bd\t\x1bi'
         
         # --- SERVICE # 2 (1/2 Lasagne) ---
@@ -72,6 +75,7 @@ TICKETS_LIBRARY = {
         b'\x1b!\x12\x1br\x00        ** SERVICE # 2 **\n'
         b'\x1b!2\x1br\x00  1\x1b!\x12 1/2 LASAGNE\n'
         b'\x1br\x00    \x1b!\x12 -> *GRATINEE\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n' b'\x1bd\t\x1bi'
     ),
     "Emporter #1 (Mini Special)": (
@@ -84,6 +88,7 @@ TICKETS_LIBRARY = {
         b'\x1b!2 2 MINI SPECIAL\n'
         b'\x1b!1 POISSON\n'
         b'\x1b!\x12 1 * pas trop croute\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n'
         b'\x1bd\t\x1bi'
     ),
@@ -94,10 +99,12 @@ TICKETS_LIBRARY = {
         b'\x1br\x00        2026-01-27 10:52:14\n'
         b'\x1b!2\x1br\x00\x1b!\x12     ADDITION #998629-1\n'
         b'\x1b!2\x1br\x00   TRANS #017K\n'
-        b'\x1br\x00   1 DEMI LASAGNE           $0.00\n'
-        b'\x1br\x00   1 * VIANDE                $13.99  FP\n'
+        b'\x1br\x00   1 DEMI LASAGNE   TPS:        $0.00\n'
+        b'\x1br\x00   1 * VIANDE        TVQ        $13.99  FP\n'
         b'\x1br\x00\n      TOT:     $18.95\n'
         b'\x1b!2\x1br\x00 LIVRAISON #302\n' b'\x1bd\t\x1bi'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
+        b'\n###############################\n' b'\x1bd\t\x1bi'
     ),
     "Cuisine #302 (Mini Garnie)": (
         b'\x1b@' b'\x1b!2\x1br\x00 PRINCIPALE\x1b!\x12\n'
@@ -106,6 +113,17 @@ TICKETS_LIBRARY = {
         b'\x1br\x00  27-01-2026\n'
         b'\x1b!2\x1br\x00   TABLE # 302\n'
         b'\x1b!\x12\x1br\x00 \x1b!2  1\x1b!\x12 MINI GARNIE\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
+        b'\n###############################\n' b'\x1bd\t\x1bi'
+    ),
+    "Cuisine dejeuner (menage)": (
+        b'\x1b!2\x1br\x00 PRINCIPALE\x1b!\x12\n'
+        b'\x1b!2\x1br\x00    COMMANDE\n'
+        b'\x1br\x00 Heure: 11:05:42\n'
+        b'\x1br\x00  27-01-2026\n'
+        b'\x1b!2\x1br\x00   TABLE # 102\n'
+        b'\x1b!\x12\x1br\x00 \x1b!2  1\x1b!\x12 MENAGE BLANC\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n' b'\x1bd\t\x1bi'
     ),
     "Addition Livraison #320 (8 Eime Ave)": (
@@ -122,7 +140,9 @@ TICKETS_LIBRARY = {
         b'\n' b'\x1br\x00  TOT:      $47.22\n' b'\n'
         b'\x1br\x00      VOUS AVEZ SERVI\n'
         b'\x1br\x00        PAR : LIVRAISON\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\x1b!2\x1br\x00LIVRAISON #320\n' b'\x1bd\t\x1bi'
+        b'\n###############################\n' b'\x1bd\t\x1bi'
     )
 }
 

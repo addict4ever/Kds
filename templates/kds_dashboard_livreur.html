@@ -19,29 +19,31 @@
             </button>
             
 
-            <div class="casiers-container" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+            <div class="casiers-container" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 {% for nom in livreurs_actifs %}
                 {% set nb = stats.get(nom, 0) %}
                 <div class="casier-card" onclick="filterByLivreur('{{ nom }}')" id="casier-{{ nom }}"
-                    style="background: #222; border: 3px solid #3498db; padding: 15px; border-radius: 15px; min-width: 140px; text-align: center; cursor: pointer;">
-                    <div style="font-size: 1.2rem; color: #aaa; font-weight: bold;">{{ nom }}</div>
-                    <div style="font-size: 2.5rem; color: white; font-weight: 900;">00</div>
+                    style="background: #222; border: 2px solid #3498db; padding: 7px; border-radius: 8px; min-width: 70px; text-align: center; cursor: pointer;">
+                    <div style="font-size: 0.6rem; color: #aaa; font-weight: bold;">{{ nom }}</div>
+                    <div style="font-size: 1.25rem; color: white; font-weight: 900;">00</div>
                 </div>
                 {% endfor %}
+                
                 <div class="casier-card" onclick="openAdminLivreurModal()" 
-                    style="background-color: #2c3e50; border-color: #95a5a6; min-width: 80px; width: 80px; display: flex; justify-content: center; align-items: center;">
-                    <div style="font-size: 2rem; color: #ecf0f1;"><i class="fas fa-cog"></i></div>
+                    style="background-color: #2c3e50; border-color: #95a5a6; min-width: 40px; padding: 7px; border-radius: 8px; display: flex; justify-content: center; align-items: center;">
+                    <div style="font-size: 1rem; color: #ecf0f1;"><i class="fas fa-cog"></i></div>
                 </div>
+                
                 <div class="casier-card" onclick="enableAudio()" id="btn-audio-enable" 
-                    style="background-color: #8e44ad; border-color: #fff; min-width: 120px; width: 120px; cursor: pointer;">
-                    <div class="casier-name" style="color: white; font-size: 1rem !important;">AUDIO</div>
-                    <div class="casier-count" style="color: white; font-size: 1.8rem !important;">🔊</div>
+                    style="background-color: #8e44ad; border-color: #fff; min-width: 60px; padding: 7px; border-radius: 8px; cursor: pointer;">
+                    <div class="casier-name" style="color: white; font-size: 0.5rem !important;">AUDIO</div>
+                    <div class="casier-count" style="color: white; font-size: 0.9rem !important;">🔊</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row row-cols-5 g-2" id="kds-ajax-zone">
+    <div class="row row-cols-7 g-2" id="kds-ajax-zone">
         {% for bid, item in livraisons.items() %}
             {# --- INITIALISATION ET RECHERCHE DU NUMÉRO --- #}
             {% set ns = namespace(found_no="") %}
@@ -86,29 +88,30 @@
                             {% endif %}
                         {% endfor %}
 
-                        {# 2. Affichage du numéro de livraison en premier #}
-                        <div style="margin-bottom: 8px;">
-                            <strong style="font-size: 1.4rem; color: #0f31f1;">LIVRAISON : {{ ns.found_no if ns.found_no != "" else "???" }}</strong>
+                        {# 2. Affichage du numéro de livraison en premier (Version compacte) #}
+                        <div style="margin-bottom: 4px;">
+                            <strong style="font-size: 1.0rem; color: #0f31f1;">LIVRAISON : {{ ns.found_no if ns.found_no != "" else "???" }}</strong>
                         </div>
-                        <div class="d-flex flex-column mt-2 mb-3">
-                            <div class="extras-row d-flex justify-content-between mb-2">
+
+                        <div class="d-flex flex-column mt-1 mb-2">
+                            <div class="extras-row d-flex justify-content-between mb-1" style="gap: 4px;">
                                 {# Heure #}
                                 {% if item.extras.desired_time and item.extras.desired_time != 'HEURE' %}
-                                <div id="btn-heure-{{ bid }}" class="extra-box extra-selected">
+                                <div id="btn-heure-{{ bid }}" class="extra-box extra-selected" style="padding: 2px 6px; font-size: 0.8rem;">
                                     {{ item.extras.desired_time }}
                                 </div>
                                 {% endif %}
 
                                 {# Ustensiles #}
                                 {% if item.extras.utensils and item.extras.utensils != 'UST' %}
-                                <div id="btn-ust-{{ bid }}" class="extra-box extra-selected">
+                                <div id="btn-ust-{{ bid }}" class="extra-box extra-selected" style="padding: 2px 6px; font-size: 0.8rem;">
                                     {{ item.extras.utensils }}
                                 </div>
                                 {% endif %}
 
                                 {# Note #}
                                 {% if item.extras.custom_note and item.extras.custom_note != 'NOTE' %}
-                                <div id="btn-note-{{ bid }}" class="extra-box extra-selected">
+                                <div id="btn-note-{{ bid }}" class="extra-box extra-selected" style="padding: 2px 6px; font-size: 0.8rem;">
                                     {{ item.extras.custom_note }}
                                 </div>
                                 {% endif %}
@@ -116,10 +119,10 @@
 
                             {# Sauces #}
                             {% if item.extras.sauces and item.extras.sauces != 'SAUCES' %}
-                            <div class="sauce-row mb-2">
+                            <div class="sauce-row mb-1">
                                 <div id="btn-sauce-{{ bid }}" 
                                     class="extra-box w-100 extra-selected-sauce" 
-                                    style="text-align: center; justify-content: center;">
+                                    style="text-align: center; justify-content: center; padding: 2px; font-size: 0.8rem;">
                                     {{ item.extras.sauces }}
                                 </div>
                             </div>
@@ -179,10 +182,16 @@
                             {% endif %}
 
                             <button id="btn-assign-{{ bid }}" 
-                                    class="btn btn-white-touch w-100 touch-element-xxl d-flex align-items-center justify-content-center" 
-                                    style="border: 2px solid #00d2ff !important; color: #00d2ff !important; background: #000 !important; height: 60px; font-weight: bold;"
+                                    class="btn btn-white-touch w-100 d-flex align-items-center justify-content-center" 
+                                    style="border: 2px solid #00d2ff !important; color: #00d2ff !important; background: #000 !important; height: 40px; font-weight: bold; font-size: 0.85rem; padding: 0 10px;"
                                     onclick="openLivreurModal('{{ bid }}')">
-                                {{ item.livreur if item.livreur else '👤 ASSIGNER LIVREUR' }}
+                                {{ item.livreur if item.livreur else '👤 ASSIGNER' }}
+                            </button>
+
+                            <button class="btn btn-white-touch w-100 d-flex align-items-center justify-content-center mt-2" 
+                                    style="border: 2px solid #f39c12 !important; color: #f39c12 !important; background: #000 !important; height: 40px; font-weight: bold; font-size: 0.85rem; padding: 0 10px;" 
+                                    onclick="printOrder('{{ bid }}')">
+                                🖨️ IMPRIMER
                             </button>
 
                         </div>
@@ -220,7 +229,6 @@
                                     {% if it is mapping and it.sub_items %}
                                     <ul class="order-item-subs">
                                         {% for sub in it.sub_items %}
-                                            {# Filtrage strict des lignes et remplacement du texte dans les options #}
                                             {% set s_upper = sub | upper %}
                                             {% if "MERCI" not in s_upper 
                                                 and "PROCHAINE" not in s_upper 
@@ -229,7 +237,17 @@
                                                 and "COMMERCANT" not in s_upper
                                                 and "ORIGINALE" not in s_upper
                                                 and "====" not in s_upper %}
-                                                <li>{{ sub | replace('TOT', 'TOTAL') | replace('*', '') }}</li>
+                                                
+                                                {# AJUSTEMENT ICI : Détection stricte de "TPS $" et "TVQ $" #}
+                                                {% if "TOT" in s_upper or "TPS $" in s_upper or "TVQ $" in s_upper %}
+                                                    <div class="order-item-main" style="font-size: 15px; font-weight: bold; margin-top: 6px; padding: 3px 0; color: #ffcc00; list-style: none;">
+                                                        {{ sub | replace('TOT', 'TOTAL') | replace('*', '') }}
+                                                    </div>
+                                                {# OPTIONS NORMALES #}
+                                                {% else %}
+                                                    <li>{{ sub | replace('TOT', 'TOTAL') | replace('*', '') }}</li>
+                                                {% endif %}
+                                                
                                             {% endif %}
                                         {% endfor %}
                                     </ul>
@@ -311,6 +329,18 @@
                 style="background-color: #2980b9; color: white; padding:20px; font-weight:900; font-size:1.6rem; border-radius: 15px; border: none; box-shadow: 0 4px 15px rgba(41, 128, 185, 0.4);">
                 <i class="fas fa-box"></i> NON, JUSTE CELLE-CI
             </button>
+        </div>
+    </div>
+</div>
+
+<div id="printModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 99999; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 30px; border-radius: 15px; text-align: center; color: #333; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+        <div style="font-size: 3rem; margin-bottom: 15px;">🖨️</div>
+        <h3 style="margin-bottom: 20px;">Confirmation d'impression</h3>
+        <p style="margin-bottom: 30px; font-size: 1.1rem;">Voulez-vous lancer l'impression du ticket sélectionné ?</p>
+        <div style="display: flex; gap: 15px; justify-content: center;">
+            <button onclick="closePrintModal()" style="padding: 10px 25px; border-radius: 8px; border: none; background: #95a5a6; color: white; font-weight: bold; cursor: pointer;">Non</button>
+            <button onclick="confirmPrint()" style="padding: 10px 25px; border-radius: 8px; border: none; background: #2ecc71; color: white; font-weight: bold; cursor: pointer;">Oui, Imprimer</button>
         </div>
     </div>
 </div>
@@ -523,6 +553,7 @@
     let lastNomToDelete = null;
     let deleteTimeout = null;
     let nomActuelPourRename = null;
+    let currentPrintAction = null;
     
     
 
@@ -547,7 +578,7 @@
 
     function refreshKDS() {
         // 1. DÉTECTION DES MODALES OUVERTES
-        const modals = ['#modal-note', '#modal-utensils', '#custom-confirm-modal','#modal-confirm', '#modal-sauces', '#modal-time', 'modal-admin-livreurs'];
+        const modals = ['#modal-note','#printModal', '#modal-utensils', '#custom-confirm-modal','#modal-confirm', '#modal-sauces', '#modal-time', 'modal-admin-livreurs'];
         const isModalOpen = modals.some(selector => {
             const modal = document.querySelector(selector);
             return modal && modal.style.display === 'block';
@@ -679,6 +710,26 @@
                 }
             })
             .catch(err => console.error("Erreur refresh KDS:", err));
+    }
+
+    
+    function askForPrint(printFunction) {
+        currentPrintAction = printFunction;
+        document.getElementById('printModal').style.display = 'flex';
+    }
+
+    // Fonction pour fermer
+    function closePrintModal() {
+        document.getElementById('printModal').style.display = 'none';
+        currentPrintAction = null;
+    }
+
+    // Fonction pour confirmer
+    function confirmPrint() {
+        if (currentPrintAction) {
+            currentPrintAction(); // Exécute la fonction d'impression originale
+        }
+        closePrintModal();
     }
 
     function openVirtualKeyboard() {
@@ -1652,6 +1703,14 @@ async function toggleLivreurStatus(nom) {
 
         isEditing = true; 
         
+        // 1. Réinitialisation visuelle immédiate du timer pour l'utilisateur
+        const timerElement = document.getElementById('timer-' + bid);
+        if (timerElement) {
+            timerElement.setAttribute('data-start', new Date().toISOString());
+            // Optionnel : on peut forcer l'affichage à 0:00 tout de suite
+            timerElement.innerText = "0:00"; 
+        }
+        
         fetch(`/assign_livreur/${bid}/${nom}`, { method: 'POST' })
         .then(response => {
             if (response.ok) {
@@ -1667,7 +1726,6 @@ async function toggleLivreurStatus(nom) {
             isEditing = false;
         });
     }
-
     
     function resetLivraison(bid) {
         // On appelle directement le serveur sans afficher de modal

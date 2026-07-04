@@ -10,10 +10,11 @@ import json
 import threading
 import requests # Nécessaire pour envoyer la commande /shutdown
 import re 
-
+import uuid
 import platform # <--- Ajoutez cet import en haut du fichier
 import os
 import json
+from flask import send_from_directory,send_file# Ajoutez cet import en haut du fichier
 
 from serial_reader import SerialReader
 
@@ -34,14 +35,18 @@ WHITELIST_ROUTES = [
     '/',
     '/kds',
     '/kds_livreur',
+    '/update_status_livraisons',
     '/kds_pa',
     '/kds_placeur',
+    '/mark_all_treated_livreur',
     '/api/livreurs',
     '/api/livreurs/add',
     '/api/livreurs/rename',
     '/api/livreurs/reorder',
+    '/nouvelle_livraison',
     '/api/livreurs/delete',
     '/api/livreurs/check_status',
+    '/static/css/bootstrap.min.css',
     '/kds_pa_alert',              # Ajouté : Page des alertes PA
     '/marquer_pa_traitee',        # Ajouté : Action sur alerte PA
     '/api/livreurs/toggle_status', # Ajouté : Activation/Désactivation livreur
@@ -66,7 +71,19 @@ WHITELIST_ROUTES = [
     '/static/js/Sortable.min.js',
     '/static/sound/beep_short.ogg',
     '/favicon.ico',
-    '/livraisons'
+    '/temperatures',
+    '/suivi',
+    '/livraisons',
+    '/static/css/tabulator.min.css',
+    '/static/css/flatpickr.min.css',
+    '/static/js/chart.min.js',
+    '/static/js/flatpickr.js',
+    '/static/js/tabulator.min.js',
+    '/static/js/jspdf.umd.min.js',
+    '/static/js/jspdf.plugin.autotable.min.js',
+    '/static/js/chartjs-plugin-zoom.min.js',
+    '/static/js/html2pdf.bundle.min.js'
+    
     
 ]
 
@@ -240,6 +257,34 @@ def filtrer_acces_global():
     
     if path == '/kds_pa_alert':
         return
+    if path == '/suivi':
+        return
+    if path == '/temperatures':
+        return
+    if path == '/static/css/bootstrap.min.css':
+        return
+    if path == '/static/css/tabulator.min.css':
+        return
+    if path == '/static/js/tabulator.min.js':
+        return
+    if path == '/static/js/flatpickr.js':
+        return
+    if path == '/static/js/jspdf.plugin.autotable.min.js':
+        return
+    if path == '/static/js/jspdf.umd.min.js':
+        return
+    if path == '/static/css/flatpickr.min.css':
+        return
+    if path == '/static/js/html2pdf.bundle.min.js':
+        return
+    if path == '/static/js/chart.min.js':
+        return
+    if path == '/static/js/chartjs-plugin-zoom.min.js':
+        return
+    if path == '/nouvelle_livraison':
+        return
+    if path == '/mark_all_treated_livreur':
+        return
     if path.startswith('/update_status'):
         return
     if path == '/static/sound/beep_short.ogg':
@@ -266,22 +311,29 @@ def filtrer_acces_global():
 
 @app.route('/kds_pa_alert')
 def kds_pa_alert():
-    # 1. Récupération de toutes les commandes en attente depuis la base de données
-    all_orders = db_manager.get_pending_orders()
-    pa_alerts = {}
+    # 1. Récupération des commandes
+    all_orders = db_manager.get_pending_orders_kds_alert()
     
-    # 2. On parcourt TOUTES les catégories (SALLE, LIVRAISON, POUR EMPORTER, etc.)
+    # 2. On transforme le dictionnaire en une liste pour le tri
+    # On crée une liste plate avec toutes les commandes
+    order_list = []
     for category in all_orders:
         for order in all_orders.get(category, []):
-            # On stocke absolument toutes les commandes en attente dans le dictionnaire
-            # C'est le JavaScript du KDS qui filtrera visuellement avec les toggles !
-            pa_alerts[order['bill_id']] = {'data': order}
+            order_list.append(order)
 
-    # Si c'est une requête AJAX (rafraîchissement automatique), on rend uniquement la liste
+    # 3. Tri personnalisé : 
+    # Critère 1 : Si service_type est '888', il vient en premier (False < True en Python)
+    # Critère 2 : Si service_type n'est pas 888, on trie par bill_id décroissant (nouveau -> ancien)
+    # On supprime le int() et on utilise une comparaison de chaînes de caractères
+    order_list.sort(key=lambda x: (x.get('service_type') != '888', str(x.get('bill_id', ''))), reverse=False)
+
+    # 4. Reconstruction du dictionnaire pour le template
+    # On garde la structure attendue par kds_order_list.html
+    pa_alerts = {order['bill_id']: {'data': order} for order in order_list}
+
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return render_template('partials/kds_order_list.html', pa_list=pa_alerts)
     
-    # Sinon, on rend la page complète au chargement initial
     return render_template('kds_alert_pa.html', pa_list=pa_alerts, refresh_rate=5)
 
 @app.route('/marquer_pa_traitee/<bill_id>', methods=['POST'])
@@ -596,6 +648,17 @@ def kds_dashboard_placeur():
         refresh_rate=KDS_REFRESH_RATE,
         search_query=search_query
     )
+
+@app.route('/mark_all_treated_livreur', methods=['POST'])
+def mark_all_treated_livreur():
+    if request.headers.get('X-App-Access') != APP_AUTH_KEY:
+        return jsonify({"success": False, "message": "Accès interdit"}), 403
+
+    try:
+        count = db_manager.mark_all_as_treated_livreur()
+        return jsonify({"success": True, "count": count, "message": f"{count} commandes marquées comme traitées."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
     
 @app.route('/api/livreurs', methods=['GET'])
 def get_livreurs():
@@ -613,6 +676,55 @@ def add_livreur():
         return jsonify(success=True)
     return jsonify(success=False, error="Nom invalide ou déjà présent")
 
+@app.route('/nouvelle_livraison', methods=['GET', 'POST'])
+def nouvelle_livraison():
+    if request.method == 'POST':
+        data = request.get_json()
+        if not data:
+            return jsonify(success=False, error="Aucune donnée reçue"), 400
+        
+        # Récupération et TRONCATURE des données (Validation)
+        # On utilise [:limite] pour couper le texte s'il est trop long
+        adresse = str(data.get('adresse', ''))[:200].strip()
+        telephone = str(data.get('telephone', 'N/A'))[:15].strip()
+        note = str(data.get('note', ''))[:200].strip()
+        heure = str(data.get('heure', 'ASAP'))[:20] # 20 suffit largement pour une heure
+        
+        # Vérification minimale obligatoire
+        if not adresse:
+            return jsonify(success=False, error="L'adresse est obligatoire"), 400
+        
+        bid = str(uuid.uuid4())[:8].upper()
+        
+        # Structure enrichie
+        items_list = [
+            json.dumps({
+                "main_item": f"ADRESSE: {adresse}", 
+                "sub_items": [
+                    f"TEL: {telephone}", 
+                    f"NOTE: {note}", 
+                    f"HEURE: {heure}"
+                ]
+            })
+        ]
+        
+        try:
+            db_manager.add_new_order(
+                bill_id=bid,
+                table_number="999",
+                serveuse_name="SYSTÈME",
+                service_type="LIVREUR",
+                items=items_list,
+                status='En attente',
+                creation_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                raw_content=f"LIVRAISON MANUELLE\nADR: {adresse}\nTEL: {telephone}\nNOTE: {note}\nHEURE: {heure}"
+            )
+            return jsonify(success=True, bid=bid)
+        except Exception as e:
+            logger.error(f"Erreur DB : {e}")
+            return jsonify(success=False, error=str(e)), 500
+            
+    return render_template('formulaire_adresse.html')
 
 @app.route('/api/livreurs/toggle_status', methods=['POST'])
 def api_toggle_livreur():
@@ -1099,7 +1211,35 @@ def update_status_livraison(bill_id):
     else:
         logger.warning(f"⚠️ Impossible de fermer la livraison {bill_id} (non trouvée).")
         return jsonify({"success": False, "message": "ID non trouvé"}), 404
-            
+
+
+@app.route('/update_status_livraisons/<string:bill_id>/<string:new_status>', methods=['POST'])
+def update_status_livraisons(bill_id, new_status):
+    # Sécurité globale
+    if request.headers.get('X-App-Access') != APP_AUTH_KEY:
+        return jsonify({"success": False, "message": "Accès interdit"}), 403
+
+    # Correction des accents (si nécessaire)
+    if new_status == 'Traitee':
+        new_status = 'Traitée'
+
+    valid_statuses = ['En cours', 'Traitée', 'Annulée', 'En attente']
+    if new_status not in valid_statuses:
+        return jsonify({"success": False, "message": f"Statut non valide: {new_status}"}), 400
+        
+    try:
+        # Appel à la fonction spécifique qui cible uniquement le clone Livreur
+        row_count = db_manager.set_order_status_by_bill_id_livraison(bill_id, new_status)
+        
+        if row_count > 0:
+            logger.info(f"Statut (Livreur) Bill ID {bill_id} mis à jour à '{new_status}'.")
+            return jsonify({"success": True, "message": f"Statut mis à jour pour {bill_id} dans la base Livreur."}), 200
+        else:
+            return jsonify({"success": False, "message": f"Bill ID {bill_id} non trouvé dans la base Livreur ou aucun changement."}), 404
+    except Exception as e:
+        logger.error(f"Erreur DB Livreur: {str(e)}")
+        return jsonify({"success": False, "message": f"Erreur DB: {str(e)}"}), 500
+
 @app.route('/update_status/<string:bill_id>/<string:new_status>', methods=['POST'])
 def update_status(bill_id, new_status):
     # Sécurité globale
@@ -1182,6 +1322,48 @@ def api_delete_livreur():
         logger.error(f"Erreur suppression livreur: {e}")
         return jsonify({"status": "error", "message": f"💥 ERREUR SYSTÈME : {str(e)}"}), 500
 
+@app.route('/suivi', methods=['GET'])
+def afficher_suivi():
+    # render_template cherche automatiquement dans le dossier 'templates'
+    return render_template('temperature_view.html')
+
+@app.route('/temperatures', methods=['GET'])
+def get_temperatures():
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    if not start_date or not end_date:
+        return jsonify({"data": [], "error": "Dates manquantes"})
+
+    results = []
+    log_directory = r"C:\resto_controller\temperature"
+    
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
+        
+        for day_offset in range((end - start).days + 1):
+            current_date = start + timedelta(days=day_offset)
+            date_str = current_date.strftime('%Y-%m-%d')
+            file_name = f"logs_{date_str}.json"
+            file_path = os.path.join(log_directory, file_name)
+            
+            if os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    file_data = json.load(f)
+                    
+                    # --- ICI : On ajoute la date à chaque entrée ---
+                    for entry in file_data:
+                        # Si 'entry' est un dictionnaire, on ajoute la clé 'date'
+                        if isinstance(entry, dict):
+                            entry['date'] = date_str
+                            
+                    results.extend(file_data)
+                    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        
+    return jsonify({"data": results})
 
 # ⭐ NOUVELLE ROUTE : Endpoint pour arrêter le serveur de développement Flask (pour le GUI)
 def shutdown_server():

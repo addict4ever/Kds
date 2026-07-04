@@ -25,6 +25,21 @@
     /* Style pour le Modal de Gestion */
 /* --- STYLE DU MODAL GESTION LIVREURS --- */
 
+.custom-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    background: #e74c3c; /* Rouge par défaut */
+    color: white;
+    border-radius: 5px;
+    z-index: 10000;
+    font-weight: bold;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    animation: fadeIn 0.3s;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
 /* Zone de la liste avec scrollbar invisible ou fine pour le tactile */
 #admin-livreur-list {
     max-height: 450px;
@@ -33,6 +48,8 @@
     scrollbar-width: thin;
     scrollbar-color: #3498db #1a1a1a;
 }
+
+
 
 #admin-livreur-list::-webkit-scrollbar {
     width: 8px;
@@ -258,9 +275,9 @@
     }
 
     .order-item-main {
-        font-size: 1.3rem;
+        font-size: 0.85rem;        /* 1.3 * 0.66 ≈ 0.85 */
         font-weight: 800;
-        color: #ffffff; /* Blanc pur pour l'item principal */
+        color: #ffffff;
         text-transform: uppercase;
         display: flex;
         align-items: center;
@@ -269,20 +286,20 @@
     .order-item-main::before {
         content: "";
         display: inline-block;
-        width: 6px;
-        height: 6px;
-        background: #ffffff; /* Point blanc */
+        width: 4px;                /* 6 * 0.66 ≈ 4 */
+        height: 4px;               /* 6 * 0.66 ≈ 4 */
+        background: #ffffff;
         border-radius: 50%;
-        margin-right: 10px;
+        margin-right: 7px;         /* 10 * 0.66 ≈ 7 */
     }
 
     .order-item-subs li {
-        font-size: 1.1rem;
-        color: #e0e0e0; /* Gris très clair (presque blanc) */
+        font-size: 0.75rem;        /* 1.1 * 0.66 ≈ 0.75 */
+        color: #e0e0e0;
         font-weight: 600;
-        line-height: 1.3;
+        line-height: 1.2;          /* Légèrement réduit pour compacter */
     }
-
+    
     /* --- RÉVISION DES COULEURS KDS (Plus sobre) --- */
     .item-main { 
         color: #ffffff !important; /* Force le blanc pour les plats */

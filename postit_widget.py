@@ -363,7 +363,8 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
             self.after(60000, safe_auto_close)
         else:
             logger.info(f"[DEBUG] Pas d'auto-fermeture pour #{self.bill_id} (Table: {table_number}, Items: {len(items)})")
-            
+
+    #pas bon        
     def _strike_all_items(self, event=None):
         """Raye absolument tous les items et sous-items du ticket."""
         for item_idx, widgets in self.item_widgets_map.items():
@@ -381,6 +382,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         # Notifier la fenêtre serveur et vérifier l'auto-fermeture
         self._notify_serveur_window()
 
+    #pas bon 
     def _unstrike_all_items(self, event=None):
         """Retire la rature de tous les items et sous-items du ticket."""
         for item_idx, widgets in self.item_widgets_map.items():
@@ -398,8 +400,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
     def _toggle_strike_all_items(self, event=None):
         """
         Bascule l'état de rature pour TOUS les items.
-        Si tout est déjà rayé -> on retire tout.
-        Sinon -> on raye tout.
+        Ajoute/retire le symbole ✓, applique le style, notifie le serveur et met à jour le compteur global.
         """
         # 1. Vérifier l'état actuel : est-ce que TOUT est déjà rayé ?
         all_already_struck = True
@@ -411,24 +412,42 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                     break
         
         # 2. Déterminer le nouvel état
-        # Si tout est rayé, on veut remettre en 'bold'. Sinon, on met en 'overstrike'.
         new_state = "bold" if all_already_struck else "overstrike"
         
         # 3. Appliquer le changement à tous les labels
-        for widgets in self.item_widgets_map.values():
-            # Item principal
+        for item_idx, widgets in self.item_widgets_map.items():
+            # Traitement Item principal
             ml = widgets.get('main_item_label')
             if ml and ml.winfo_exists():
+                current_text = ml.cget("text")
                 size = MAIN_ITEM_POLICE if '15' in str(ml.cget("font")) else SUB_ITEM_POLICE
-                ml.config(font=('Segoe UI', size, new_state))
+                
+                if new_state == "overstrike":
+                    # Ajouter ✓ si absent
+                    if not current_text.startswith("✓"):
+                        ml.config(text=f"✓ {current_text}", font=('Segoe UI', size, new_state))
+                else:
+                    # Retirer ✓
+                    new_text = current_text.replace("✓ ", "").replace("✓", "").strip()
+                    ml.config(text=new_text, font=('Segoe UI', size, new_state))
             
-            # Sous-items
+            # Traitement Sous-items
             for sl in widgets.get('sub_item_labels', []):
                 if sl and sl.winfo_exists():
-                    sl.config(font=('Segoe UI', SUB_ITEM_POLICE, new_state))
+                    current_sub_text = sl.cget("text")
+                    if new_state == "overstrike":
+                        if not current_sub_text.startswith("✓"):
+                            sl.config(text=f"✓ {current_sub_text}", font=('Segoe UI', SUB_ITEM_POLICE, new_state))
+                    else:
+                        new_sub_text = current_sub_text.replace("✓ ", "").replace("✓", "").strip()
+                        sl.config(text=new_sub_text, font=('Segoe UI', SUB_ITEM_POLICE, new_state))
         
-        # 4. Notifier le système (pour la fenêtre serveur et le timer de fermeture)
+        # 4. Notifier la fenêtre serveur
         self._notify_serveur_window()
+        
+        # 5. Mise à jour du compteur global dans kds_gui
+        if hasattr(self, 'kds_gui_instance'):
+            self.kds_gui_instance.update_special_item_count()
 
     def _handle_status_change(self, bill_id, new_status: str):
         """Met à jour le statut dans la DB et retire ou met à jour le post-it."""
@@ -468,66 +487,75 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
             self.master_selector.remove_postit(self)
 
     def _handle_print(self):
-        """Affiche un menu pour choisir l'imprimante avant d'imprimer."""
+        """Affiche un menu pour choisir l'imprimante avant d'imprimer avec Custom Error Box."""
         content_to_print = self.display_ticket_content 
         
+        # --- Fonction utilitaire pour erreur personnalisée ---
+        def show_custom_error(title, message):
+            err_win = tk.Toplevel(self)
+            err_win.overrideredirect(True)
+            err_win.geometry("300x150")
+            err_win.configure(bg="#c0392b") # Rouge
+            err_win.grab_set()
+            # Centrage
+            x = self.winfo_x() + 50
+            y = self.winfo_y() + 50
+            err_win.geometry(f"+{x}+{y}")
+            
+            tk.Label(err_win, text=title, font=('Arial', 10, 'bold'), bg="#c0392b", fg="white").pack(pady=10)
+            tk.Label(err_win, text=message, font=('Arial', 9), bg="#c0392b", fg="white", wraplength=250).pack(pady=5)
+            tk.Button(err_win, text="OK", command=err_win.destroy, bg="white", fg="#c0392b", width=10).pack(pady=15)
+
+        # Vérification initiale
         if not content_to_print or not isinstance(content_to_print, str):
-            messagebox.showwarning("Impression", "Contenu introuvable.")
+            show_custom_error("Impression", "Contenu du ticket introuvable.")
             return
 
-        # Création d'une petite fenêtre de dialogue pour le choix
+        # Création de la fenêtre de choix
         print_win = tk.Toplevel(self)
-        
-        # SUPPRESSION DU X ET DE LA BARRE DE TITRE
         print_win.overrideredirect(True) 
         print_win.resizable(False, False)
         
-        # Dimensions et Centrage
-        width, height = 300, 320
+        width, height = 300, 370
         screen_width = print_win.winfo_screenwidth()
         screen_height = print_win.winfo_screenheight()
         x = (screen_width // 2) - (width // 2)
         y = (screen_height // 2) - (height // 2)
         print_win.geometry(f"{width}x{height}+{x}+{y}")
-        
-        # Style de la fenêtre
         print_win.config(bg="#34495e", highlightbackground="white", highlightthickness=2)
         print_win.grab_set() 
 
         tk.Label(print_win, text="CHOIX DE L'IMPRIMANTE", 
                  font=('Arial', 12, 'bold'), bg="#34495e", fg="white", pady=15).pack()
 
-        # Fonction interne pour lancer l'impression
         def send_to(p_index):
-            # Import local pour éviter les problèmes de dépendances circulaires
-            from serial_reader import SerialReader, SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3
+            from serial_reader import SerialReader, SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3, SERIAL_PORT_PRINTER_4
             
-            ports = [SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3]
+            ports = [SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3, SERIAL_PORT_PRINTER_4]
             selected_port = ports[p_index-1]
             
-            # APPEL STATIQUE DIRECT (Pas besoin de self.serial_reader)
-            # La logique TCP pour le port 3 est maintenant à l'intérieur de cette fonction
             success = SerialReader.reprint_ticket_to_printer(content_to_print, selected_port)
             
             if success:
                 print_win.destroy()
             else:
-                messagebox.showerror("Erreur", f"Échec de l'impression sur Imprimante {p_index}")
+                # Ferme la fenêtre de choix avant d'afficher l'erreur si besoin
+                print_win.destroy()
+                show_custom_error("Erreur", f"Échec de l'impression sur Imprimante {p_index}")
 
-        # --- Boutons de sélection ---
+        # --- Boutons ---
         tk.Button(print_win, text="Imprimante 1 (Cuisine)", font=('Arial', 10, 'bold'),
-                  height=2, width=22, bg="#2ecc71", fg="white", activebackground="#27ae60",
-                  command=lambda: send_to(1)).pack(pady=5)
+                  height=2, width=22, bg="#2ecc71", fg="white", command=lambda: send_to(1)).pack(pady=5)
                   
         tk.Button(print_win, text="Imprimante 2 (Livraison Caisse)", font=('Arial', 10, 'bold'),
-                  height=2, width=22, bg="#3498db", fg="white", activebackground="#2980b9",
-                  command=lambda: send_to(2)).pack(pady=5)
+                  height=2, width=22, bg="#3498db", fg="white", command=lambda: send_to(2)).pack(pady=5)
                   
         tk.Button(print_win, text="Imprimante 3 (Livraison Pa TCP)", font=('Arial', 10, 'bold'),
-                  height=2, width=22, bg="#9b59b6", fg="white", activebackground="#8e44ad",
-                  command=lambda: send_to(3)).pack(pady=5)
+                  height=2, width=22, bg="#9b59b6", fg="white", command=lambda: send_to(3)).pack(pady=5)
+
+        tk.Button(print_win, text="Imprimante 4 (Livreur)", font=('Arial', 10, 'bold'),
+                  height=2, width=22, bg="#90EE90", fg="black", command=lambda: send_to(4)).pack(pady=5)
         
-        # Bouton Annuler
         tk.Button(print_win, text="ANNULER", font=('Arial', 10),
                   height=1, width=15, bg="#95a5a6", fg="white",
                   command=print_win.destroy).pack(pady=20)
@@ -580,20 +608,40 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
             messagebox.critical("Erreur DB", f"La séparation a échoué : {e}")
 
     def _toggle_single_strike(self, label_widget):
-        """Bascule la rature uniquement sur le widget cliqué."""
-        if self.is_selected:
+        """Bascule la rature sur le widget cliqué, met à jour le serveur et le compteur global."""
+        # 1. Gestion de la sélection (si existante)
+        if hasattr(self, 'is_selected') and self.is_selected:
             self._toggle_selection()
 
+        # 2. Récupération de l'état actuel
         current_font = label_widget.cget("font")
+        current_text = label_widget.cget("text")
+        
+        # Détermination de la taille de police (15 pour titre, SUB_ITEM_POLICE sinon)
         size = '15' if '15' in str(current_font) else SUB_ITEM_POLICE
         
+        # 3. Bascule l'état (Rayé <-> Normal)
         if "overstrike" in str(current_font):
-            label_widget.config(font=('Segoe UI', size, 'bold'))
+            # Passage en mode NON RAYÉ (Retrait du ✓)
+            new_text = current_text.replace("✓ ", "").replace("✓", "").strip()
+            label_widget.config(font=('Segoe UI', size, 'bold'), text=new_text)
         else:
-            label_widget.config(font=('Segoe UI', size, 'overstrike'))
+            # Passage en mode RAYÉ (Ajout du ✓)
+            if not current_text.startswith("✓"):
+                new_text = f"✓ {current_text}"
+            else:
+                new_text = current_text
+            
+            label_widget.config(font=('Segoe UI', size, 'overstrike'), text=new_text)
         
-        # Correction ici aussi
+        # 4. Notifier la fenêtre serveur (Mise à jour visuelle des serveurs)
         self._notify_serveur_window()
+        
+        # 5. 🌟 MISE À JOUR DU COMPTEUR GLOBAL DANS KDS_GUI
+        # C'est cette ligne qui déclenche le recalcul du compteur en bas de l'écran
+        if hasattr(self, 'kds_gui_instance'):
+            self.kds_gui_instance.update_special_item_count()
+            print("DEBUG: [_toggle_single_strike] Mise à jour du compteur global (KDSGUI) déclenchée.")
 
     def _toggle_single_widget_strike(self, label_widget):
         """
@@ -614,30 +662,41 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
 
     # ⭐ AJOUTER CELLE-CI IMMÉDIATEMENT APRÈS DANS LA CLASSE OrderPostIt
     def _notify_serveur_window(self):
-        """Prépare les données raturées avec gestion du timer d'annulation."""
+        """Prépare les données raturées et nettoie le texte pour la fenêtre serveur."""
         if hasattr(self, 'kds_gui_instance') and self.kds_gui_instance.serveur_window:
             items_with_status = []
             total_elements = 0
             struck_elements = 0
             
-            # ... (votre boucle for existante pour compter les items reste la même) ...
             for item_idx, widgets in self.item_widgets_map.items():
-                # (Vérification plat principal)
+                # 1. Vérification plat principal
                 main_label = widgets.get('main_item_label')
-                if main_label:
+                if main_label and main_label.winfo_exists():
+                    raw_text = main_label.cget("text")
                     font_info = str(main_label.cget("font")).lower()
-                    is_raye = "overstrike" in font_info
-                    items_with_status.append({"text": main_label.cget("text"), "is_raye": is_raye})
+                    
+                    # Détection : Symbole ✓ OU style overstrike
+                    is_raye = "✓" in raw_text or "overstrike" in font_info
+                    
+                    # Nettoyage : On envoie le texte pur à la fenêtre serveur
+                    clean_text = raw_text.replace("✓", "").strip()
+                    
+                    items_with_status.append({"text": clean_text, "is_raye": is_raye})
                     total_elements += 1
                     if is_raye: struck_elements += 1
                 
-                # (Vérification sous-items)
+                # 2. Vérification sous-items
                 for sub_label in widgets.get('sub_item_labels', []):
-                    sub_font_info = str(sub_label.cget("font")).lower()
-                    is_raye_sub = "overstrike" in sub_font_info
-                    items_with_status.append({"text": sub_label.cget("text"), "is_raye": is_raye_sub})
-                    total_elements += 1
-                    if is_raye_sub: struck_elements += 1
+                    if sub_label and sub_label.winfo_exists():
+                        raw_sub_text = sub_label.cget("text")
+                        sub_font_info = str(sub_label.cget("font")).lower()
+                        
+                        is_raye_sub = "✓" in raw_sub_text or "overstrike" in sub_font_info
+                        clean_sub_text = raw_sub_text.replace("✓", "").strip()
+                        
+                        items_with_status.append({"text": clean_sub_text, "is_raye": is_raye_sub})
+                        total_elements += 1
+                        if is_raye_sub: struck_elements += 1
 
             # Mise à jour de la fenêtre serveur
             self.kds_gui_instance.serveur_window.update_table(
@@ -645,18 +704,36 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 items_with_status, self.order_data.get('serveuse_name', '')
             )
 
-            # --- GESTION DU TIMER ---
-            
-            # 1. On annule TOUJOURS le timer existant s'il y en a un
+            # Gestion du timer (inchangée)
             if self.auto_close_timer:
                 self.after_cancel(self.auto_close_timer)
                 self.auto_close_timer = None
-
-            # 2. Si tout est rayé, on lance (ou relance) le chrono de 4 minutes
             if total_elements > 0 and struck_elements == total_elements:
-                # On stocke l'ID du timer pour pouvoir l'annuler plus tard
                 self.auto_close_timer = self.after(600000, self._check_and_close_if_still_struck)
-                
+
+    def get_items_status(self):
+        """Retourne la liste des items avec leur texte propre et leur état raturé."""
+        items_data = []
+        for item_idx, widgets in self.item_widgets_map.items():
+            # Item principal
+            ml = widgets.get('main_item_label')
+            if ml and ml.winfo_exists():
+                text = ml.cget("text")
+                font = str(ml.cget("font")).lower()
+                is_raye = "overstrike" in font or "✓" in text
+                clean_text = text.replace("✓", "").strip()
+                items_data.append({"text": clean_text, "is_raye": is_raye})
+            
+            # Sous-items
+            for sl in widgets.get('sub_item_labels', []):
+                if sl and sl.winfo_exists():
+                    text = sl.cget("text")
+                    font = str(sl.cget("font")).lower()
+                    is_raye = "overstrike" in font or "✓" in text
+                    clean_text = text.replace("✓", "").strip()
+                    items_data.append({"text": clean_text, "is_raye": is_raye})
+        return items_data
+
     def _check_and_close_if_still_struck(self):
         """Vérifie une dernière fois si tout est raturé avant de fermer."""
         try:
@@ -1306,7 +1383,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         # Bouton '↔️' (ÉCHANGER - Gris foncé ou Turquoise selon ton goût)
         tk.Button(btn_frame_2, 
                   text="↔️", 
-                  command=self.master_selector.swap_selected_orders, 
+                  command=self._swap_service_type, 
                   font=('Segoe UI', 14, 'bold') ,
                   bg='#3498db', # Turquoise original
                   fg='white', 
@@ -1321,7 +1398,76 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
 
     
 
+    def _swap_service_type(self):
+        """
+        Popup personnalisée avec sécurité préventive : 
+        autorise le swap UNIQUEMENT si la table est 'LIV' ou '999'.
+        """
+        current_service = self.order_data.get('service_type')
+        current_table = str(self.order_data.get('table_number', '')).upper()
+        
+        # --- Fonction interne pour afficher une erreur stylisée ---
+        def show_custom_error(message):
+            err_popup = tk.Toplevel(self)
+            err_popup.title("Action Refusée")
+            err_popup.geometry("350x120")
+            err_popup.configure(bg='#c0392b') # Rouge foncé
+            err_popup.transient(self)
+            err_popup.grab_set()
+            tk.Label(err_popup, text=message, fg="white", bg='#c0392b', 
+                     font=('Segoe UI', 11, 'bold'), wraplength=300).pack(expand=True, padx=10)
+            tk.Button(err_popup, text="OK", command=err_popup.destroy, 
+                      bg='white', fg='#c0392b', width=10).pack(pady=5)
 
+        # --- SÉCURITÉ PRÉVENTIVE ---
+        # On n'autorise QUE 'LIV' ou '999'. Tout le reste (1-200, 888, PA...) est ignoré.
+        if current_table not in ['LIV', '999']:
+            return # On ne fait strictement rien, comme si le bouton était inactif.
+
+        # Déterminer les nouvelles valeurs
+        new_service = 'LIVRAISON' if current_service == 'LIVREUR' else 'LIVREUR'
+        new_table = 'LIV' if new_service == 'LIVRAISON' else 999
+        
+        # --- Création de la Custom Box de Confirmation ---
+        popup = tk.Toplevel(self)
+        popup.title("Confirmation")
+        popup.geometry("400x150")
+        popup.configure(bg='#2c3e50')
+        popup.transient(self)
+        popup.grab_set()
+
+        msg = f"Transformer en {new_service} (Table {new_table}) ?"
+        tk.Label(popup, text=msg, fg="white", bg='#2c3e50', font=('Segoe UI', 12)).pack(pady=20)
+
+        def on_confirm():
+            # 1. Appel à la BDD
+            success, message = self.db_manager.update_order_service_and_table(self.bill_id, new_service, new_table)
+            
+            popup.destroy()
+            
+            # 2. Création de la popup de résultat (Succès ou Erreur)
+            result_popup = tk.Toplevel(self)
+            result_popup.geometry("300x100")
+            result_popup.title("Info")
+            bg_color = '#2ecc71' if success else '#e74c3c'
+            result_popup.configure(bg=bg_color)
+            
+            tk.Label(result_popup, text=message, fg="white", bg=bg_color, 
+                     font=('Segoe UI', 10, 'bold'), wraplength=280).pack(expand=True)
+            
+            # Rafraîchir si succès
+            if success and hasattr(self.master_selector, 'refresh_display'):
+                self.master_selector.refresh_display()
+            
+            # Fermer après 2 secondes
+            result_popup.after(2000, result_popup.destroy)
+
+        btn_frame = tk.Frame(popup, bg='#2c3e50')
+        btn_frame.pack(pady=10)
+        
+        tk.Button(btn_frame, text="Confirmer", command=on_confirm, bg='#2ecc71', fg='white').pack(side=tk.LEFT, padx=10)
+        tk.Button(btn_frame, text="Annuler", command=popup.destroy, bg='#e74c3c', fg='white').pack(side=tk.LEFT, padx=10)
+            
     def update_timer(self):
         time_diff = datetime.now() - self.creation_date
         total_seconds = int(time_diff.total_seconds())

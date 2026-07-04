@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Pro Complet</title>
+    <link href="{{ url_for('static', filename='css/tabulator.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/flatpickr.min.css') }}" rel="stylesheet">
+    <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tabulator.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/flatpickr.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jspdf.umd.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chartjs-plugin-zoom.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jspdf.plugin.autotable.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/html2pdf.bundle.min.js') }}"></script>
+    <style>
+    /* Reset et typographie moderne */
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { 
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+        background-color: #f4f7f6; 
+        padding: 15px; 
+        margin: 0;
+        touch-action: manipulation;
+    }
+
+    .card { 
+        background: white; 
+        padding: 20px; 
+        border-radius: 16px; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08); 
+        margin-bottom: 20px; 
+    }
+
+    /* Contrôles tactiles (hauteur min 44px) */
+    .controls { 
+        display: flex; 
+        gap: 12px; 
+        flex-wrap: wrap; 
+        align-items: center; 
+    }
+
+    input, select {
+        padding: 12px 15px;
+        border-radius: 8px;
+        border: 1px solid #dcdcdc;
+        font-size: 16px;
+        min-height: 44px;
+        outline: none;
+    }
+
+    button { 
+        padding: 12px 20px; 
+        border-radius: 8px; 
+        border: none; 
+        cursor: pointer; 
+        font-weight: 600;
+        min-height: 44px;
+        transition: transform 0.1s, background-color 0.2s;
+    }
+    
+    button:active { transform: scale(0.96); }
+    
+    .btn-primary { background: #27ae60; color: white; }
+    .btn-danger { background: #ff7675; color: white; }
+    .btn-default { background: #f1f2f6; border: 1px solid #ddd; }
+
+    .flatpickr-day.has-data {
+        background-color: #f1c40f !important; /* Jaune */
+        color: #000 !important;
+        font-weight: bold;
+    }
+    
+    /* Tabulator épuré */
+    .tabulator { border: none !important; border-radius: 12px; overflow: hidden; }
+    .tabulator-header { background-color: #f8f9fa !important; border-bottom: 2px solid #dee2e6 !important; }
+    .tabulator-cell { padding: 12px 15px !important; }
+    .tabulator-row { border-bottom: 1px solid #f0f0f0; }
+
+    /* Scroll tactile */
+    .scroll-container {
+        width: 100%;
+        /* La hauteur est le levier principal pour agrandir le graphique */
+        height: 800px; 
+        overflow-x: auto; /* Permet le défilement horizontal si le graphique est zoomé */
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    #tempChart {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    /* Style du bouton d'export */
+    .btn-export {
+        background-color: #34495e;
+        color: white;
+        padding: 12px 24px;       /* Plus grand pour le tactile */
+        font-size: 16px;          /* Lisible sur tablette/mobile */
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;       /* Bords arrondis modernes */
+        cursor: pointer;
+        transition: all 0.3s ease; /* Animation fluide */
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;                 /* Espace entre le texte et l'icône */
+    }
+
+    /* Effet au survol (sur PC) */
+    .btn-export:hover:not(:disabled) {
+        background-color: #2c3e50;
+        transform: translateY(-2px); /* Léger effet de soulèvement */
+        box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+    }
+
+    /* Effet au clic (tactile) */
+    .btn-export:active:not(:disabled) {
+        transform: translateY(0);
+        background-color: #1a252f;
+    }
+
+    /* Style quand le bouton est désactivé (données non chargées) */
+    .btn-export:disabled {
+        background-color: #bdc3c7; /* Gris clair */
+        cursor: not-allowed;
+        box-shadow: none;
+        opacity: 0.7;
+    }
+</style>
+
+<div class="card">
+    <div class="controls">
+        <input type="text" id="dateRange" placeholder="Sélectionner période" style="flex: 1; min-width: 200px;">
+        <button class="btn-primary" onclick="loadData()">Charger Données</button>
+        <select id="chartType" onchange="renderDashboard()">
+            <option value="line">Ligne</option>
+            <option value="bar">Barres</option>
+            <option value="radar">Radar</option>
+            <option value="scatter">Points</option>
+            <option value="polarArea">Zones</option>
+        </select>
+    </div>
+    <div id="dateFilters" class="controls" style="margin-top:15px; padding-top:15px; border-top:1px solid #eee;"></div>
+</div>
+
+<button id="exportBtn" class="btn-export" onclick="toggleExportMenu()" disabled>
+    <span>Exporter Données</span> ⬇️
+</button>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <strong>Configuration des Seuils :</strong>
+        <button class="btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="clearThresholds()">Tout Supprimer</button>
+    </div>
+
+    <div class="controls" style="margin-bottom: 15px;">
+        <input type="number" id="newVal" placeholder="Ex: 25.5" style="width: 140px;">
+        <input type="color" id="newColor" value="#ffcccc" style="width: 60px; padding: 2px;">
+        <button class="btn-primary" onclick="addThreshold()">Ajouter</button>
+    </div>
+
+    <div id="thresholdList" style="display: flex; flex-wrap: wrap; gap: 8px;">
+        </div>
+</div>
+
+
+
+<div id="exportMenu" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border-radius:12px; box-shadow:0 0 20px rgba(0,0,0,0.3); z-index:9999;">
+    <h4 style="margin-top:0;">Choisir le format :</h4>
+    <button onclick="exportData('csv')">CSV</button>
+    <button onclick="exportData('json')">JSON</button>
+    <button onclick="exportData('pdf')">PDF</button>
+    <button onclick="exportData('html')">HTML</button>
+    <button onclick="toggleExportMenu()" style="background:#e74c3c; color:white; margin-top:10px;">Fermer</button>
+</div>
+
+<div id="chartToolbar" style="margin-bottom:10px; display:flex; gap:10px;">
+    <button onclick="zoomChart(1.2)" class="tool-btn">➕ Zoom</button>
+    <button onclick="zoomChart(0.8)" class="tool-btn">➖ Dézoom</button>
+    <button onclick="resetZoom()" class="tool-btn">↺ Reset</button>
+    <button onclick="toggleFullScreen()" class="tool-btn">⛶ Plein écran</button>
+</div>
+<div class="dashboard-wrapper" id="dashboard-wrapper">
+    <div class="panel-section">
+        <div class="scroll-container">
+            <canvas id="tempChart"></canvas>
+        </div>
+    </div>
+
+    <div class="panel-section" style="margin-top: 30px;">
+        <h3>Données détaillées</h3>
+        <div id="tempTable"></div>
+    </div>
+</div>
+<script>
+    let myChart, table, globalData = [];
+    let currentFilter = "all";
+    let thresholds = JSON.parse(localStorage.getItem('myThresholds')) || [];
+    let availableDates = [];
+
+    const fp = flatpickr("#dateRange", { 
+        mode: "range", dateFormat: "Y-m-d",
+        onDayCreate: function(dObj, dStr, fp, dayElem) {
+            let dateStr = dayElem.dateObj.toISOString().split('T')[0];
+            if(availableDates.includes(dateStr)) dayElem.classList.add("has-data");
+        }
+    });
+
+    
+    async function loadData() {
+        const dateInput = document.getElementById('dateRange');
+        const rangeStr = dateInput.value;
+        const exportBtn = document.getElementById('exportBtn'); // Récupération du bouton export
+
+        // 1. Validation de la période
+        if (!rangeStr) {
+            return alert("Veuillez sélectionner une période.");
+        }
+        
+        const range = rangeStr.split(' to ');
+        // Si une seule date est sélectionnée, startDate et endDate sont identiques
+        const startDate = range[0];
+        const endDate = range.length > 1 ? range[1] : range[0];
+
+        try {
+            // 2. Appel API
+            const res = await fetch(`/temperatures?start_date=${startDate}&end_date=${endDate}`);
+            const json = await res.json();
+            
+            if (json.error) throw new Error(json.error);
+
+            // 3. Mise à jour de la "source de vérité" globale
+            window.globalData = json.data || [];
+            window.availableDates = [...new Set(window.globalData.map(d => d.date))];
+
+            // 4. Gestion de l'affichage de la période
+            const dateDisplay = document.getElementById('selectedDateDisplay');
+            if (dateDisplay) {
+                dateDisplay.innerText = `Période : ${rangeStr}`;
+                dateDisplay.style.color = "#27ae60"; // Vert succès
+            }
+
+            // 5. Gestion du bouton d'Export
+            // On active le bouton uniquement si on a reçu des données
+            if (exportBtn) {
+                exportBtn.disabled = (window.globalData.length === 0);
+            }
+
+            // 6. Mise à jour du dashboard
+            generateDateFilters();
+            renderDashboard(); // Recrée le graphique et le tableau avec les nouvelles données
+
+            if (window.globalData.length === 0) {
+                console.warn("Aucune donnée trouvée pour cette période.");
+            }
+
+        } catch (error) {
+            console.error("Erreur de chargement :", error);
+            alert("Erreur lors de la récupération des données : " + error.message);
+            
+            // En cas d'erreur, on désactive le bouton d'export
+            if (exportBtn) exportBtn.disabled = true;
+        }
+    }
+
+    function generateDateFilters() {
+        const filterDiv = document.getElementById('dateFilters');
+        filterDiv.innerHTML = ''; 
+
+        // Bouton "Tout afficher" (Envoie TOUTES les données)
+        const btnAll = document.createElement('button');
+        btnAll.innerText = "Toutes les dates";
+        btnAll.className = "filter-btn";
+        btnAll.onclick = () => renderDashboard(window.globalData);
+        filterDiv.appendChild(btnAll);
+
+        // Boutons par date (Filtre et envoie uniquement les données du jour)
+        window.availableDates.sort().forEach(date => {
+            const btn = document.createElement('button');
+            btn.innerText = date;
+            btn.className = "filter-btn";
+            btn.onclick = () => {
+                // Filtrage local : on crée un nouveau tableau avec uniquement cette date
+                const filtered = window.globalData.filter(d => d.date === date);
+                renderDashboard(filtered); // On envoie uniquement ce jour au dashboard
+            };
+            filterDiv.appendChild(btn);
+        });
+    }
+
+    function filterByDate(date) {
+        currentFilter = date;
+        renderDashboard();
+    }
+
+    
+    function renderDashboard(dataToDisplay = null) {
+    // 1. Source de vérité
+    const displayData = dataToDisplay || window.globalData || [];
+    
+    // Palette de couleurs pour les capteurs
+    const palette = ['#3498db', '#e67e22', '#27ae60', '#9b59b6', '#f1c40f', '#e74c3c'];
+    const sensors = [...new Set(displayData.map(d => d.sensor))];
+    const sensorColors = {};
+    sensors.forEach((s, i) => sensorColors[s] = palette[i % palette.length]);
+
+    // 2. Rendu Chart.js
+    if (window.myChart) window.myChart.destroy();
+    
+    const ctx = document.getElementById('tempChart').getContext('2d');
+    
+    // Génération des datasets par capteur
+    const datasets = sensors.map(sensorName => {
+        const filtered = displayData.filter(d => d.sensor === sensorName);
+        return {
+            label: sensorName,
+            data: filtered.map(d => d.val),
+            borderColor: sensorColors[sensorName],
+            backgroundColor: sensorColors[sensorName] + '22', // Transparence
+            tension: 0.3,
+            fill: false,
+            pointRadius: 3,
+            pointHoverRadius: 6
+        };
+    });
+
+    // Utilisation des heures uniques comme labels sur l'axe X
+    const labels = [...new Set(displayData.map(d => `${d.date} ${d.heure}`))];
+
+    window.myChart = new Chart(ctx, {
+        type: document.getElementById('chartType').value || 'line',
+        data: { labels: labels, datasets: datasets },
+        options: { 
+            maintainAspectRatio: false,
+            responsive: true,
+            plugins: { 
+                legend: { position: 'top', display: true }, // Légende activée
+                tooltip: { mode: 'index', intersect: false },
+                zoom: {
+                    pan: { enabled: true, mode: 'x' },
+                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                }
+            },
+            scales: { 
+                x: { title: { display: true, text: 'Date / Heure' } },
+                y: { title: { display: true, text: 'Température (°C)' } }
+            }
+        }
+    });
+
+    // 3. Rendu Tabulator
+    if (window.table) window.table.destroy();
+    
+    window.table = new Tabulator("#tempTable", {
+        data: displayData,
+        pagination: "local",
+        paginationSize: 24,
+        layout: "fitColumns",
+        columns: [
+            {title: "Capteur", field: "sensor", hozAlign: "center", width: 120, 
+             formatter: (cell) => `<span style="color: ${sensorColors[cell.getValue()]}; font-weight: bold;">${cell.getValue()}</span>`
+            },
+            {title: "Date", field: "date", hozAlign: "center", width: 120},
+            {title: "Heure", field: "heure", hozAlign: "center", width: 100},
+            {
+                title: "Température", 
+                field: "val", 
+                hozAlign: "center",
+                formatter: (cell) => {
+                    const val = cell.getValue();
+                    let textColor = "#2c3e50";
+                    if (window.thresholds) {
+                        [...window.thresholds].sort((a,b) => a.val - b.val).forEach(t => { 
+                            if(val >= t.val) textColor = t.color; 
+                        });
+                    }
+                    return `<span style="color: ${textColor}; font-weight: 700;">${val} °C</span>`;
+                }
+            }
+        ]
+    });
+}
+
+    function zoomChart(factor) {
+        window.myChart.zoom(factor);
+    }
+
+    // Réinitialiser le zoom à la vue initiale
+    function resetZoom() {
+        window.myChart.resetZoom();
+    }
+
+    // Basculer le graphique en plein écran
+    function toggleFullScreen() {
+        const elem = document.getElementById('tempChart').parentNode; // Conteneur du graphique
+        if (!document.fullscreenElement) {
+            elem.requestFullscreen().catch(err => alert(`Erreur plein écran: ${err.message}`));
+        } else {
+            document.exitFullscreen();
+        }
+    }
+
+    /**
+     * Ouvre ou ferme le menu d'export
+     */
+    function toggleExportMenu() {
+        const menu = document.getElementById('exportMenu');
+        // On bascule la visibilité
+        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+    }
+
+    
+    function exportData(format) {
+        if (!window.table) return alert("Le tableau n'est pas encore prêt.");
+
+        // --- Export PDF et HTML (Capture complète) ---
+        if (format === 'pdf' || format === 'html') {
+            const element = document.getElementById('dashboard-wrapper');
+            if (!element) return alert("Zone d'export introuvable.");
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const fileName = `Export_Complet_${timestamp}`;
+
+            if (format === 'pdf') {
+                const opt = {
+                    margin: 10,
+                    filename: `${fileName}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, letterRendering: true, useCORS: true, windowWidth: element.scrollWidth },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                html2pdf().set(opt).from(element).save().then(toggleExportMenu);
+            } else {
+                // Export HTML : On télécharge un fichier avec le contenu stylisé
+                const htmlContent = `
+                    <html>
+                    <head><title>Export Dashboard</title>
+                    <style>body{font-family:sans-serif; padding:20px;} .card{border:1px solid #ccc; padding:20px; margin-bottom:20px;}</style>
+                    </head>
+                    <body>${element.innerHTML}</body>
+                    </html>`;
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `${fileName}.html`;
+                link.click();
+                toggleExportMenu();
+            }
+            return;
+        }
+
+        // --- Export CSV / JSON (Données brutes) ---
+        const now = new Date().toISOString().slice(0, 10);
+        window.table.download(format, `Donnees_${now}.${format}`, { rows: "all" });
+        toggleExportMenu();
+    }
+
+
+    function loadThresholdsToInputs() {
+        // Récupère le dernier seuil sauvegardé (ou le premier selon votre besoin)
+        const savedThresholds = JSON.parse(localStorage.getItem('myThresholds')) || [];
+        
+        if (savedThresholds.length > 0) {
+            // On prend le dernier seuil ajouté comme exemple
+            const lastThreshold = savedThresholds[savedThresholds.length - 1];
+            
+            document.getElementById('newVal').value = lastThreshold.val;
+            document.getElementById('newColor').value = lastThreshold.color;
+        }
+    }
+
+    function updateThresholdList() {
+        const listDiv = document.getElementById('thresholdList');
+        listDiv.innerHTML = ''; // Vide la liste
+
+        window.thresholds.forEach((t, index) => {
+            const span = document.createElement('span');
+            span.style.cssText = `
+                background: ${t.color}; 
+                padding: 8px 12px; 
+                border-radius: 20px; 
+                display: flex; 
+                align-items: center; 
+                gap: 8px;
+                font-size: 14px;
+                border: 1px solid rgba(0,0,0,0.1);
+            `;
+            span.innerHTML = `
+                ${t.val}°C 
+                <span style="cursor:pointer; font-weight:bold;" onclick="removeThreshold(${index})">&times;</span>
+            `;
+            listDiv.appendChild(span);
+        });
+    }
+
+    // Modifier addThreshold pour inclure l'affichage
+    function addThreshold() {
+        const valInput = document.getElementById('newVal');
+        const colorInput = document.getElementById('newColor');
+        const val = parseFloat(parseFloat(valInput.value).toFixed(2));
+        
+        if (isNaN(val)) return alert("Entrez une valeur valide");
+
+        window.thresholds.push({ val: val, color: colorInput.value });
+        localStorage.setItem('myThresholds', JSON.stringify(window.thresholds));
+        
+        updateThresholdList(); // Rafraîchit la liste visuelle
+        renderDashboard();     // Rafraîchit le graph/tableau
+    }
+
+    // Nouvelle fonction pour supprimer un seul seuil
+    function removeThreshold(index) {
+        window.thresholds.splice(index, 1);
+        localStorage.setItem('myThresholds', JSON.stringify(window.thresholds));
+        updateThresholdList();
+        renderDashboard();
+    }
+
+    function clearThresholds() {
+        thresholds = []; localStorage.removeItem('myThresholds'); renderDashboard();
+    }
+
+    // Au chargement de la page, initialiser la liste
+    document.addEventListener("DOMContentLoaded", () => {
+        window.thresholds = JSON.parse(localStorage.getItem('myThresholds')) || [];
+        updateThresholdList();
+    });
+</script>
+</body>
+</html>

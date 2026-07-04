@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # --- NOUVELLE CONSTANTE : Chemin de la BDD d'Archive ---
 CONSULTATION_DB_PATH = 'consultation.db'
+LIVREUR_DB_PATH = 'kds_livreur_orders.db'
 
 class DBManager:
     """
@@ -48,15 +49,16 @@ class DBManager:
             raise
 
     def _create_tables(self):
-        """Crée les tables KDS et la table 'orders_archive' dans la BDD de consultation."""
+        """Crée les tables KDS, la table 'orders_archive' (consultation) et le clone 'livreur'."""
         conn_kds = None
         conn_consultation = None
+        conn_livreur = None
+        
         try:
-            # 1. Tables de la BDD KDS principale
+            # 1. Tables de la BDD KDS principale (kds_orders.db)
             conn_kds = self._get_connection()
             cursor_kds = conn_kds.cursor()
             
-            # Table des commandes (orders)
             cursor_kds.execute("""
                 CREATE TABLE IF NOT EXISTS orders (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,11 +69,9 @@ class DBManager:
                     items TEXT NOT NULL,
                     creation_date TEXT NOT NULL,
                     status TEXT NOT NULL,
-                    raw_content BLOB  -- ⭐ Stockage du ticket binaire
+                    raw_content BLOB
                 )
             """)
-            
-            # Table des notes de facture (bill_notes)
             cursor_kds.execute("""
                 CREATE TABLE IF NOT EXISTS bill_notes (
                     bill_id TEXT PRIMARY KEY,
@@ -82,11 +82,10 @@ class DBManager:
             conn_kds.commit()
             logger.info("Tables KDS ('orders', 'bill_notes') vérifiées/créées.")
             
-            # 2. Table des commandes archivées (orders_archive) - Base de consultation
+            # 2. Table des commandes archivées (consultation.db)
             conn_consultation = self._get_consultation_connection()
             cursor_consultation = conn_consultation.cursor()
             
-            # Table orders_archive (même structure + archived_date)
             cursor_consultation.execute("""
                 CREATE TABLE IF NOT EXISTS orders_archive (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,20 +97,69 @@ class DBManager:
                     creation_date TEXT NOT NULL,
                     status TEXT NOT NULL,
                     archived_date TEXT NOT NULL,
-                    raw_content BLOB  -- ⭐ Stockage du ticket binaire
+                    raw_content BLOB
                 )
             """)
             conn_consultation.commit()
             logger.info("Table 'orders_archive' dans consultation.db vérifiée/créée.")
+
+            # 3. Initialisation du clone 'kds_livreur_orders.db'
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor_livreur = conn_livreur.cursor()
+            cursor_livreur.execute("""
+                CREATE TABLE IF NOT EXISTS orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bill_id TEXT NOT NULL,
+                    table_number INTEGER NOT NULL,
+                    serveuse_name TEXT NOT NULL, 
+                    service_type TEXT NOT NULL, 
+                    items TEXT NOT NULL,
+                    creation_date TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    raw_content BLOB
+                )
+            """)
+            conn_livreur.commit()
+            logger.info("Base clone 'kds_livreur_orders.db' vérifiée/créée.")
             
         except sqlite3.Error as e:
             logger.error(f"Erreur lors de la création des tables : {e}")
         finally:
-            if conn_kds:
-                conn_kds.close()
-            if conn_consultation:
-                conn_consultation.close()
-    # ⭐ MÉTHODE À AJOUTER POUR CORRIGER L'AttributeError
+            if conn_kds: conn_kds.close()
+            if conn_consultation: conn_consultation.close()
+            if conn_livreur: conn_livreur.close()
+
+
+    def _execute_on_main_and_clone(self, query, params):
+        """
+        Exécute une commande SQL sur la base principale (kds_orders.db) 
+        et sur le clone (kds_livreur_orders.db).
+        """
+        # 1. Exécution sur la base principale
+        conn = None
+        try:
+            conn = self._get_connection()
+            conn.execute(query, params)
+            conn.commit()
+        except sqlite3.Error as e:
+            logger.error(f"Erreur lors de l'exécution sur la base principale : {e}")
+            raise # On remonte l'erreur pour que l'app sache que l'insertion a échoué
+        finally:
+            if conn:
+                conn.close()
+
+        # 2. Exécution sur le clone 'Livreur'
+        conn_clone = None
+        try:
+            conn_clone = sqlite3.connect(LIVREUR_DB_PATH)
+            conn_clone.execute(query, params)
+            conn_clone.commit()
+        except sqlite3.Error as e:
+            # On logue l'erreur mais on ne bloque pas tout le système si le clone échoue
+            logger.error(f"Erreur lors de l'exécution sur le clone '{LIVREUR_DB_PATH}' : {e}")
+        finally:
+            if conn_clone:
+                conn_clone.close()
 
     def get_main_dishes(self):
         """Récupère les noms et prix depuis kds_constants.db."""
@@ -187,6 +235,42 @@ class DBManager:
             raise e
         finally:
             if conn: conn.close()
+
+    def set_order_status_by_bill_id_livraison(self, bill_id: str, new_status: str) -> int:
+        """
+        Met à jour le statut d'une commande EXCLUSIVEMENT dans la base 'LIVREUR'.
+        """
+        row_count = 0
+        conn = None
+        
+        try:
+            # Connexion directe à la base du clone
+            conn = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor = conn.cursor()
+            clean_bid = str(bill_id).strip()
+            
+            # Mise à jour dans la base livreur
+            cursor.execute("""
+                UPDATE orders 
+                SET status = ? 
+                WHERE id = ? OR bill_id = ? OR bill_id LIKE ?
+            """, (new_status, clean_bid, clean_bid, f"{clean_bid}-%"))
+            
+            conn.commit()
+            row_count = cursor.rowcount
+            
+            if row_count > 0:
+                logger.info(f"✅ Succès (Livreur) : {row_count} ligne(s) mise(s) à jour pour '{clean_bid}'")
+            else:
+                logger.warning(f"⚠️ Échec (Livreur) : Aucune facture trouvée pour '{clean_bid}'.")
+                
+        except sqlite3.Error as e:
+            logger.error(f"❌ Erreur SQL (Livreur) : {e}")
+            if conn: conn.rollback()
+        finally:
+            if conn: conn.close()
+                
+        return row_count
 
     # ⭐ MÉTHODE CRITIQUE : Changer le statut d'une commande (pour Fermer/Traiter/Post-it)
     def set_order_status_by_bill_id(self, bill_id: str, new_status: str) -> int:
@@ -336,6 +420,57 @@ class DBManager:
         finally:
             if conn:
                 conn.close()
+
+    def add_note(self, message):
+        """
+        Crée une entrée dans la table 'orders'. 
+        Le message est découpé en lignes de 40 caractères max pour l'affichage KDS.
+        """
+        try:
+            bill_id = f"NOTE-{uuid.uuid4().hex[:8].upper()}"
+            
+            # 1. Découpage du message en lignes de 40 caractères max
+            # textwrap.wrap découpe proprement sans couper les mots au milieu si possible
+            lines = textwrap.wrap(message, width=30)
+            
+            # 2. Création de l'objet (dictionnaire)
+            note_dict = {
+                "main_item": "MESSAGE",
+                "sub_items": lines  # Utilise la liste de lignes découpées
+            }
+            
+            # 3. Conversion en chaîne JSON (premier niveau)
+            json_str = json.dumps(note_dict)
+            
+            # 4. Conversion finale pour la DB (double encodage avec les \ échappés)
+            items_json = json.dumps([json_str])
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO orders (
+                    bill_id, table_number, serveuse_name, service_type, 
+                    items, creation_date, status
+                ) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                bill_id, 
+                888, 
+                "MESSAGE", 
+                "888", 
+                items_json, 
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+                "En attente"
+            ))
+            
+            conn.commit()
+            conn.close()
+            return bill_id
+            
+        except Exception as e:
+            logger.error(f"Erreur DB lors de l'insertion de la note : {e}")
+            return None
                 
     def get_active_orders(self) -> list:
         """
@@ -587,19 +722,82 @@ class DBManager:
             
         return archived_orders_flat
     
+
+    def update_order_service_and_table(self, bill_id: str, new_service_type: str, new_table_number: str):
+        """
+        1. Vérifie si le service est autorisé (LIVRAISON/LIVREUR).
+        2. Vérifie si la table actuelle est autorisée (LIV/999).
+        3. Ferme l'ancienne commande et en crée une nouvelle.
+        """
+        # 0. Vérification de sécurité du service et de la table cible
+        authorized_services = ['LIVRAISON', 'LIVREUR']
+        # On définit les tables autorisées selon le service choisi
+        valid_tables = {'LIVRAISON': 'LIV', 'LIVREUR': '999'}
+        
+        if new_service_type not in authorized_services:
+            return False, f"Service '{new_service_type}' non autorisé."
+            
+        # Vérification si la table demandée correspond bien au service
+        if str(new_table_number) != str(valid_tables[new_service_type]):
+            return False, f"Table {new_table_number} invalide pour le service {new_service_type}."
+
+        conn = self._get_connection()
+        if not conn: return False, "Erreur BDD."
+        
+        try:
+            cursor = conn.cursor()
+            
+            # 1. Récupérer les données de l'ancienne commande
+            cursor.execute("""
+                SELECT items, serveuse_name, creation_date, table_number 
+                FROM orders WHERE bill_id = ?
+            """, (bill_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return False, f"Commande {bill_id} introuvable."
+            
+            items_data, serveuse_name, creation_date, current_table = row
+            
+            # 2. Sécurité : Vérifier si la table actuelle est autorisée à être déplacée
+            # Interdire si c'est 888 ou commence par PA
+            curr_table_str = str(current_table).upper()
+            if curr_table_str == '888' or curr_table_str.startswith('PA'):
+                return False, f"La table {curr_table_str} est protégée (déplacement interdit)."
+
+            # 3. Fermer l'ancienne
+            cursor.execute("UPDATE orders SET status = 'Traitée' WHERE bill_id = ?", (bill_id,))
+            
+            # 4. Créer la nouvelle
+            new_id = str(uuid.uuid4())
+            cursor.execute("""
+                INSERT INTO orders (bill_id, service_type, table_number, status, items, serveuse_name, creation_date)
+                VALUES (?, ?, ?, 'En attente', ?, ?, ?)
+            """, (new_id, new_service_type, str(new_table_number), items_data, serveuse_name, creation_date))
+            
+            conn.commit()
+            msg = f"Commande transférée vers {new_service_type} ({new_table_number})."
+            logger.info(msg)
+            return True, msg
+            
+        except sqlite3.Error as e:
+            return False, f"Erreur SQL : {e}"
+        finally:
+            if conn: conn.close()
+            
     
     def add_items_to_existing_bill(self, table_number, serveuse_name, new_items_list):
         """
-        Supprime l'ancienne commande et en crée une nouvelle.
-        Si une HEURE, une NOTE ou des UST sont déjà présents, ils sont MIS À JOUR
-        au lieu d'être additionnés. La commande repasse en 'En attente'.
+        Supprime l'ancienne commande et en crée une nouvelle dans la base principale et le clone livreur.
         """
         conn = self._get_connection()
+        conn_livreur = None
+        
         try:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
-            # 1. On récupère la dernière commande (peu importe le statut)
+            # 1. Récupération de l'ancienne commande
             cursor.execute("""
                 SELECT * FROM orders 
                 WHERE table_number = ? AND serveuse_name = ? 
@@ -607,83 +805,69 @@ class DBManager:
             """, (str(table_number), str(serveuse_name)))
             
             row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return False
+
+            # 2. Décodage et traitement des items
+            current_items_objs = []
+            raw_items_data = row['items']
+            if raw_items_data:
+                try:
+                    loaded = json.loads(raw_items_data)
+                    for item in (loaded if isinstance(loaded, list) else [loaded]):
+                        current_items_objs.append(json.loads(item) if isinstance(item, str) else item)
+                except:
+                    current_items_objs = []
+
+            prefixes_to_manage = {"HEURE:": "HEURE:", "NOTE:": "NOTE:", "UST:": "UST:"}
+
+            for new_item_raw in new_items_list:
+                new_obj = json.loads(new_item_raw) if isinstance(new_item_raw, str) else new_item_raw
+                new_text = new_obj.get('main_item', "")
+                
+                found_prefix = next((p for p in prefixes_to_manage if new_text.startswith(p)), None)
+                if found_prefix:
+                    current_items_objs = [i for i in current_items_objs if not (isinstance(i, dict) and i.get('main_item', "").startswith(found_prefix))]
+                current_items_objs.append(new_obj)
+
+            # 3. Préparation des données
+            final_items_json_strings = [json.dumps(obj) for obj in current_items_objs]
+            order_data = dict(row)
+            old_id = order_data.pop('id')
+            order_data['status'] = 'En attente'
+            order_data['items'] = json.dumps(final_items_json_strings)
+            order_data['creation_date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            # 4. EXÉCUTION SYNC (Base Principale + Clone Livreur)
+            # Suppression dans les deux bases
+            cursor.execute("DELETE FROM orders WHERE id = ?", (old_id,))
             
-            if row:
-                # 2. Décodage des items actuels
-                current_items_objs = []
-                raw_items_data = row['items']
-                if raw_items_data:
-                    try:
-                        loaded = json.loads(raw_items_data)
-                        for item in (loaded if isinstance(loaded, list) else [loaded]):
-                            current_items_objs.append(json.loads(item) if isinstance(item, str) else item)
-                    except:
-                        current_items_objs = []
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            conn_livreur.execute("DELETE FROM orders WHERE id = ?", (old_id,))
 
-                # --- 3. LOGIQUE DE MISE À JOUR (REMPLACEMENT) ---
-                prefixes_to_manage = {
-                    "HEURE:": "HEURE:",
-                    "NOTE:": "NOTE:",
-                    "UST:": "UST:"
-                }
-
-                for new_item_raw in new_items_list:
-                    new_obj = json.loads(new_item_raw) if isinstance(new_item_raw, str) else new_item_raw
-                    new_text = new_obj.get('main_item', "")
-                    
-                    # On cherche si le nouvel item commence par un de nos préfixes
-                    found_prefix = None
-                    for prefix in prefixes_to_manage:
-                        if new_text.startswith(prefix):
-                            found_prefix = prefix
-                            break
-                    
-                    if found_prefix:
-                        # On SUPPRIME l'ancien item qui avait ce préfixe avant d'ajouter le nouveau
-                        current_items_objs = [
-                            item for item in current_items_objs 
-                            if not (isinstance(item, dict) and item.get('main_item', "").startswith(found_prefix))
-                        ]
-                    
-                    # On ajoute le nouvel item (qui remplace donc l'ancien s'il existait)
-                    current_items_objs.append(new_obj)
-
-                # 4. Préparation des données pour la nouvelle commande
-                final_items_json_strings = [json.dumps(obj) for obj in current_items_objs]
-                order_data = dict(row)
-                old_id = order_data.pop('id') # On enlève l'ID pour en générer un nouveau
-                
-                # Mise à jour forcée
-                order_data['status'] = 'En attente'
-                order_data['items'] = json.dumps(final_items_json_strings)
-                
-                # Update de la date pour le tri KDS
-                for date_col in ['date', 'timestamp', 'created_at']:
-                    if date_col in order_data:
-                        order_data[date_col] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-                # 5. Cycle Suppression / Insertion (Nouvel ID)
-                cursor.execute("DELETE FROM orders WHERE id = ?", (old_id,))
-
-                columns = order_data.keys()
-                placeholders = ":" + ", :".join(columns)
-                sql = f"INSERT INTO orders ({', '.join(columns)}) VALUES ({placeholders})"
-                
-                cursor.execute(sql, order_data)
-                
-                conn.commit()
-                logger.info(f"DB: Commande #{old_id} mise à jour (Remplacement Heure/Note) et réactivée.")
-                return True
+            # Insertion dans les deux bases
+            columns = order_data.keys()
+            placeholders = ":" + ", :".join(columns)
+            sql = f"INSERT INTO orders ({', '.join(columns)}) VALUES ({placeholders})"
             
-            return False
+            cursor.execute(sql, order_data) # Base principale
+            conn_livreur.execute(sql, order_data) # Clone livreur
+            
+            conn.commit()
+            conn_livreur.commit()
+            
+            logger.info(f"DB: Commande #{old_id} mise à jour et synchronisée avec le clone.")
+            return True
 
         except Exception as e:
-            logger.error(f"Erreur lors de la mise à jour/réactivation : {e}")
-            conn.rollback()
+            logger.error(f"Erreur lors de la synchro mise à jour : {e}")
+            if conn: conn.rollback()
+            if conn_livreur: conn_livreur.rollback()
             return False
         finally:
-            conn.close()
-    
+            if conn: conn.close()
+            if conn_livreur: conn_livreur.close()
     import threading  # <--- AJOUTEZ CECI EN HAUT DE VOTRE FICHIER
 
 # ... (votre classe DBManager)
@@ -695,18 +879,20 @@ class DBManager:
         import sqlite3
 
         conn = self._get_connection()
+        conn_livreur = None
+        str_bid = str(bid)
+        
         try:
+            # 1. Récupération
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            str_bid = str(bid)
-            
-            # 1. Récupération de la commande
             cursor.execute("SELECT * FROM orders WHERE id = ?", (str_bid,))
             row = cursor.fetchone()
             if not row:
+                conn.close()
                 return False
 
-            # 2. Décodage des items existants
+            # 2. Traitement des items
             current_items_objs = []
             raw_items_data = row['items']
             if raw_items_data:
@@ -717,81 +903,79 @@ class DBManager:
                 except:
                     current_items_objs = []
 
-            # --- LOGIQUE DE RÉCUPÉRATION ---
-            # Si on reçoit 'NOTE', 'HEURE' ou 'UST', on essaie de garder l'ancienne valeur si elle existe
-            
-            # Extraction des valeurs actuelles dans les items pour ne pas les perdre
             old_time = next((i['main_item'].replace("HEURE: ", "") for i in current_items_objs if str(i.get('main_item')).startswith("HEURE:")), None)
             old_ust = next((i['main_item'].replace("UST: ", "") for i in current_items_objs if str(i.get('main_item')).startswith("UST:")), None)
             old_note_obj = next((i for i in current_items_objs if str(i.get('main_item')) == "NOTE:"), None)
 
-            # On décide quelle valeur utiliser (la nouvelle si elle est valide, sinon l'ancienne)
             final_time = desired_time if (desired_time and desired_time.upper() != 'HEURE') else old_time
             final_ust = utensils if (utensils and utensils.upper() != 'UST') else old_ust
             
-            # Pour la note, on vérifie si la nouvelle est valide
             if note and note.upper() != 'NOTE':
                 final_note = note
             else:
-                # On reconstruit la note à partir des sub_items si elle existait
                 final_note = " ".join(old_note_obj['sub_items']) if old_note_obj else None
 
-            # 3. Préparation des lignes de note
             note_lines = textwrap.wrap(final_note, width=18) if final_note else []
 
-            # 4. Nettoyage (on enlève tout pour reconstruire proprement avec les valeurs conservées)
             prefixes_to_clean = ["HEURE:", "UST:", "NOTE:", "*** DONNER AU PC", "*** ENLEVER", "PA #"]
             current_items_objs = [
                 i for i in current_items_objs 
                 if not any(str(i.get('main_item', '')).startswith(p) for p in prefixes_to_clean)
             ]
 
-            # 5. Ajout des valeurs (finales ou récupérées)
-            if final_time:
-                current_items_objs.append({"main_item": f"HEURE: {final_time}", "sub_items": []})
-            
-            if final_ust:
-                current_items_objs.append({"main_item": f"UST: {final_ust}", "sub_items": []})
-
-            if final_note:
-                current_items_objs.append({"main_item": "NOTE:", "sub_items": note_lines})
-            
+            if final_time: current_items_objs.append({"main_item": f"HEURE: {final_time}", "sub_items": []})
+            if final_ust: current_items_objs.append({"main_item": f"UST: {final_ust}", "sub_items": []})
+            if final_note: current_items_objs.append({"main_item": "NOTE:", "sub_items": note_lines})
             if donner_au_pc:
                 display_pa = pa_number if pa_number else "???"
                 current_items_objs.append({"main_item": f"*** DONNER AU PC (PA #{display_pa}) ***", "sub_items": []})
                 current_items_objs.append({"main_item": "*** ENLEVER LE PAPIER JAUNE ***", "sub_items": []})
 
-            # 6. MISE À JOUR EN BASE
             final_json = json.dumps([json.dumps(obj) for obj in current_items_objs])
             
-            cursor.execute("""
-                UPDATE orders 
-                SET items = ?, status = ? 
-                WHERE id = ?
-            """, (final_json, 'Traitée', str_bid))
+            # --- MISE À JOUR SYNCHRONISÉE ---
+            query = "UPDATE orders SET items = ?, status = ? WHERE id = ?"
+            
+            # Base KDS : On met à 'Traitée' pour forcer le refresh visuel (fermeture)
+            cursor.execute(query, (final_json, 'Traitée', str_bid))
+            
+            # Base Livreur : On met à 'En attente' directement
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            conn_livreur.execute(query, (final_json, 'Traitée', str_bid))
             
             conn.commit()
+            conn_livreur.commit()
             
-            # 7. RÉACTIVATION après 3 seconde
-            def reset_to_pending():
+            # 3. RÉACTIVATION DIFFÉRÉE (KDS uniquement)
+            def reactivate_kds():
                 try:
+                    # Réactivation KDS
                     conn_timer = sqlite3.connect(self.db_path)
-                    cur = conn_timer.cursor()
-                    cur.execute("UPDATE orders SET status = ? WHERE id = ?", ('En attente', str_bid))
+                    conn_timer.execute("UPDATE orders SET status = ? WHERE id = ?", ('En attente', str_bid))
                     conn_timer.commit()
                     conn_timer.close()
+                    
+                    # Réactivation Livreur
+                    conn_livreur_timer = sqlite3.connect(LIVREUR_DB_PATH)
+                    conn_livreur_timer.execute("UPDATE orders SET status = ? WHERE id = ?", ('En attente', str_bid))
+                    conn_livreur_timer.commit()
+                    conn_livreur_timer.close()
                 except Exception as e:
-                    print(f"Erreur réactivation: {e}")
+                    logger.error(f"Erreur réactivation différée des deux bases: {e}")
 
-            threading.Timer(3.0, reset_to_pending).start()
+            # Déclenchement du délai de 3 secondes
+            threading.Timer(3.0, reactivate_kds).start()
+            
             return True
 
         except Exception as e:
-            print(f"Erreur: {e}")
+            logger.error(f"Erreur update_pa_details avec synchro: {e}")
             if conn: conn.rollback()
+            if conn_livreur: conn_livreur.rollback()
             return False
         finally:
             if conn: conn.close()
+            if conn_livreur: conn_livreur.close()
 
     def close_livraison_details(self, bid):
         """
@@ -867,7 +1051,7 @@ class DBManager:
         """Marque les commandes par service_type comme 'Traitée'."""
         try:
             # Les 4 types que tu veux traiter
-            types_to_process = ('POUR EMPORTER', 'LIVRAISON', 'COMMANDE', 'LIVREUR')
+            types_to_process = ('POUR EMPORTER', 'LIVRAISON', 'COMMANDE', 'LIVREUR' ,'888')
             
             # On génère dynamiquement le bon nombre de "?" (ici il en faut 4)
             placeholders = ', '.join(['?'] * len(types_to_process))
@@ -897,116 +1081,119 @@ class DBManager:
             return 0
 
 
-    def mark_specific_types_as_done(self):
-        """Marque les commandes par service_type comme 'Traitée'."""
+    def mark_all_as_done(self):
+        """Marque TOUTES les commandes (quel que soit le service_type) comme 'Traitée' dans les deux bases."""
+        total_count = 0
+        
+        # Requête pour mettre à jour tout ce qui n'est pas encore traité
+        query = "UPDATE orders SET status = 'Traitée' WHERE status != 'Traitée'"
+        
         try:
-            # Vérifie bien que ces noms correspondent exactement à ce qui est écrit sur tes tickets
-            types_to_process = ('POUR EMPORTER', 'LIVRAISON', 'LIVREUR')
-            
-            # Correction de la colonne : service_type au lieu de order_type
-            query = """
-                UPDATE orders 
-                SET status = 'Traitée' 
-                WHERE service_type IN (?, ?, ?) 
-                AND status != 'Traitée'
-            """
-            
+            # 1. Traitement BDD Principale
             conn = self._get_connection()
             cursor = conn.cursor()
-            cursor.execute(query, types_to_process)
-            count = cursor.rowcount
+            cursor.execute(query)
+            count_main = cursor.rowcount
             conn.commit()
             conn.close()
             
-            if count > 0:
-                logger.info(f"NETTOYAGE AUTO: {count} commandes ({types_to_process}) traitées.")
-            return count
+            # 2. Traitement BDD Livreur
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor_livreur = conn_livreur.cursor()
+            cursor_livreur.execute(query)
+            count_livreur = cursor_livreur.rowcount
+            conn_livreur.commit()
+            conn_livreur.close()
+            
+            total_count = count_main + count_livreur
+            
+            if total_count > 0:
+                logger.info(f"NETTOYAGE AUTO: {total_count} commandes marquées comme 'Traitée' dans les deux bases.")
+                
+            return total_count
+            
         except Exception as e:
-            logger.error(f"Erreur lors du marquage automatique : {e}")
+            logger.error(f"Erreur lors du marquage automatique de toutes les commandes : {e}")
             return 0
 
     # --- MÉTHODES DE COMMANDE (MODIFIÉE) ---
     def insert_order(self, bill_id, table_number, serveuse_name, service_type, items, status='En attente', creation_date=None, raw_content=None):
         """
-        Insère une nouvelle ligne de commande avec son contenu binaire brut (ESC/POS).
-        Garantit l'unicité par un suffixe de 8 caractères et gère l'archive de consultation.
+        Insère une nouvelle commande.
+        - Base principale: Toujours.
+        - Clone livreur (kds_livreur_orders.db): Toujours (Vrai clone).
+        - Consultation: Seulement si critères respectés.
         """
         conn = None
-        conn_consul = None # Pour la base d'archive
+        conn_consul = None
+        conn_livreur = None
         
-        # 1. Création de l'ID unique (ID original + 8 caractères aléatoires)
+        # 1. Création de l'ID unique
         unique_suffix = uuid.uuid4().hex[:8]
         safe_bill_id = f"{bill_id}-{unique_suffix}"
         
-        # 2. Gestion de la date
         if not creation_date:
             creation_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # Encodage des items en JSON
         items_json = json.dumps(items, ensure_ascii=False) 
 
         try:
-            # --- BASE PRINCIPALE (kds_orders.db) ---
+            # --- 1. BASE PRINCIPALE (kds_orders.db) ---
             conn = self._get_connection()
             cursor = conn.cursor()
-            
-            # 3. Insertion incluant le champ raw_content (BLOB)
             cursor.execute("""
                 INSERT INTO orders (bill_id, table_number, serveuse_name, service_type, items, creation_date, status, raw_content)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (safe_bill_id, table_number, serveuse_name, service_type, items_json, creation_date, status, raw_content))
             
-            # 4. Note de facture (obligatoire pour le fonctionnement du KDS)
             cursor.execute("""
                 REPLACE INTO bill_notes (bill_id, note_content, last_updated)
                 VALUES (?, ?, ?)
             """, (safe_bill_id, "", creation_date))
-            
             conn.commit()
-            logger.info(f"Commande ajoutée avec succès. ID unique: {safe_bill_id}")
+            logger.info(f"Commande ajoutée (Base principale). ID: {safe_bill_id}")
             
-            # --- LOGIQUE DE FILTRAGE POUR L'ARCHIVE ---
+            # --- 2. CLONE LIVREUR (kds_livreur_orders.db) ---
+            # Ce bloc assure que le clone reçoit exactement les mêmes données que la base principale
+            try:
+                conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+                conn_livreur.execute("""
+                    INSERT INTO orders (bill_id, table_number, serveuse_name, service_type, items, creation_date, status, raw_content)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (safe_bill_id, table_number, serveuse_name, service_type, items_json, creation_date, status, raw_content))
+                conn_livreur.commit()
+            except sqlite3.Error as e:
+                logger.error(f"Erreur insertion dans clone livreur : {e}")
+
+            # --- 3. BASE DE CONSULTATION ---
             est_livreur = (str(table_number) == "999")
             nom_serveuse_maj = str(serveuse_name).upper()
             est_inconnu_888 = (str(table_number) == "888" and "INCONNU" in nom_serveuse_maj)
 
-            # On n'enregistre dans CONSULTATION que si ce n'est NI un livreur NI un test "Inconnu"
             if not est_livreur and not est_inconnu_888:
                 try:
                     conn_consul = self._get_consultation_connection()
-                    cursor_consul = conn_consul.cursor()
-                    
-                    # 5. Insertion dans orders_archive incluant le contenu brut
-                    cursor_consul.execute("""
+                    conn_consul.execute("""
                         INSERT INTO orders_archive (
                             bill_id, table_number, serveuse_name, service_type, 
                             items, creation_date, status, archived_date, raw_content
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        safe_bill_id, table_number, serveuse_name, service_type, 
-                        items_json, creation_date, status, creation_date, raw_content
-                    ))
-                    
+                    """, (safe_bill_id, table_number, serveuse_name, service_type, 
+                          items_json, creation_date, status, creation_date, raw_content))
                     conn_consul.commit()
-                    logger.info(f"Commande {safe_bill_id} dupliquée dans l'archive consultation (avec binaire).")
+                    logger.info(f"Commande {safe_bill_id} dupliquée dans consultation.db")
                 except sqlite3.Error as e_consul:
-                    logger.error(f"Erreur lors de l'archivage (consultation.db) : {e_consul}")
-                    if conn_consul: conn_consul.rollback()
-            else:
-                raison = "LIVREUR (999)" if est_livreur else "TEST/ERREUR (888 + Nom contient INCONNU)"
-                logger.info(f"Commande {safe_bill_id} ignorée pour l'archive (Raison: {raison})")
+                    logger.error(f"Erreur archivage consultation.db : {e_consul}")
 
         except sqlite3.Error as e:
-            logger.error(f"Erreur lors de l'insertion du ticket {bill_id} dans la base principale : {e}")
+            logger.error(f"Erreur critique insertion ticket {bill_id} : {e}")
             if conn: conn.rollback()
         
         finally:
-            # Fermeture impérative des connexions pour libérer SQLite
-            if conn:
-                conn.close()
-            if conn_consul:
-                conn_consul.close()
+            if conn: conn.close()
+            if conn_consul: conn_consul.close()
+            if conn_livreur: conn_livreur.close()
         
     def add_new_order(self, bill_id, table_number, serveuse_name, service_type, items, status='En attente', creation_date=None, raw_content=None):
         """
@@ -1027,6 +1214,83 @@ class DBManager:
             creation_date=creation_date,
             raw_content=raw_content
         )
+
+    def get_pending_orders_kds_alert(self):
+        """
+        Récupère toutes les commandes en cours depuis la base LIVREUR.
+        Les regroupe par types incluant le contenu brut (BLOB).
+        """
+        conn = None
+        rows = []
+        
+        # --- 1. LECTURE DE LA BASE LIVREUR ---
+        try:
+            # On se connecte spécifiquement au fichier du clone
+            conn = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT id, bill_id, table_number, serveuse_name, service_type, 
+                       items, creation_date, status, raw_content 
+                FROM orders 
+                WHERE status NOT IN ('Traitée', 'Annulée') 
+                ORDER BY creation_date ASC
+            """)
+            rows = cursor.fetchall()
+            
+        except sqlite3.Error as e:
+            logger.error(f"Erreur lors de la récupération des commandes dans le clone '{LIVREUR_DB_PATH}' : {e}")
+        finally:
+            if conn: 
+                conn.close()
+
+        # --- 2. TRAITEMENT DES DONNÉES ---
+        pending_orders_by_service = {
+            'COMMANDE': [],
+            'LIVRAISON': [],
+            'LIVREUR': [],
+            'POUR EMPORTER': []
+        }
+        
+        for row in rows:
+            try:
+                raw_items = row[5]
+                items_list = json.loads(raw_items) if raw_items else []
+                
+                order_data = {
+                    'id': row[0],
+                    'bill_id': row[1],
+                    'table_number': str(row[2]).strip(),
+                    'serveuse_name': str(row[3]).strip(),
+                    'service_type': str(row[4]).upper(), 
+                    'items': items_list,
+                    'creation_date': row[6],
+                    'status': row[7],
+                    'raw_content': row[8]
+                }
+                
+                stype = order_data['service_type']
+                table = order_data['table_number']
+                serveuse = order_data['serveuse_name']
+                
+                # --- LOGIQUE DE CLASSEMENT ---
+                if table == "777" or serveuse == "777" or "LIVRAISON" in stype:
+                    pending_orders_by_service['LIVRAISON'].append(order_data)
+                
+                elif table == "999" or serveuse == "999" or "LIVREUR" in stype:
+                    pending_orders_by_service['LIVREUR'].append(order_data)
+                
+                elif table == "888" or "EMPORTER" in stype:
+                    pending_orders_by_service['POUR EMPORTER'].append(order_data)
+                
+                else:
+                    pending_orders_by_service['COMMANDE'].append(order_data)
+                    
+            except Exception as e:
+                logger.warning(f"Erreur lors du traitement d'une ligne (Clone {LIVREUR_DB_PATH}, ID {row[0]}): {e}")
+                continue
+                
+        return pending_orders_by_service
 
     def get_pending_orders(self):
         """
@@ -1533,61 +1797,97 @@ class DBManager:
     # --- MÉTHODES DE SUPPRESSION (Vérifiées pour être KDS-only) ---
     def clear_all_data(self):
         """
-        🗑️ Supprime TOUTES les commandes de la table 'orders' et 
-        TOUTES les notes de la table 'bill_notes' DANS LA BDD KDS SEULEMENT.
-        L'archive (consultation.db) N'EST PAS AFFECTÉE.
+        Supprime TOUTES les données dans la BDD KDS et le clone Livreur.
         """
         conn = None
+        conn_livreur = None
         orders_deleted = 0
         notes_deleted = 0
-        logger.critical("ATTENTION: Suppression de TOUTES les données de la BDD KDS principale.")
+        
+        logger.critical("ATTENTION: Suppression totale des données (KDS + Clone Livreur).")
+        
         try:
+            # Nettoyage base principale
             conn = self._get_connection()
             cursor = conn.cursor()
-            
-            # Supprimer toutes les lignes de la table orders (KDS)
             cursor.execute("DELETE FROM orders")
             orders_deleted = cursor.rowcount
-            
-            # Supprimer toutes les lignes de la table bill_notes (KDS)
             cursor.execute("DELETE FROM bill_notes")
             notes_deleted = cursor.rowcount
-            
             conn.commit()
-            logger.critical(f"Nettoyage complet effectué : {orders_deleted} commandes et {notes_deleted} notes supprimées de kds_orders.db.")
+            
+            # Nettoyage clone livreur
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            conn_livreur.execute("DELETE FROM orders")
+            conn_livreur.commit()
+            
+            logger.critical(f"Nettoyage complet : {orders_deleted} commandes supprimées des deux bases.")
         except sqlite3.Error as e:
-            logger.error(f"Erreur critique lors du nettoyage complet de la BDD KDS : {e}")
+            logger.error(f"Erreur lors du nettoyage complet : {e}")
         finally:
-            if conn:
-                conn.close()
+            if conn: conn.close()
+            if conn_livreur: conn_livreur.close()
         
-        return orders_deleted, notes_deleted 
-        
-    def delete_completed_and_cancelled_orders(self):
+        return orders_deleted, notes_deleted
+
+    def mark_all_as_treated_livreur(self):
         """
-        ✅ Fonction Corbeille : Supprime définitivement de la BDD KDS 
-        toutes les commandes ayant le statut 'Traitée' ou 'Annulée'.
-        L'archive (consultation.db) N'EST PAS AFFECTÉE (Clonage effectué à l'insertion).
+        Marque TOUTES les commandes de la base LIVREUR comme 'Traitée'.
         """
         conn = None
         row_count = 0
         try:
-            conn = self._get_connection()
+            # Connexion directe à la base du clone livreur
+            conn = sqlite3.connect(LIVREUR_DB_PATH)
             cursor = conn.cursor()
             
+            # Mise à jour de toutes les commandes non traitées/annulées
             cursor.execute("""
-                DELETE FROM orders
-                WHERE status IN ('Traitée', 'Annulée')
+                UPDATE orders 
+                SET status = 'Traitée' 
+                WHERE status NOT IN ('Traitée', 'Annulée')
             """)
             
+            conn.commit()
+            row_count = cursor.rowcount
+            logger.info(f"✅ Succès (Livreur) : {row_count} commandes marquées comme 'Traitée'.")
+            
+        except sqlite3.Error as e:
+            logger.error(f"❌ Erreur SQL lors du marquage en 'Traitée' (Livreur) : {e}")
+            if conn: conn.rollback()
+        finally:
+            if conn: conn.close()
+                
+        return row_count
+            
+    def delete_completed_and_cancelled_orders(self):
+        """
+        Supprime les commandes 'Traitée'/'Annulée' dans la BDD KDS et le clone Livreur.
+        """
+        conn = None
+        conn_livreur = None
+        row_count = 0
+        
+        try:
+            # Nettoyage base principale
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM orders WHERE status IN ('Traitée', 'Annulée')")
             row_count = cursor.rowcount
             conn.commit()
-            logger.warning(f"Corbeille vidée : {row_count} commandes 'Traitée'/'Annulée' supprimées définitivement de kds_orders.db.")
+            
+            # Nettoyage clone livreur
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            conn_livreur.execute("DELETE FROM orders WHERE status IN ('Traitée', 'Annulée')")
+            conn_livreur.commit()
+            
+            logger.warning(f"Corbeille vidée : {row_count} commandes supprimées des deux bases.")
         except sqlite3.Error as e:
-            logger.error(f"Erreur lors de la suppression des commandes archivées : {e}")
+            logger.error(f"Erreur lors du vidage de la corbeille : {e}")
         finally:
-            if conn:
-                conn.close()
+            if conn: conn.close()
+            if conn_livreur: conn_livreur.close()
+            
         return row_count
 
 # --------------------------------------------------------------------------------

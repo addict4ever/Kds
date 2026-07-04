@@ -680,11 +680,25 @@ def main():
     finally:
         # --- NETTOYAGE ABSOLU ---
         # S'exécute TOUJOURS, que ce soit un return normal, un Ctrl+C ou un crash !
+        
+        # 1. Fermeture de l'affichage
         pygame.display.quit()
+        
+        # 2. Fermeture de l'audio
         try:
             pygame.mixer.quit()
-        except:
+        except Exception:
             pass
+            
+        # 3. DÉSACTIVATION COMPLÈTE DE PYGAME
+        # C'est cette ligne qui libère le verrou sur le touchscreen et les périphériques HID
+        try:
+            pygame.quit()
+        except Exception:
+            pass
+            
+        # Note: Assurez-vous de ne pas avoir de 'sys.exit()' dans le reste de votre code
+        # si vous voulez que votre main_app.py reste ouvert après le jeu.
 
 # --- AJOUTE CETTE PROTECTION ---
 # Cela permet de lancer le jeu si on clique sur le fichier, 

@@ -15,7 +15,9 @@ import math
 import textwrap  # Pour le retour à la ligne automatique
 import re
 import time
-
+import shutil
+##from floating_note import FloatingNote
+from thermometer_widget import FloatingApp # Importez la classe principale
 
 
 
@@ -86,7 +88,7 @@ try:
 except ImportError:
     class DBManager:
         def __init__(self): logging.warning("DBManager simulé.")
-        def get_pending_orders(self):return {'Sur Place': [], 'À Emporter': [], 'Livraison': [], 'Livreur': []}
+        def get_pending_orders(self):return {'Sur Place': [], 'À Emporter': [], 'Livraison': [], 'Livreur': [], '888': []}
         def update_order_status(self, bill_id, status): return 1
         def permanent_delete_order_by_bill_id(self, bill_id): return 1
         # Simuler les méthodes requises par les autres modules pour éviter les crashs
@@ -610,22 +612,23 @@ class KDSGUI:
             "COMMANDE": True,
             "LIVRAISON": True,
             "LIVREUR": True,
-            "POUR EMPORTER": True
+            "POUR EMPORTER": True,
+            "888": True
         }
         self.all_selected = True
 
         
 
         # 🚀 VÉRIFICATION DE LA CONFIGURATION POUR LE COMPAGNON
-        if DesktopPet:
+        #if DesktopPet:
             # On va chercher la valeur dans KDS_CONFIG (ou sa valeur par défaut True si absente)
-            if KDS_CONFIG.get("animation_personnage", True):
-                logger.info("Configuration : Animation personnage ACTIVÉE.")
-                pet_window = tk.Toplevel(self.root)
-                self.desktop_pet = DesktopPet(pet_window)
-            else:
-                logger.info("Configuration : Animation personnage DÉSACTIVÉE.")
-                self.desktop_pet = None
+        #    if KDS_CONFIG.get("animation_personnage", True):
+        #        logger.info("Configuration : Animation personnage ACTIVÉE.")
+        #        pet_window = tk.Toplevel(self.root)
+        #        self.desktop_pet = DesktopPet(pet_window)
+        #    else:
+        #        logger.info("Configuration : Animation personnage DÉSACTIVÉE.")
+        #        self.desktop_pet = None
         
         # Initialisation du gestionnaire des plats principaux
         try:
@@ -649,7 +652,7 @@ class KDSGUI:
         print_forwarding_state=self.print_enabled_var
         )
 
-        
+        threading.Thread(target=lambda: FloatingApp(), daemon=True).start()
         
         # 3. Démarrer le thread
         self.serial_reader.daemon = True
@@ -662,7 +665,10 @@ class KDSGUI:
         self.check_auto_cleanup()
         self._schedule_auto_cleanup()
 
-        
+
+    def start_thermometer():
+        # On lance l'application flottante
+        FloatingApp()    
     
     def disable_event(self, event=None):
         """Fonction qui ne fait rien pour bloquer les tentatives de fermeture."""
@@ -703,10 +709,10 @@ class KDSGUI:
             if getattr(self, 'last_cleanup_morning', None) != now.date():
                 print(f"🕒 {now.strftime('%H:%M')} - Début du nettoyage automatique matinal...")
                 try:
-                    count = self.db_manager.mark_specific_types_as_done()
+                    count = self.db_manager.mark_specific_types_as_done_all()
                     if count > 0:
                         self.update_status(f"Nettoyage Auto Matin : {count} commandes traitées.", "#2ecc71")
-                        self.refresh_display()
+                        
                     
                     self.last_cleanup_morning = now.date()
                     print(f"✅ Nettoyage matinal terminé le {now.date()}.")
@@ -719,10 +725,10 @@ class KDSGUI:
             if getattr(self, 'last_cleanup_afternoon', None) != now.date():
                 print(f"🕒 {now.strftime('%H:%M')} - Début du nettoyage automatique après-midi...")
                 try:
-                    count = self.db_manager.mark_specific_types_as_done()
+                    count = self.db_manager.mark_specific_types_as_done_all()
                     if count > 0:
                         self.update_status(f"Nettoyage Auto Après-midi : {count} commandes traitées.", "#2ecc71")
-                        self.refresh_display()
+                        
                     
                     self.last_cleanup_afternoon = now.date()
                     print(f"✅ Nettoyage après-midi terminé le {now.date()}.")
@@ -825,6 +831,11 @@ class KDSGUI:
             command=lambda: self._switch_tab("POUR EMPORTER"))
         self.btn_pa.pack(side=tk.LEFT, padx=5)
 
+        self.btn_888 = tk.Button(self.left_tabs_frame, text="888", 
+            font=('Arial', 11, 'bold'), bg='#e91e63', fg='white', relief='flat', padx=15,
+            command=lambda: self._switch_tab("888"))
+        self.btn_888.pack(side=tk.LEFT, padx=5)
+
         # --- 🕒 B. ZONE DROITE : HEURE ET COMPTEUR (EN JAUNE) ---
         self.top_title_label = tk.Label(
             self.header_frame, 
@@ -845,49 +856,62 @@ class KDSGUI:
 
 
     def update_special_item_count(self):
-        """Extraction intelligente utilisant les données chargées en mémoire."""
         import re
-
-        # Vérification de sécurité pour l'index du mode[cite: 1]
-        if self.bread_count_mode >= len(self.modes_comptage):
-            return
+        if self.bread_count_mode >= len(self.modes_comptage): return
             
         current_cfg = self.modes_comptage[self.bread_count_mode]
         target_1, target_2 = current_cfg["targets"]
-        
-        count_1 = 0
-        count_2 = 0
+        count_1, count_2 = 0, 0
 
+        # --- CORRECTION DE LA LOGIQUE DE QUANTITÉ ---
         def extract_quantity(text):
+            # Trouve tous les nombres dans le texte (ex: "1 2" -> ["1", "2"])
             numbers = re.findall(r'(\d+)', text)
-            return int(numbers[-1]) if numbers else 1
+            if not numbers:
+                return 1
+            
+            # On multiplie tous les nombres trouvés entre eux
+            # "1 2 MENAGE" -> 1 * 2 = 2
+            qty = 1
+            for n in numbers:
+                qty *= int(n)
+            return qty
 
-        # Analyse des commandes actives
-        for postit in self.active_postits.values():
-            items = postit.order_data.get('items', [])
-            for item in items:
-                raw_text = item.get('text', '') if isinstance(item, dict) else str(item)
+        for bill_id, postit in self.active_postits.items():
+            items_status = postit.get_items_status() 
+            
+            for item in items_status:
+                raw_text = item['text']
+                is_raye = item['is_raye']
+                
+                # Exclure si rayé ou commence par [
+                if is_raye or raw_text.startswith("["):
+                    continue
+
                 text = raw_text.upper().strip()
-
-                # Application des règles (ex: SUPER SAND)[cite: 1]
+                
+                # Calcul quantité
                 qty = 1
                 found_special = False
                 for item_special, multiplicateur in self.regles_speciales.items():
                     if item_special in text:
+                        # Si on trouve une règle spéciale, on garde la valeur fixe du multiplicateur
                         qty = multiplicateur
                         found_special = True
                         break
                 
                 if not found_special:
+                    # Si aucune règle spéciale, on utilise la multiplication des nombres trouvés
                     qty = extract_quantity(text)
 
-                # Incrémentation
+                # DEBUG pour vérifier le calcul
+                # print(f"DEBUG: '{text}' -> qty détectée: {qty}")
+
                 if target_1 in text:
                     count_1 += qty
                 elif target_2 in text:
                     count_2 += qty
 
-        # Mise à jour du Label (Interface tactile)[cite: 1]
         if hasattr(self, 'lbl_mini_spe_count'):
             label_text = f"{current_cfg['prefix']} {current_cfg['labels'][0]}: {count_1}  |  {current_cfg['labels'][1]}: {count_2}"
             self.lbl_mini_spe_count.config(text=label_text)
@@ -1007,7 +1031,7 @@ class KDSGUI:
 
     def get_current_sound_path(self):
         """Retourne le chemin complet du son choisi."""
-        sound_name = KDS_CONFIG.get("selected_sound", "alerte") # 'alerte' par défaut
+        sound_name = KDS_CONFIG.get("selected_sound", "beep") # 'alerte' par défaut
         # Construction du chemin dynamique
         base_dir = os.path.dirname(os.path.abspath(__file__))
         # Dictionnaire de correspondance (extension selon le nom)
@@ -1130,9 +1154,10 @@ class KDSGUI:
         c_livreur = len(all_pending.get('LIVREUR', []))
         c_pa = len(all_pending.get('POUR EMPORTER', []))
         c_salle = len(all_pending.get('COMMANDE', []))
+        c_888 = len(all_pending.get('888', []))
         
         # Correction : On ajoute bien c_livreur ici !
-        total = c_liv + c_livreur + c_pa + c_salle
+        total = c_liv + c_livreur + c_pa + c_salle + c_888
 
         # Mise à jour des textes sur les boutons
         if hasattr(self, 'btn_tout'): 
@@ -1149,6 +1174,9 @@ class KDSGUI:
             
         if hasattr(self, 'btn_pa'): 
             self.btn_pa.config(text=f"EMPORTER ({c_pa})")
+
+        if hasattr(self, 'btn_888'): 
+            self.btn_888.config(text=f"888 ({c_888})")
 
         self.update_special_item_count()
 
@@ -1178,7 +1206,8 @@ class KDSGUI:
             "COMMANDE": {"on": "#e67e22", "off": "#5d4037"}, 
             "LIVRAISON": {"on": "#27ae60", "off": "#1b5e20"},
             "LIVREUR": {"on": "#1abc9c", "off": "#16a085"}, # Couleur distincte pour livreur
-            "POUR EMPORTER": {"on": "#8e44ad", "off": "#4a235a"}
+            "POUR EMPORTER": {"on": "#8e44ad", "off": "#4a235a"},
+            "888": {"on": "#8e44ad", "off": "#4a235a"}
         }
 
         # --- 1. LOGIQUE DE SÉLECTION (TOGGLE) ---
@@ -1197,9 +1226,10 @@ class KDSGUI:
         c_livreur = len(all_pending.get('LIVREUR', []))
         c_pa = len(all_pending.get('POUR EMPORTER', []))
         c_salle = len(all_pending.get('COMMANDE', []))
+        c_888 = len(all_pending.get('888', []))
         
         # Le total inclut maintenant les 4 catégories
-        total = c_liv + c_livreur + c_pa + c_salle
+        total = c_liv + c_livreur + c_pa + c_salle + c_888
 
         # --- 3. MISE À JOUR VISUELLE DES BOUTONS ---
         
@@ -1241,6 +1271,14 @@ class KDSGUI:
             text=f"EMPORTER ({c_pa})",
             bg=COLORS["POUR EMPORTER"]["on"] if is_pa else COLORS["POUR EMPORTER"]["off"],
             relief='sunken' if is_pa else 'flat'
+        )
+
+        # Bouton POUR EMPORTER (888)
+        is_888 = self.active_filters["888"]
+        self.btn_888.config(
+            text=f"EMPORTER ({c_888})",
+            bg=COLORS["888"]["on"] if is_pa else COLORS["888"]["off"],
+            relief='sunken' if is_888 else 'flat'
         )
 
         # --- 4. APPLICATION DU FILTRE SUR L'ÉCRAN ---
@@ -1860,7 +1898,7 @@ class KDSGUI:
         # Un seul bouton pour regrouper tous les réglages
         self.master_settings_btn = tk.Button(
             self.status_frame, 
-            text="⚙️ SETTINGS", 
+            text="⚙️ OPTIONS", 
             font=('Segoe UI', 11, 'bold'),
             bg='#8e44ad', fg='white', 
             relief=tk.FLAT, bd=0,
@@ -1951,7 +1989,7 @@ class KDSGUI:
 
         # Nouveau bouton INGRÉDIENTS à la place du RESET
         tk.Button(self.status_frame,
-                text="🍔 INGRÉDIENTS",
+                text="🍔 MENU",
                 command=self._show_burger_recipes, # Nouvelle méthode
                 font=('Segoe UI', 12, 'bold'),
                 bg='#2ecc71',  # Vert pour un aspect menu/nourriture
@@ -1960,6 +1998,17 @@ class KDSGUI:
                 bd=0,
                 padx=10
         ).pack(side=tk.RIGHT, padx=5)
+
+        #tk.Button(self.status_frame,
+        #          text="📝 Note",
+        #          command=self.open_note_tool,
+        #          font=('Segoe UI', 12, 'bold'),
+        #          bg='#3498db',  # Bleu pour le différencier du vert "Ingrédients"
+        #          fg='white',
+        #          relief=tk.FLAT,
+        #          bd=0,
+        #          padx=10
+        #).pack(side=tk.RIGHT, padx=5)
 
         tk.Button(self.status_frame,
                   text="📊 KDS",
@@ -1997,6 +2046,12 @@ class KDSGUI:
     
     
 
+    #def open_note_tool(self):
+    #    """Ouvre la fenêtre de saisie de note rapide."""
+    #    # On importe ici pour éviter les erreurs de dépendance circulaire si besoin
+    #    from floating_note import FloatingNote
+    #    FloatingNote(self.root, self.db_manager)
+        
     def _on_pa_press(self, event):
         # On initialise un drapeau pour savoir si le menu a été ouvert
         self.menu_opened = False
@@ -2647,6 +2702,8 @@ class KDSGUI:
                           command=alert.destroy).pack(pady=15)
                 
                 alert.grab_set() # Bloque l'interaction avec le reste tant que pas cliqué
+            
+            
 
             # --- LA FONCTION MANAGE_SERIAL MODIFIÉE ---
             def manage_serial(action):
@@ -2680,6 +2737,38 @@ class KDSGUI:
 
                 except Exception as e:
                     custom_alert("ERREUR COM", f"Échec de l'action : {e}", "#e74c3c")
+
+            def clear_logs():
+                # Liste des dossiers à nettoyer
+                folders_to_clean = [
+                    "./logs", 
+                    "C:\\resto_controller\\logs"
+                ]
+                
+                # On utilise un set pour éviter de supprimer deux fois le même dossier 
+                # si "./logs" pointe vers le même endroit que le chemin absolu
+                folders_to_clean = list(set(folders_to_clean))
+
+                if messagebox.askyesno("Confirmation", "Voulez-vous vraiment effacer tous les fichiers de log dans les répertoires cibles ?"):
+                    success_count = 0
+                    
+                    for log_dir in folders_to_clean:
+                        if os.path.exists(log_dir):
+                            try:
+                                for filename in os.listdir(log_dir):
+                                    file_path = os.path.join(log_dir, filename)
+                                    if os.path.isfile(file_path):
+                                        os.remove(file_path)
+                                    elif os.path.isdir(file_path):
+                                        shutil.rmtree(file_path)
+                                success_count += 1
+                            except Exception as e:
+                                custom_alert("ERREUR", f"Erreur sur {log_dir} : {e}", "#e74c3c")
+                    
+                    if success_count > 0:
+                        custom_alert("SUCCÈS", "Les dossiers de logs ont été vidés.", "#27ae60")
+                    else:
+                        custom_alert("INFO", "Aucun dossier de logs valide n'a été trouvé.", "#f39c12")
 
             # --- FONCTIONS DE LANCEMENT ---
             def launch_logs():
@@ -2724,6 +2813,10 @@ class KDSGUI:
 
             tk.Button(choice_win, text="🖨️ SIMULATEUR D'IMPRESSION", font=("Arial", 11, "bold"), 
                       bg="#9b59b6", fg="white", width=30, pady=10, command=launch_simulator).pack(pady=5)
+            
+            # --- BOUTON AJOUTÉ ---
+            tk.Button(choice_win, text="🗑️ EFFACER LES LOGS", font=("Arial", 11, "bold"), 
+                    bg="#c0392b", fg="white", width=30, pady=10, command=clear_logs).pack(pady=5)
 
             # --- SECTION GESTION COM (CORRIGÉE) ---
             tk.Label(choice_win, text="--- ACTIONS MATÉRIEL (PORTS COM) ---", 
@@ -2906,7 +2999,7 @@ class KDSGUI:
         """
         # 1. Déterminer le texte du statut selon les filtres cochés
         if self.all_selected:
-            types_to_fetch = ["COMMANDE", "LIVRAISON", "LIVREUR", "POUR EMPORTER"]
+            types_to_fetch = ["COMMANDE", "LIVRAISON", "LIVREUR", "POUR EMPORTER" , "888"]
             status_text = "Affichage : TOUT"
         else:
             types_to_fetch = [k for k, v in self.active_filters.items() if v]

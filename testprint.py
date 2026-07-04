@@ -94,7 +94,7 @@ TEST_MODELS = {
         b'\x1br\x00   Frais de livrais       $2.50  FP\n'
         b'\x1br\x00\n      TOT:     $53.44\n'
         b'\x1b!2\x1br\x00 LIVRAISON #301\n'
-        b'\x1bd\t\x1bi'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
     ),
     "Cuisine #302 (Lasagne)": (
         b'\x1b@'
@@ -105,6 +105,7 @@ TEST_MODELS = {
         b'\x1b!2\x1br\x00   TABLE # 302\n'
         b'\x1b!\x12\x1br\x00 \x1b!2  1\x1b!\x12 DEMI POULET\n'
         b'\x1br\x01   \x1b!2  1\x1b!\x12 VIANDE\x1br\x01\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n'
         b'\x1bd\t\x1bi'
     ),
@@ -119,6 +120,7 @@ TEST_MODELS = {
         b'\x1br\x00   1 DEMI LASAGNE           $0.00\n'
         b'\x1br\x00   1 VIANDE                $13.99  FP\n'
         b'\x1br\x00\n      TOT:     $18.95\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\x1b!2\x1br\x00 LIVRAISON #302\n'
         b'\x1bd\t\x1bi'
     ),
@@ -136,6 +138,7 @@ TEST_MODELS = {
         b'\x1br\x00   1 FISH N CHIP MIDI     $16.95  FP\n'
         b'\x1br\x00   Frais de livrais       $2.50  FP\n'
         b'\x1br\x00\n      TOT:     $28.11\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\x1b!2\x1br\x00 LIVRAISON #303\n'
         b'\x1bd\t\x1bi'
     ),
@@ -147,6 +150,7 @@ TEST_MODELS = {
         b'\x1br\x00  27-01-2026\n'
         b'\x1b!2\x1br\x00   TABLE # 304\n'
         b'\x1b!\x12\x1br\x00 \x1b!2  1\x1b!\x12 MINI GARNIE\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\x1br\x00\n###############################\n'
         b'\x1bd\t\x1bi'
     ),
@@ -164,6 +168,7 @@ TEST_MODELS = {
         b'\x1br\x00    POUR EMPORTE #1\n\n'
         b'\x1b!2 1 MINI SPECIAL\n'
         b'\x1b!\x12 pas trop croute\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n'
         b'\x1bd\t\x1bi'
     ),
@@ -177,6 +182,7 @@ TEST_MODELS = {
         b'\x1b!2\x1br\x00 TABLE # 342\n\n'
         b'\x1b!\x12 1 PT. FRITES\n'
         b'\x1b!\x12 1 LARGE PEP FROM BAC\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n'
         b'\x1bd\t\x1bi'
     ),
@@ -190,6 +196,7 @@ TEST_MODELS = {
         b'\x1b!\x12\x1br\x00        ** SERVICE # 1 **\n'
         b'\x1b!2\x1br\x00  1\x1b!\x12 SOUPE MIDI\n'
         b'\x1br\x00    \x1b!\x12 -> *LEGUMES\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n' b'\x1bd\t\x1bi'
         
         # --- SERVICE # 2 (1/2 Lasagne) ---
@@ -201,6 +208,7 @@ TEST_MODELS = {
         b'\x1b!\x12\x1br\x00        ** SERVICE # 2 **\n'
         b'\x1b!2\x1br\x00  1\x1b!\x12 1/2 LASAGNE\n'
         b'\x1br\x00    \x1b!\x12 -> *GRATINEE\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\n###############################\n' b'\x1bd\t\x1bi'
     ),
     "Addition Livraison #320 (8 Eime Ave)": (
@@ -220,6 +228,7 @@ TEST_MODELS = {
         b'\n'
         b'\x1br\x00      VOUS AVEZ SERVI\n'
         b'\x1br\x00        PAR : LIVRAISON\n'
+        b'\x1br\x00\n TEST TEST TEST TEST TEST \n'
         b'\x1b!2\x1br\x00LIVRAISON #320\n'
         b'\x1bd\t\x1bi'
     )

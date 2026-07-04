@@ -4,7 +4,27 @@
 
 <div class="col-12 mb-4 no-print">
     <label class="text-white mb-2 d-block fw-bold" style="letter-spacing: 1px; font-size: 0.9rem; opacity: 0.8;">STYLE D'AFFICHAGE KDS</label>
-    
+    <div id="random-msg" style="
+        background: linear-gradient(135deg, #27ae60, #2ecc71); 
+        color: white; 
+        text-align: center; 
+        padding: 3px 10px; 
+        height: 35px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        font-size: 0.8rem; 
+        font-weight: bold; 
+        position: sticky; 
+        top: 0; 
+        z-index: 10000; 
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        border-bottom: 2px solid #27ae60;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    ">
+    </div>
     <div class="theme-nav-wrapper">
         <button class="nav-arrow left" onclick="scrollThemes(-200)">
             <i class="fas fa-chevron-left text-white"></i> ❮
@@ -79,16 +99,7 @@
                             {{ item.extras.custom_note if item.extras.custom_note else 'NOTE' }}
                         </div>
 
-                        <button id="btn-donner-{{ item.data.id }}" 
-                            class="btn {% if item.data.status == 'Traitée' %}btn-danger btn-donner-active{% else %}btn-outline-warning{% endif %} w-100 fw-bold mt-2 py-3 fs-2"
-                            onclick="openPAModal('{{ item.data.id }}')">
                         
-                        {% if item.data.status == 'Traitée' %}
-                            ✅ DONNER
-                        {% else %}
-                            🔔 DONNER
-                        {% endif %}
-                    </button>
                         </div>
 
                     
@@ -360,6 +371,71 @@
             })
             .catch(err => console.error("Erreur refresh KDS:", err));
     }
+
+    function getRandomEndMessage() {
+        const messages = [
+            "🥂 ON A SURVÉCU ! CUISINE FERMÉE, ALCOOL OUVERT ! 🥳",
+            "🚀 FINI ! ALORS, ON VA PRENDRE UN VERRE ? 🍻",
+            "✨ SERVICE TERMINÉ ! REPOS BIEN MÉRITÉ POUR TOUT LE MONDE ! 👏",
+            "🎉 C'EST DANS LA POCHE ! PROFITEZ BIEN DE LA SOIRÉE ! 🌙",
+            "🔥 QUELLE ÉQUIPE ! CUISINE PROPRE, ON PEUT RENTRER ! 🏠",
+            "🏆 RECORD BATTU ! MERCI POUR LA PATIENCE ! 🙏",
+            "🎈 FIN DU JEU ! ON SE DÉTEND, C'EST LE WEEK-END ! 🍹",
+            "🌟 UNE NUIT ÉTOILÉE NOUS ATTEND ! MERCI À TOUS ! ✨",
+            "🍕 C'EST L'HEURE DE LA DÉCOMPRESSION ! BIEN JOUÉ ! 🎈",
+            "🤙 ON L'A FAIT ! TOUT LE MONDE A BIEN BOSSE ! 🤜🤛",
+            "🥂 LA CLOCHE A SONNÉ ! ON RENTRE À LA MAISON ! 🏠",
+            "⚡ EFFICACITÉ MAXIMALE ! BONNE FIN DE SOIRÉE ! 🚀",
+            "🙌 MERCI À L'ÉQUIPE, ON EST LES MEILLEURS ! 🏅",
+            "🏖️ SERVICE FERMÉ ! VACANCES (OU PRESQUE) ! 🌊",
+            "🕺 ALORS, ON VA DANSER ? SERVICE FINI ! 🎶",
+            "👑 FIN DU SERVICE ! LE TRÔNE EST À NOUS ! 👑",
+            "💤 ON A TOUT DONNÉ ! REPOS LÉGENDAIRE EN VUE ! 🛌",
+            "🌈 SOLEIL APRÈS LA TEMPÊTE ! MERCI POUR TOUT ! 🌞",
+            "🎯 CIBLE ATTEINTE ! ON FERME LES FEUX ! 🔥",
+            "🍔 DERNIER PLAT ENVOYÉ ! ON PEUT SOUFFLER ! 💨",
+            "🎩 CHAPEAU BAS L'ÉQUIPE ! SERVICE TERMINÉ ! 🎩",
+            "🍀 ON A SURVÉCU ! MERCI POUR LA TOLÉRANCE ! 🥂",
+            "🧨 BOUM ! C'EST FINI ! BON REPOS À TOUS ! 😴",
+            "🧼 CUISINE BRILLANTE ! SERVICE FERMÉ ! ✨",
+            "🌠 MISSION ACCOMPLIE ! MERCI À VOUS ! 🙏",
+            "👠 ON ENLÈVE LES TALONS, LE SERVICE EST FINI ! 🦶",
+            "🎭 DÉJÀ FINI ? C'ÉTAIT PLUS COURT QU'UNE SAISON DE SÉRIE ! 🎬",
+            "🌪️ ON A BALAYÉ LE SERVICE COMME DES PROS ! 🧹",
+            "🧳 LA CUISINE FERME, JE REVIENS DANS 10 ANS ! ✌️",
+            "🏆 CHAMPIONS DU MONDE DE L'ASSIETTE ! 🥇",
+            "🍷 ON A MÉRITÉ CETTE BOUTEILLE, NON ? 🍷",
+            "🆘 CUISINE LIBRE ! SAUVE QUI PEUT ! 🏃",
+            "🌞 C'EST FINI, IL EST TEMPS D'ALLER VOIR LA VRAIE VIE ! 🌍",
+            "💡 ON ÉTEINT TOUT, BONNE NUIT À LA TEAM ! 🔌",
+            "🥨 DERNIER CLIENT PARTOU, ON FERME LA BOUTIQUE ! 🔐",
+            "🧸 SERVICE TERMINÉ ! LE KDS PEUT DORMIR ! 💤",
+            "🧤 ON LÂCHE LES TABLIERS, ON A GÉRÉ ! 💪",
+            "🍹 BONNE SOIRÉE, ON A BIEN BOSSE ! ✨",
+            "🚀 DÉCOLLAGE IMMÉDIAT VERS LE REPOS ! 🛫",
+            "🌟 VOUS ÊTES GÉNIAUX ! SERVICE CLOS ! ❤️",
+            "🔥 CUISINE FERMÉE : ÇA SENT LA LIBERTÉ ! 🗽",
+            "🍕 PLUS RIEN À ENVOYER ? C'EST LE PARADIS ! ☁️",
+            "🥂 À LA VÔTRE ! MERCI D'AVOIR TENU ! 🥂",
+            "👑 FIN DU SERVICE, PLACE AU ROI/REINE DU CANAPÉ ! 🛋️",
+            "🌊 ON A SURVÉCU À LA VAGUE ! MERCI ! 🏄",
+            "🔋 BATTERIE À 0% ! SERVICE FINI, ON DORT ! 🪫",
+            "🎊 C'EST FINI ! ON PEUT FAIRE LA FÊTE ! 🥳",
+            "🗝️ JE FERME LA PORTE, À DEMAIN ! 👋",
+            "🐾 ON REPART EN DOUCEUR, MERCI À TOUS ! 🐾",
+            "✨ FIN DU SHOW ! MERCI POUR L'ÉNERGIE ! 🌟"
+        ];
+
+        const randomIndex = Math.floor(Math.random() * messages.length);
+        return messages[randomIndex];
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const msgElement = document.getElementById('random-msg');
+        if (msgElement) {
+            msgElement.innerText = getRandomEndMessage();
+        }
+    });
 
     function changeTheme(themeName) {
         // 1. Appliquer le thème aux factures
@@ -749,6 +825,15 @@ document.getElementById('themeContainer').addEventListener('wheel', (evt) => {
         if (card) card.classList.remove('flash-mauve');
     }
 
+    function showCustomMessage(message, isError = true) {
+        const toast = document.createElement('div');
+        toast.className = 'custom-toast';
+        toast.style.background = isError ? '#e74c3c' : '#2ecc71';
+        toast.innerText = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000); // Disparaît après 3 secondes
+    }
+
     function sendAllExtras(bid) {
         // 1. On récupère les éléments de la carte
         const card = document.getElementById('order-' + bid);
@@ -757,8 +842,8 @@ document.getElementById('themeContainer').addEventListener('wheel', (evt) => {
             return;
         }
 
-        // 2. Préparation des données depuis tempExtras
-        // Si tempExtras n'est pas défini pour ce bid, on envoie des chaînes vides
+        // 2. Préparation des données
+        // On prend les données telles quelles, sans restriction obligatoire
         const extras = tempExtras[bid] || { custom_note: '', desired_time: '', utensils: '' };
         
         let payload = {
@@ -768,7 +853,7 @@ document.getElementById('themeContainer').addEventListener('wheel', (evt) => {
             utensils: extras.utensils || ''
         };
 
-        // 3. Envoi au serveur sur la route PA dédiée
+        // 3. Envoi au serveur
         fetch('/update_pa_details', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -777,31 +862,31 @@ document.getElementById('themeContainer').addEventListener('wheel', (evt) => {
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                // 4. Nettoyage local
+                // Nettoyage local après succès
                 delete tempExtras[bid];
                 if (typeof isEditing !== 'undefined') isEditing = false;
-
-                // 5. Cache le bouton OK
+                
                 const okBtn = document.getElementById('ok-' + bid);
                 if (okBtn) okBtn.style.display = 'none';
 
-                // 6. Feedback visuel
-                card.style.borderColor = "#2ecc71"; // Vert pour succès
+                // Feedback visuel sur la carte
+                card.style.borderColor = "#2ecc71";
                 setTimeout(() => card.style.borderColor = "", 1000);
 
-                // 7. Force le rafraîchissement
-                if (typeof refreshKDS === 'function') {
-                    refreshKDS(); 
-                }
+                // Rafraîchissement
+                if (typeof refreshKDS === 'function') refreshKDS();
                 
-                console.log("Enregistrement réussi pour PA BID:", bid);
+                // Message de confirmation personnalisé
+                showCustomMessage("✅ Enregistré avec succès !", false);
             } else {
-                alert("Erreur lors de l'enregistrement : " + (data.error || "Inconnue"));
+                // Message d'erreur personnalisé
+                showCustomMessage("❌ Erreur : " + (data.error || "Inconnue"));
             }
         })
         .catch(err => {
             console.error("Erreur réseau:", err);
-            alert("Impossible de joindre le serveur");
+            // Message d'erreur réseau personnalisé
+            showCustomMessage("❌ Impossible de joindre le serveur");
         });
     }
 

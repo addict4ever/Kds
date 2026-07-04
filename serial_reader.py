@@ -47,8 +47,8 @@ SERIAL_PORT_TCP_1_PORT = 9100      # Port standard pour les imprimantes réseau
 SERIAL_TCP_PRINTER_1 = '192.168.5.210'  # IP de l'imprimante cible
 SERIAL_TCP_PRINTER_1_PORT = 9100        # Port de l'imprimante cible
 
-SERIAL_TCP_COMPUTER_1 = '127.0.0.1'  # IP de l'imprimante cible
-SERIAL_TCP_COMPUTER_PORT_1 = 9200        # Port de l'imprimante cible
+SERIAL_TCP_COMPUTER_1 = '192.168.5.205'  # IP de l'imprimante cible
+SERIAL_TCP_COMPUTER_PORT_1 = 9100        # Port de l'imprimante cible
 
 MAX_TICKET_SIZE = 1048576
 
@@ -337,23 +337,47 @@ class TCPReader(threading.Thread):
         if "ENLEVER LE PAPIER JAUNE" in ticket_content:
             _log_activity("TCP FILTRE : 'ENLEVER LE PAPIER JAUNE' détecté. Impression bloquée.", "TCP_FILTER")
             return 
-
-
-        # --- 4. ENVOI PHYSIQUE (Si passé tous les filtres) ---
-        printer_ip = self.net_config.get('SERIAL_TCP_PRINTER_1')
-        printer_port = self.net_config.get('SERIAL_TCP_PRINTER_1_PORT')
         
-        if not printer_ip:
-            return
+        # --- 4. ENVOI PHYSIQUE (Si passé tous les filtres) ---
+        
+        # A. Envoi vers l'imprimante principale (SEULEMENT si "POUR EMPORTER" est présent)
+        if "POUR EMPORTER" in ticket_content:
+            printer_ip = self.net_config.get('SERIAL_TCP_PRINTER_1')
+            printer_port = self.net_config.get('SERIAL_TCP_PRINTER_1_PORT')
+            
+            if printer_ip and printer_port:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as printer_sock:
+                        printer_sock.settimeout(2.0)
+                        # Assurez-vous que le port est un entier
+                        printer_sock.connect((printer_ip, int(printer_port)))
+                        printer_sock.sendall(raw_bytes)
+                        _log_activity(f"Redirection POUR EMPORTER vers imprimante {printer_ip}", "TCP_OUT_EMPORTER")
+                except Exception as e:
+                    _log_activity(f"Imprimante IP {printer_ip} hors ligne: {e}", "TCP_OFFLINE")
+        else:
+            # Optionnel : loguer que le ticket n'a pas été envoyé car ce n'est pas "POUR EMPORTER"
+            _log_activity("Envoi imprimante IP ignoré : Ticket standard détecté.", "TCP_SKIP_NON_EMPORTER")
 
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as printer_sock:
-                printer_sock.settimeout(2.0)
-                printer_sock.connect((printer_ip, printer_port))
-                printer_sock.sendall(raw_bytes)
-                _log_activity(f"Redirection réussie vers {printer_ip}", "TCP_OUT")
-        except Exception as e:
-            _log_activity(f"Imprimante IP {printer_ip} hors ligne ou erreur: {e}", "TCP_OFFLINE")
+
+        # Blocage Papier Jaune
+        if "POUR EMPORTER" in ticket_content:
+            _log_activity("Envoi TCP ignoré : Ticket 'POUR EMPORTER' détecté.", "TCP_SKIP_EMPORTER")
+            return 
+
+        # B. Envoi vers l'ordinateur supplémentaire (SERIAL_TCP_COMPUTER_1)
+        comp_ip = self.net_config.get('SERIAL_TCP_COMPUTER_1')
+        comp_port = self.net_config.get('SERIAL_TCP_COMPUTER_PORT_1')
+        
+        if comp_ip and comp_port:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as comp_sock:
+                    comp_sock.settimeout(2.0)
+                    comp_sock.connect((comp_ip, int(comp_port))) # Assurez-vous que le port est un entier
+                    comp_sock.sendall(raw_bytes)
+                    _log_activity(f"Copie envoyée vers ordinateur {comp_ip}", "TCP_OUT_COMP")
+            except Exception as e:
+                _log_activity(f"Ordinateur {comp_ip} inaccessible: {e}", "TCP_COMP_OFFLINE")
 
     def run(self):
         host = self.net_config.get('SERIAL_PORT_TCP_1', '0.0.0.0')
@@ -714,27 +738,54 @@ class SerialReader(threading.Thread):
     @staticmethod
     def reprint_ticket_to_printer(ticket_content: str, port_target: str) -> bool:
         """
-        Réimpression avec récupération TCP depuis le JSON et gestion d'encodage sécurisée.
+        Réimpression avec gestion spécifique de la taille et de la déchirure 
+        pour SERIAL_PORT_PRINTER.
         """
-        #_log_activity(f"RÉIMPRESSION sur : {port_target}", "REPRINT_REQUEST")
-        
-        # --- 1. PRÉPARATION DU CONTENU ---
+        # --- 1. PRÉPARATION DES COMMANDES ESC/POS ---
         ESC = '\x1b'
         GS = '\x1d'
         CMD_BOLD_ON = f'{ESC}{chr(69)}{chr(1)}' 
         CMD_RESET_ALL = f'{ESC}@' 
+        # Commande GS ! 17 = double largeur + double hauteur
+        CMD_DOUBLE_SIZE = f'{GS}{chr(33)}{chr(17)}'
+        
         header_text = f"REIMPRESSION ({datetime.now().strftime('%H:%M:%S')})\n"
         
-        full_content = CMD_RESET_ALL + CMD_BOLD_ON + header_text + CMD_RESET_ALL + "\n"
-        full_content += ticket_content + '\n\n' 
-
-        # --- 2. ROUTAGE ---
-        if port_target == SERIAL_PORT_PRINTER_3:
+        # --- 2. ROUTAGE ET ADAPTATION DU CONTENU ---
+        
+        # Cas spécifique pour SERIAL_PORT_PRINTER (Série standard)
+        if port_target == SERIAL_PORT_PRINTER:
+            # En-tête normal + Contenu en double taille + RESET + 4 sauts de ligne pour déchirure
+            full_content = CMD_RESET_ALL + CMD_BOLD_ON + header_text + CMD_RESET_ALL + "\n"
+            full_content += CMD_DOUBLE_SIZE + ticket_content + CMD_RESET_ALL + '\n\n\n\n'
+            return SerialReader._write_to_output_port_print(full_content, port_target, "Imprimante (Reprint)")
+        
+        elif port_target == SERIAL_PORT_PRINTER_4:
+            # A. Envoi vers l'imprimante physique (SERIAL_PORT_PRINTER_4)
+            full_content = CMD_RESET_ALL + CMD_BOLD_ON + header_text + CMD_RESET_ALL + "\n"
+            full_content += ticket_content + '\n\n'
+            
+            # B. Copie vers l'ordinateur (SERIAL_TCP_COMPUTER_1)
             try:
-                # Valeurs par défaut
+                encoded_data = ticket_content.encode('latin-1', errors='replace')
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(2.0)
+                    s.connect((SERIAL_TCP_COMPUTER_1, SERIAL_TCP_COMPUTER_PORT_1))
+                    s.sendall(encoded_data + TICKET_END_BINARY_SEQUENCE)
+                _log_activity("Copie TCP envoyée vers ordinateur via Reprint.", "REPRINT_TCP_OK")
+            except Exception as e:
+                _log_activity(f"Échec copie TCP sur Reprint (Port 4): {e}", "REPRINT_TCP_ERR")
+            
+            return status
+
+        # Cas spécifique pour SERIAL_PORT_PRINTER_3 (TCP)
+        elif port_target == SERIAL_PORT_PRINTER_3:
+            full_content = CMD_RESET_ALL + CMD_BOLD_ON + header_text + CMD_RESET_ALL + "\n"
+            full_content += ticket_content + '\n\n'
+            
+            try:
                 target_ip = "16.16.16.100" 
                 target_port = 9200
-                
                 config_file = "printer_ip.json"
                 if os.path.exists(config_file):
                     with open(config_file, "r") as f:
@@ -743,32 +794,26 @@ class SerialReader(threading.Thread):
                         target_ip = tcp_cfg.get("SERIAL_TCP_PRINTER_1", target_ip)
                         target_port = int(tcp_cfg.get("SERIAL_TCP_PRINTER_1_PORT", target_port))
 
-                #_log_activity(f"Réimpression TCP -> Connexion à {target_ip}:{target_port}", "REPRINT_TCP")
-
-                # --- SÉCURISATION DE L'ENCODAGE ---
-                # On encode en 'latin-1' mais on remplace les caractères impossibles (comme →) par '?'
-                # ou on peut essayer 'cp850' qui est souvent le standard des imprimantes ESC/POS
                 try:
                     raw_data = full_content.encode('latin-1', errors='replace')
                 except:
                     raw_data = full_content.encode('ascii', errors='replace')
 
-                # Envoi direct par Socket
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.settimeout(5)
                     s.connect((target_ip, target_port))
-                    s.sendall(raw_data) # On envoie les données déjà encodées
-                
-                #_log_activity("Réimpression TCP réussie.", "REPRINT_SUCCESS")
+                    s.sendall(raw_data)
                 return True
-
             except Exception as e:
                 _log_activity(f"ÉCHEC Réimpression TCP sur Port 3: {e}", "REPRINT_ERROR")
                 return False
         
+        # Cas par défaut (Autres ports séries)
         else:
-            # Pour le port série, on utilise la même logique de sécurité d'encodage si nécessaire
+            full_content = CMD_RESET_ALL + CMD_BOLD_ON + header_text + CMD_RESET_ALL + "\n"
+            full_content += ticket_content + '\n\n'
             return SerialReader._write_to_output_port_print(full_content, port_target, "Imprimante (Reprint)")
+
 
     def _send_to_computer_tcp(self, raw_ticket_data: str):
         """
@@ -801,41 +846,27 @@ class SerialReader(threading.Thread):
         
         est_une_addition = "ADDITION" in raw_ticket_data.upper()
 
-        # 🎯 NOUVELLE RÈGLE : COPIE FINANCIÈRE VERS IMPRIMANTE 4
-        # Il faut que les 4 mots soient présents obligatoirement
-        mots_requis = ["TRANS", "ADDITION", "TPS", "TVQ"]
-        if all(mot in content_upper for mot in mots_requis):
-            try:
-                _log_activity("DOC FINANCIER DÉTECTÉ (4/4) : Envoi copie vers Imprimante 4", "FINANCE_COPY")
-                SerialReader._write_to_output_port(
-                    raw_ticket_data,
-                    SERIAL_PORT_PRINTER_4, # Assure-toi que cette variable est définie dans tes constantes
-                    "Imprimante 4 (Finance)"
-                )
-            except Exception as e:
-                _log_activity(f"Erreur copie Imprimante 4 : {e}", "SERIAL_ERROR")
-
-        # ⭐ ÉTAPE 1 : ENVOI À L'ORDINATEUR (Sans lock)
-        if not est_une_addition:
-            try:
-                # A. Envoi via le Port Série (COM)
+        # ⭐ ÉTAPE 1 : ENVOI À L'ORDINATEUR
+        try:
+            # A. Envoi via le Port Série (COM)
+            # Uniquement si ce n'est PAS une addition
+            if not est_une_addition:
                 SerialReader._write_to_output_port(
                     raw_ticket_data,
                     SERIAL_PORT_COMPUTER,
                     "Ordinateur"
                 )
 
-                # B. Envoi via le Réseau (TCP 9200)
-                self._send_to_computer_tcp(raw_ticket_data)
-                
-                # Petit délai de 100ms pour laisser le matériel respirer
-                time.sleep(0.1)
-            except Exception as e:
-                _log_activity(f"Erreur sur port ordinateur : {e}", "SERIAL_ERROR")
-        else:
-            # On ignore l'envoi PC pour les additions, mais on continue vers l'imprimante
-            pass
-
+            # B. Envoi via le Réseau (TCP 9200)
+            # Uniquement si c'est une addition
+            #if est_une_addition:
+            #    self._send_to_computer_tcp(raw_ticket_data)
+            
+            # Petit délai de 100ms pour laisser le matériel respirer
+            time.sleep(0.1)
+        except Exception as e:
+            _log_activity(f"Erreur sur port ordinateur : {e}", "SERIAL_ERROR")
+            
         # ⭐ ÉTAPE 2 : LOGIQUE DE VÉRIFICATION DU FICHIER JSON POUR L'IMPRESSION
         file_path = 'imprimante_var.json'
         should_print = True
@@ -862,9 +893,25 @@ class SerialReader(threading.Thread):
             # Cas B : Le ticket vient du deuxième KDS
             # Cas B : Le ticket vient du deuxième KDS
             elif source_port == SERIAL_PORT_2:
-                _log_activity("Ticket ajouté à la file d'attente (Imprimante 2)", "QUEUE_ADD")
-                # On ne fait plus d'impression directe, on l'envoie au worker
-                self.printer_2_queue.put(raw_ticket_data)
+                is_emporter = "POUR EMPORTER" in content_upper
+                is_livraison = "PRINCIPALE" in content_upper and "LIVRAISON" in content_upper
+                
+                # --- TRAITEMENT IMPRIMANTE 2 (QUEUE) ---
+                if is_emporter:
+                    _log_activity("Ticket 'POUR EMPORTER' : Ajouté à la file Imprimante 2.", "QUEUE_ADD")
+                    self.printer_2_queue.put(raw_ticket_data)
+                else:
+                    _log_activity("Ticket ignoré pour Imprimante 2 (ni 'POUR EMPORTER').", "QUEUE_SKIP")
+                
+                # --- TRAITEMENT ENVOI TCP (ORDINATEUR) ---
+                # On envoie uniquement si ce n'est NI "POUR EMPORTER" NI une "LIVRAISON"
+                if not is_emporter and not is_livraison:
+                    self._send_to_computer_tcp(raw_ticket_data)
+                    _log_activity("Envoi TCP autorisé.", "TCP_OUT")
+                else:
+                    # Log précis selon la raison du blocage
+                    motif = "POUR EMPORTER" if is_emporter else "LIVRAISON"
+                    _log_activity(f"Envoi TCP ignoré : Ticket '{motif}' détecté.", "TCP_SKIP")
                 
             # Cas C : Le ticket vient du troisième KDS (Réseau)
             elif source_port == SERIAL_PORT_3:
@@ -1183,6 +1230,9 @@ class SerialReader(threading.Thread):
                     service_type = "POUR EMPORTER"
                     table_number = "PA"  # On force le numéro 888 pour les PA
                     server_name = "888"
+                
+                if table_number == 888 and server_name == "INCONNU":
+                    service_type = "888"
 
             # --- 5️⃣ IDS ET ITEMS ---
             # On cherche le numéro de facture ou d'addition

@@ -27,16 +27,7 @@
                 </button>
             </div>
 
-            <div class="col-12 d-flex align-items-center mt-3">
-                <div class="form-check form-switch d-flex align-items-center">
-                    <input class="form-check-input" type="checkbox" name="show_all" id="showAllCheck" value="1" checked 
-                        style="width: 80px; height: 40px; cursor: pointer;" 
-                        {% if show_all %}checked{% endif %} onchange="this.form.submit()">
-                    <label class="form-check-label text-warning fw-bold fs-2 ms-3" for="showAllCheck">
-                        VOIR TOUT
-                    </label>
-                </div>
-            </div>
+            
         </form>
     </div>
     
@@ -227,9 +218,10 @@
         <h2 class="text-white text-center mb-4" style="font-weight: 800; letter-spacing: 2px;">EXTRAS LIVRAISON</h2>
 
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 25px;">
+            <div class="extra-option" onclick="selectType('ASSIETTE UST BEURRE VERRE', this)">ASSIETTE UST BEURRE VERRE</div>
             <div class="extra-option" onclick="selectType('ASSIETTE UST BEURRE', this)">ASSIETTE UST BEURRE</div>
             <div class="extra-option" onclick="selectType('ASSIETTE UST', this)">ASSIETTE UST</div>
-            <div class="extra-option" onclick="selectType('ASS', this)">ASS</div>
+            <div class="extra-option" onclick="selectType('ASSIETTE', this)">ASSIETTE</div>
             <div class="extra-option active" onclick="selectType('UST', this)">UST</div>
             <div class="extra-option" onclick="selectType('BEURRE', this)">BEURRE</div>
             <div class="extra-option" onclick="selectType('VERRE', this)">VERRE</div>
@@ -553,12 +545,15 @@
                     // Appliquer le visuel "Livré"
                     let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
                     deliveredOrders.forEach(bid => {
+                        // On cherche la carte par son ID
                         const card = document.getElementById('order-' + bid);
+                        
                         if (card) {
-                            // Au lieu de simplement griser, on masque le wrapper complet
+                            // On cible le wrapper parent (la colonne/conteneur de la carte)
                             const wrapper = card.closest('.order-wrapper');
                             if (wrapper) {
-                                wrapper.style.display = 'none'; // Masque la colonne par défaut
+                                wrapper.style.display = 'none'; // Masquage
+                                wrapper.classList.add('hidden-delivered'); // Utile pour le CSS si besoin
                             }
                         }
                     });

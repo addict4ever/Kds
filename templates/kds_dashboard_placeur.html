@@ -6,245 +6,204 @@
     <title>KDS Pro - Placeur Logistique</title>
     <script src="{{ url_for('static', filename='js/Sortable.min.js') }}"></script>
     <style>
-        :root {
-            --bg: #0f1114; --card: #1a1d21; --accent: #0078d4;
-            --invoice-bg: #f1b400; 
-            --invoice-text: #0f31f1; 
-            --text: #e0e0e0; --shadow: 8px 8px 16px #0a0b0d, -4px -4px 12px #2a2e35;
-        }
+    :root {
+        --bg: #0f1114; --card: #1a1d21; --accent: #0078d4;
+        --invoice-bg: #f1b400; 
+        --invoice-text: #0f31f1; 
+        --text: #e0e0e0; --shadow: 8px 8px 16px #0a0b0d, -4px -4px 12px #2a2e35;
+    }
 
-        body {
-            font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
-            margin: 0; padding: 0; height: 100vh; overflow-x: hidden; overflow-y: auto;
-        }
+    body {
+        font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
+        margin: 0; padding: 0; height: 100vh; overflow-x: hidden; overflow-y: auto;
+    }
 
-        #main { 
-            padding: 20px; 
-            display: flex; 
-            flex-direction: column; 
-            gap: 25px; 
-            /* Ajoute ceci pour un défilement fluide sur mobile */
-            -webkit-overflow-scrolling: touch; 
-        }
+    #main { 
+        padding: 20px; 
+        display: flex; 
+        flex-direction: column; 
+        gap: 25px; 
+        -webkit-overflow-scrolling: touch; 
+    }
 
-        .section-label { 
-            font-size: 0.9em; font-weight: 800; color: var(--accent); 
-            text-transform: uppercase; letter-spacing: 2px; 
-            margin-bottom: 12px; border-left: 4px solid var(--accent); padding-left: 10px;
-            display: flex; justify-content: space-between; align-items: center;
-        }
+    .section-label { 
+        font-size: 0.9em; font-weight: 800; color: var(--accent); 
+        text-transform: uppercase; letter-spacing: 2px; 
+        margin-bottom: 12px; border-left: 4px solid var(--accent); padding-left: 10px;
+        display: flex; justify-content: space-between; align-items: center;
+    }
 
-        /* --- GRILLES --- */
-        /* Remplacez l'ancien .grid-layout par celui-ci */
-        .grid-layout { 
-            display: flex; 
-            flex-wrap: wrap; 
-            gap: 20px; 
-            align-items: flex-start; /* Empêche les casiers de s'étirer verticalement */
-        }
+    .grid-layout { 
+        display: flex; 
+        flex-wrap: wrap; 
+        gap: 20px; 
+        align-items: flex-start; 
+    }
 
-        /* --- SECTION RÉCEPTION (CENTRE) --- */
-        .reception-container {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 15px;
-            padding: 15px;
-            border: 2px dashed #444;
-            min-height: 120px;
-        }
+    .reception-container {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 15px;
+        padding: 15px;
+        border: 2px dashed #444;
+        min-height: 120px;
+    }
 
-        #dz-cmd {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
-            gap: 5px;
-        }
+    #dz-cmd {
+        display: grid;
+        /* Adapté pour les nouveaux tickets de 160px */
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 5px;
+    }
 
-        /* --- CASIERS --- */
-        /* Modifiez ces deux blocs */
-        /* --- CASIERS --- */
-        .casier {
-            background: var(--card); 
-            border-radius: 10px; 
-            padding: 8px;
-            box-shadow: var(--shadow); 
-            display: flex; 
-            flex-direction: column; 
-            gap: 6px;
-            width: fit-content; 
-            min-width: 210px; /* Plus étroit pour gagner de la place */
-        }
+    /* --- CASIERS RÉDUITS --- */
+    .casier {
+        background: var(--card); 
+        border-radius: 10px; 
+        padding: 8px;
+        box-shadow: var(--shadow); 
+        display: flex; 
+        flex-direction: column; 
+        gap: 6px;
+        width: fit-content; 
+        min-width: 140px; /* Réduit de 210px à 140px */
+    }
 
-        .drop-zone-zone {
-            /* HAUTEUR POUR 4 FACTURES : ~115px par facture + les écarts */
-            height: 480px; 
-            background: rgba(0,0,0,0.3); 
-            border-radius: 6px;
-            padding: 6px;
-            display: flex;
-            flex-direction: column; 
-            flex-wrap: wrap;       
-            align-content: flex-start; 
-            gap: 8px;
+    .drop-zone-zone {
+        height: 320px; /* Réduit de 480px à 320px */
+        background: rgba(0,0,0,0.3); 
+        border-radius: 6px;
+        padding: 6px;
+        display: flex;
+        flex-direction: column; 
+        flex-wrap: wrap;       
+        align-content: flex-start; 
+        gap: 8px;
+        width: 135px; /* Réduit de 205px à 135px */
+        overflow: hidden;
+        transition: width 0.3s ease; 
+    }
 
-            /* LOGIQUE DE MASQUAGE HORIZONTAL */
-            width: 205px; /* Largeur d'une seule petite colonne */
-            overflow: hidden;
-            transition: width 0.3s ease; 
-        }
+    .casier.expanded .drop-zone-zone {
+        width: fit-content;    
+        min-width: 340px; /* Réduit de 510px à 340px */
+    }
 
-        /* État quand le bouton "..." est activé */
-        .casier.expanded .drop-zone-zone {
-            width: fit-content;    /* Révèle toutes les colonnes */
-            min-width: 510px;      /* Largeur de 2 colonnes minimum si déplié */
-        }
+    .btn-more {
+        background: #333;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        padding: 2px 8px;
+        font-size: 1.1em;
+        display: none; 
+    }
+    .casier-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.8em; font-weight: bold; color: #aaa; }
+    .badge { background: var(--accent); color: white; padding: 1px 8px; border-radius: 8px; font-size: 0.85em; }
 
-        /* Style du bouton "En savoir plus" */
-        .btn-more {
-            background: #333;
-            color: var(--accent);
-            border: 1px solid var(--accent);
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            padding: 2px 8px;
-            font-size: 1.1em;
-            display: none; /* Caché par défaut, affiché via JS si > 5 items */
-        }
-        .casier-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.8em; font-weight: bold; color: #aaa; }
-        .badge { background: var(--accent); color: white; padding: 1px 8px; border-radius: 8px; font-size: 0.85em; }
+    /* --- TICKETS RÉDUITS --- */
+    .item {
+        width: 160px; /* Réduit de 240px à 160px */
+        min-height: 90px; /* Réduit de 130px à 90px */
+        background: var(--invoice-bg);
+        color: #000; 
+        padding: 8px; /* Padding réduit */
+        border-radius: 10px;
+        box-shadow: 4px 4px 10px rgba(0,0,0,0.3); 
+        cursor: grab;
+        display: flex; 
+        flex-direction: column; 
+        box-sizing: border-box;
+    }
+    .livraison-no { font-size: 0.9rem !important; color: var(--invoice-text); font-weight: 900; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 4px; }
+    .client-address { font-weight: 800; font-size: 0.7rem !important; color: #000; }
+    .client-details { list-style: none; padding: 0; margin: 4px 0 0 0; font-size: 0.6rem !important; font-weight: 600; opacity: 0.8; }
 
-        
+    /* --- AUTRES ÉLÉMENTS --- */
+    .overlay {
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 1000;
+        justify-content: center; align-items: center;
+    }
+    .modal-card { background: #1a1d21; width: 90%; max-width: 500px; border-radius: 15px; padding: 20px; border: 1px solid #333; }
+    .selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 15px; }
+    .select-btn { background: #2a2e35; border: 1px solid #444; color: white; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+    .btn-action { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px; border-radius: 6px; cursor: pointer; font-size: 0.75em; font-weight: bold; }
+    
+    .receipt-view { background: #fff; border-radius: 15px; padding: 20px; color: #000; max-height: 85vh; overflow-y: auto; }
+    
+    .extras-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 8px;
+    }
+    .extra-badge {
+        background: #000;
+        color: #fff;
+        font-size: 0.7rem; /* Taille de police réduite pour les badges */
+        font-weight: 800;
+        padding: 2px 5px;
+        border-radius: 5px;
+        border: 1px solid rgba(0,0,0,0.3);
+    }
+    .badge-time { background: #0078d4; }
+    .badge-note { background: #e67e22; }
 
-        /* Modifiez le bloc .item */
-        .item {
-            width: 240px; /* Largeur fixe pour garder des colonnes propres */
-            min-height: 130px; 
-            background: var(--invoice-bg);
-            color: #000; 
-            padding: 12px; 
-            border-radius: 10px;
-            box-shadow: 4px 4px 10px rgba(0,0,0,0.3); 
-            cursor: grab;
-            display: flex; 
-            flex-direction: column; 
-            box-sizing: border-box;
-        }
-        .livraison-no { font-size: 1.2rem; color: var(--invoice-text); font-weight: 900; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 4px; }
-        .client-address { font-weight: 800; font-size: 1rem; color: #000; }
-        .client-details { list-style: none; padding: 0; margin: 4px 0 0 0; font-size: 0.9rem; font-weight: 600; opacity: 0.8; }
+    .casier.disabled {
+        min-width: 50px !important;
+        height: 50px;
+        width: 50px;
+        padding: 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #2a2e35;
+        border: 1px solid #444;
+        opacity: 0.8;
+    }
 
-        /* --- MODALS --- */
-        .overlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 1000;
-            justify-content: center; align-items: center;
-        }
-        .modal-card { background: #1a1d21; width: 90%; max-width: 500px; border-radius: 15px; padding: 20px; border: 1px solid #333; }
-        .selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 15px; }
-        .select-btn { background: #2a2e35; border: 1px solid #444; color: white; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: bold; }
-        .btn-action { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px; border-radius: 6px; cursor: pointer; font-size: 0.75em; font-weight: bold; }
-        
-        .receipt-view { background: #fff; border-radius: 15px; padding: 20px; color: #000; max-height: 85vh; overflow-y: auto; }
-        
-        /* Nouveaux styles pour les extras du placeur */
-        .extras-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            margin-top: 8px;
-        }
-        .extra-badge {
-            background: #000;
-            color: #fff;
-            font-size: 0.8rem;
-            font-weight: 800;
-            padding: 3px 8px;
-            border-radius: 5px;
-            border: 1px solid rgba(0,0,0,0.3);
-        }
-        .badge-time { background: #0078d4; } /* Bleu pour l'heure */
-        .badge-note { background: #e67e22; } /* Orange pour les notes */
+    .casier.disabled .drop-zone-zone, 
+    .casier.disabled .btn-action, 
+    .casier.disabled .casier-header span,
+    .casier.disabled .badge,
+    .casier.disabled .btn-more {
+        display: none !important;
+    }
 
-        /* --- ÉTAT DÉSACTIVÉ --- */
-        .casier.disabled {
-            min-width: 50px !important; /* Un peu plus large pour le nom */
-            height: 50px;
-            width: 50px;
-            padding: 2px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #2a2e35;
-            border: 1px solid #444;
-            opacity: 0.8;
-        }
+    .btn-toggle-status {
+        background: none; border: none; cursor: pointer; font-size: 1em; padding: 0;
+    }
 
-        /* Cache tout le contenu sauf le bouton de réactivation quand désactivé */
-        .casier.disabled .drop-zone-zone, 
-        .casier.disabled .btn-action, 
-        .casier.disabled .casier-header span,
-        .casier.disabled .badge,
-        .casier.disabled .btn-more {
-            display: none !important;
-        }
+    .casier.disabled .casier-header span {
+        display: block !important;
+        font-size: 10px;
+        font-weight: bold;
+        text-align: center;
+        color: #888;
+    }
 
-        /* Bouton On/Off */
-        .btn-toggle-status {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1.2em;
-            padding: 0;
-            line-height: 1;
-            filter: grayscale(1);
-            transition: transform 0.2s;
-        }
-
-        /* Style du petit nom dans la pastille */
-        .casier.disabled .casier-header span {
-            display: block !important;
-            font-size: 10px;
-            font-weight: bold;
-            text-align: center;
-            color: #888;
-        }
-
-        .btn-toggle-status {
-            background: none; border: none; cursor: pointer; font-size: 1em; padding: 0;
-        }
-        /* --- PERSONNALISATION DE LA BARRE DE DÉFILEMENT --- */
-
-        /* --- BARRE DE DÉFILEMENT LARGE (TOUCH-FRIENDLY) --- */
-
-        /* Largeur globale de la barre */
-        ::-webkit-scrollbar {
-            width: 45px;  /* Très large pour les doigts */
-            height: 45px; /* Pour le défilement horizontal si nécessaire */
-        }
-
-        /* Le fond (la piste) */
-        ::-webkit-scrollbar-track {
-            background: #1a1d21; /* Couleur sombre du thème */
-            border-radius: 20px;
-        }
-
-        /* La partie qui bouge (le curseur) */
-        ::-webkit-scrollbar-thumb {
-            background: #555; /* Gris plus clair pour la visibilité */
-            border-radius: 20px;
-            /* On ajoute une bordure transparente pour créer une marge interne */
-            border: 8px solid transparent;
-            background-clip: content-box;
-        }
-
-        /* Couleur quand on touche ou survole */
-        ::-webkit-scrollbar-thumb:hover, 
-        ::-webkit-scrollbar-thumb:active {
-            background: var(--accent); /* Devient bleue (0078d4) au toucher */
-            background-clip: content-box;
-        }
-
-
-    </style>
+    ::-webkit-scrollbar {
+        width: 45px; 
+        height: 45px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #1a1d21; 
+        border-radius: 20px;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #555; 
+        border-radius: 20px;
+        border: 8px solid transparent;
+        background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover, 
+    ::-webkit-scrollbar-thumb:active {
+        background: var(--accent); 
+        background-clip: content-box;
+    }
+</style>
 
 </head>
 <body>
@@ -268,19 +227,25 @@
     </div>
 </div>
 
-<div id="modal-attr" class="overlay">
-    <div class="modal-card">
-        <h3 style="margin-top:0; color:var(--accent); text-align: center;">Déplacer vers...</h3>
-        <div class="selector-grid" id="attr-options"></div>
-        <button onclick="closeModal('modal-attr')" style="margin-top:20px; width:100%; padding:12px; background:#444; color:white; border:none; border-radius:10px; cursor:pointer;">ANNULER</button>
+<div id="modal-alert" class="overlay" onclick="if(event.target==this) closeModal('modal-alert')">
+    <div class="modal-card" style="border: 2px solid #e74c3c;" onclick="event.stopPropagation()">
+        <h3 style="color: #e74c3c; margin-top: 0;">⚠️ Attention</h3>
+        <p id="alert-message" style="font-size: 1.2rem; margin: 20px 0;"></p>
     </div>
 </div>
 
-<div id="modal-view" class="overlay" onclick="closeModal('modal-view')">
+
+<div id="modal-attr" class="overlay" onclick="if(event.target==this) closeModal('modal-attr')">
+    <div class="modal-card">
+        <h3 style="margin-top:0; color:var(--accent); text-align: center;">Déplacer vers...</h3>
+        <div class="selector-grid" id="attr-options"></div>
+    </div>
+</div>
+
+<div id="modal-view" class="overlay" onclick="if(event.target==this) closeModal('modal-view')">
     <div class="modal-card receipt-view" onclick="event.stopPropagation()">
         <h2 id="view-title" style="text-align:center; border-bottom:2px dashed #ccc; padding-bottom:10px;">DÉTAILS</h2>
         <div id="view-items"></div>
-        <button onclick="closeModal('modal-view')" style="width:100%; padding:12px; background:#000; color:#fff; border:none; font-weight:bold; cursor:pointer; border-radius:8px; margin-top:15px;">FERMER</button>
     </div>
 </div>
 
@@ -306,16 +271,20 @@
         LISTE_LIVREURS.forEach((name, index) => {
             const div = createCasier(name, gLivreurs);
             
-            // Si l'index est >= 7, on le désactive par défaut
-            if (index >= 7) {
+            // Si l'index est >= 10, on le désactive par défaut
+            if (index >= 10) {
                 toggleStatus(div.id, true); // On force la désactivation initiale
             }
         });
 
-        LISTE_GROUPES.forEach(z => {
+        LISTE_GROUPES.forEach((z, index) => {
             const div = createCasier(z, gGroupes);
-            // On force la désactivation (réduction) par défaut pour tous les groupes
-            toggleStatus(div.id, true); 
+            
+            // On ouvre (ne désactive pas) les 5 premiers (index 0 à 4)
+            // Si l'index est >= 5, on le désactive par défaut
+            if (index >= 5) {
+                toggleStatus(div.id, true); 
+            }
         });
     }
 
@@ -330,18 +299,24 @@
         const shortName = name.substring(0, 3).toUpperCase();
 
         div.innerHTML = `
-            <div class="casier-header" style="font-size: 0.75em;">
+            <div class="casier-header" style="font-size: 0.75em; display: flex; align-items: center; justify-content: space-between;">
+                
                 <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
                     <button class="btn-toggle-status" onclick="toggleStatus('${div.id}')">🟢</button>
                     <span class="name-label">${name.toUpperCase()}</span>
                 </div>
+
+                <button class="btn-action" style="font-size: 0.8em; padding: 4px 8px; font-weight: bold;" onclick="openAttrib(this)">
+                    TRANSFERT
+                </button>
+
                 <div style="display:flex; gap:5px; align-items:center;">
                     <button class="btn-more" onclick="toggleCasier('${div.id}')">...</button>
                     <div class="badge">0</div>
                 </div>
             </div>
+            
             <div class="drop-zone-zone"></div>
-            <button class="btn-action" style="font-size: 0.65em; padding: 3px;" onclick="openAttrib(this)">TRANSFERT</button>
         `;
         
         container.appendChild(div);
@@ -512,20 +487,26 @@
 
     }
 
+    function showCustomAlert(message) {
+        const modal = document.getElementById('modal-alert');
+        document.getElementById('alert-message').textContent = message;
+        modal.style.display = 'flex';
+        isModalOpen = true;
+    }
+
     function toggleStatus(casierId, forceDisable = null) {
         const el = document.getElementById(casierId);
         const btn = el.querySelector('.btn-toggle-status');
         const label = el.querySelector('.name-label');
         const fullName = el.dataset.id.toUpperCase();
         
-        // Détermine si on doit désactiver (soit forcé, soit par toggle)
         const isDisabling = (forceDisable !== null) ? forceDisable : !el.classList.contains('disabled');
 
         if (isDisabling) {
             const zone = el.querySelector('.drop-zone-zone');
-            // On ne bloque pas si c'est le chargement initial (forceDisable)
+            // Remplacement de l'alerte ici :
             if (forceDisable === null && zone.children.length > 0) {
-                alert("Videz le casier avant de le désactiver !");
+                showCustomAlert("Impossible de désactiver ce casier : il contient encore des commandes. Veuillez les déplacer d'abord.");
                 return;
             }
             el.classList.add('disabled');
@@ -625,23 +606,46 @@
 
     function openView(bid) {
         const data = facturesCache[bid];
-        if(!data) return;
+        if (!data) return;
+        
         isModalOpen = true;
         document.getElementById('view-title').textContent = "COMMANDE #" + bid;
         
         let itemsRaw = [];
         try { itemsRaw = typeof data.items === 'string' ? JSON.parse(data.items) : data.items; } catch(e) { itemsRaw = []; }
 
-        let html = `<div style="font-family:monospace; font-size:1.1em;">`;
-        itemsRaw.forEach(raw => {
+        // --- SECTION EXTRAS (Affichage des infos de livraison/spécifiques) ---
+        let extrasHtml = '';
+        if (data.extras) {
+            const ex = data.extras;
+            extrasHtml = `
+                <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #e67e22;">
+                    ${ex.desired_time ? `<div style="font-weight:bold; color:#e67e22;">🕒 ${ex.desired_time}</div>` : ''}
+                    <div style="font-size: 0.9em; margin-top: 5px;">
+                        ${ex.utensils ? `🍴 ${ex.utensils} | ` : ''}
+                        ${ex.sauces ? `🥫 ${ex.sauces}` : ''}
+                    </div>
+                    ${ex.custom_note ? `<div style="margin-top:5px; font-style:italic;">📝 ${ex.custom_note}</div>` : ''}
+                </div>
+            `;
+        }
+
+        // --- SECTION ITEMS ---
+        let itemsHtml = itemsRaw.map(raw => {
             let it = typeof raw === 'string' ? JSON.parse(raw) : raw;
-            html += `<div style="margin-bottom:10px;"><strong>● ${it.main_item}</strong>`;
-            if(it.sub_items) html += `<ul style="margin:2px 0 0 15px;">${it.sub_items.map(s => `<li>${s}</li>`).join('')}</ul>`;
-            html += `</div>`;
-        });
-        html += `</div>`;
-        
-        document.getElementById('view-items').innerHTML = html;
+            let subItems = it.sub_items ? it.sub_items.map(s => `<li style="padding: 2px 0;">${s}</li>`).join('') : '';
+            
+            return `
+                <div style="margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                    <div style="color: #e67e22; font-weight: 900; font-size: 1.1em; text-transform: uppercase;">
+                        ● ${it.main_item}
+                    </div>
+                    ${subItems ? `<ul style="list-style: none; padding-left: 20px; font-size: 0.95em; color: #555;">${subItems}</ul>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        document.getElementById('view-items').innerHTML = extrasHtml + itemsHtml;
         document.getElementById('modal-view').style.display = 'flex';
     }
 

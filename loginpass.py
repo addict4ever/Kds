@@ -4,8 +4,11 @@ import math
 import hashlib
 import os
 import json
+import pyotp  # <-- AJOUT ICI
 from functools import partial
 from typing import Optional, Tuple
+from PIL import ImageTk
+import qrcode
 
 # --- Configuration du Système ---
 CONFIG_FILE = "access_key_config.json" # Fichier pour stocker le sel et le hash
@@ -20,35 +23,117 @@ HASH_ITERATIONS = 600000             # Nombre d'itérations pour PBKDF2
 SALT_SIZE = 16                       # 16 bytes = 32 caractères hexadécimaux
 
 
+class CustomMessageBox(tk.Toplevel):
+    """Boîte de message personnalisée de style sombre, tactile, sans barre de titre et toujours au premier plan."""
+    def __init__(self, parent, title: str, message: str, is_error: bool = True):
+        super().__init__(parent)
+        self.configure(bg="#222")
+        
+        # --- ENLEVER LE X ET LA BARRE DE TITRE COMPLET ---
+        
+        # S'assurer qu'elle s'affiche par-dessus le cadran topmost
+        self.attributes('-topmost', True)
+        self.transient(parent)
+        self.grab_set()
+
+        # Dimensions et centrage
+        win_w, win_h = 450, 220
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = (sw - win_w) // 2
+        y = (sh - win_h) // 2
+        self.geometry(f"{win_w}x{win_h}+{x}+{y}")
+
+        # On ajoute une petite bordure colorée tout autour pour compenser la perte de la fenêtre Windows
+        border_color = "#e74c3c" if is_error else "#3498db"
+        self.configure(highlightbackground=border_color, highlightthickness=3)
+
+        # Conteneur principal
+        main_frame = tk.Frame(self, bg="#222", padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Icône et Titre réintégrés à l'intérieur de la boîte
+        icon_color = "#e74c3c" if is_error else "#3498db"
+        icon_text = "🚨" if is_error else "ℹ️"
+        
+        header_frame = tk.Frame(main_frame, bg="#222")
+        header_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        tk.Label(header_frame, text=icon_text, font=("Helvetica", 24), fg=icon_color, bg="#222").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Label(header_frame, text=title.upper(), font=("Helvetica", 14, "bold"), fg="#fff", bg="#222").pack(side=tk.LEFT)
+
+        # Message textuel
+        self.msg_label = tk.Label(
+            main_frame, 
+            text=message, 
+            font=("Helvetica", 11), 
+            fg="#eee", 
+            bg="#222", 
+            justify=tk.LEFT, 
+            wraplength=400
+        )
+        self.msg_label.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+
+        # Gros bouton de fermeture (idéal pour le tactile)
+        btn_color = "#c0392b" if is_error else "#2980b9"
+        self.ok_btn = tk.Button(
+            main_frame, 
+            text="COMPRIS", 
+            command=self.destroy, 
+            font=("Helvetica", 12, "bold"), 
+            bg=btn_color, 
+            fg="#fff", 
+            activebackground="#e74c3c", 
+            activeforeground="#fff",
+            relief=tk.FLAT,
+            height=1,
+            width=12
+        )
+        self.ok_btn.pack(side=tk.BOTTOM)
+        
+        # Permet de valider aussi en appuyant sur Entrée ou Espace
+        # Permet de valider aussi en appuyant sur Entrée ou Espace
+        self.bind("<Return>", lambda e: self.destroy())
+        self.bind("<space>", lambda e: self.destroy())  # <-- REMPLACE <Space> PAR <space> EN MINUSCULE
+
+    @classmethod
+    def show_error(cls, parent, title: str, message: str):
+        """Méthode pratique pour afficher une erreur."""
+        dialog = cls(parent, title, message, is_error=True)
+        parent.wait_window(dialog)
+
+    @classmethod
+    def show_info(cls, parent, title: str, message: str):
+        """Méthode pratique pour afficher une information standard."""
+        dialog = cls(parent, title, message, is_error=False)
+        parent.wait_window(dialog)
+
 # --- Fonctions de Sécurité (Hashing et Stockage) ---
 
-def load_security_config() -> Tuple[Optional[str], Optional[str]]:
-    """Charge le sel et le hash à partir du fichier de configuration."""
+def load_security_config() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Charge le sel, le hash et le secret OTP à partir du fichier."""
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            return data.get('salt'), data.get('hash')
-    except FileNotFoundError:
-        # Initialisation si le fichier n'existe pas
-        return None, None
-    except json.JSONDecodeError:
-        # Erreur si le fichier est corrompu
-        return None, None
+            return data.get('salt'), data.get('hash'), data.get('otp_secret')
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None, None, None
     except Exception as e:
-        print(f"Erreur inattendue lors du chargement de la config de sécurité : {e}")
-        return None, None
+        print(f"Erreur inattendue lors du chargement : {e}")
+        return None, None, None
 
-def save_security_config(salt_hex: str, hash_hex: str):
-    """Sauvegarde le nouveau sel et le hash dans le fichier."""
+def save_security_config(salt_hex: str, hash_hex: str, otp_secret: str):
+    """Sauvegarde le sel, le hash et le secret OTP dans le fichier."""
     data = {
         'salt': salt_hex,
-        'hash': hash_hex
+        'hash': hash_hex,
+        'otp_secret': otp_secret  # <-- AJOUT ICI
     }
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
     except Exception as e:
-        print(f"Erreur lors de la sauvegarde du fichier de configuration : {e}")
+        print(f"Erreur lors de la sauvegarde : {e}")
         raise
 
 def hash_password(password: str, salt: bytes) -> str:
@@ -81,31 +166,41 @@ def verify_password(password: str, salt_hex: str, stored_hash_hex: str) -> bool:
 
 # --- Chargement et Initialisation du Mot de Passe Maître ---
 
-SAVED_SALT, SAVED_HASH = load_security_config()
+# --- Chargement et Initialisation ---
+SAVED_SALT, SAVED_HASH, SAVED_OTP_SECRET = load_security_config()
 
-if SAVED_SALT is None or SAVED_HASH is None:
-    # Si c'est le premier lancement, initialiser avec un mot de passe par défaut (ex: 1234)
-    print(f"FICHIER DE CONFIGURATION INTROUVABLE OU CORROMPU : Création d'un mot de passe par défaut (1234).")
-    INITIAL_PASSWORD = "1234"
-    # Génération d'un sel aléatoire et sécurisé
+if SAVED_SALT is None or SAVED_HASH is None or SAVED_OTP_SECRET is None:
+    print(f"INITIALISATION DE LA SÉCURITÉ...")
+    INITIAL_PASSWORD = "567418978"
     NEW_SALT = os.urandom(SALT_SIZE) 
     NEW_HASH = hash_password(INITIAL_PASSWORD, NEW_SALT)
     
+    # Génération d'une clé secrète OTP standard (Base32)
+    NEW_OTP_SECRET = pyotp.random_base32()
+    
     try:
-        save_security_config(NEW_SALT.hex(), NEW_HASH)
-        SAVED_SALT, SAVED_HASH = NEW_SALT.hex(), NEW_HASH
-        print(f"Mot de passe par défaut généré et sauvegardé dans {CONFIG_FILE}. Veuillez le changer immédiatement.")
+        save_security_config(NEW_SALT.hex(), NEW_HASH, NEW_OTP_SECRET)
+        SAVED_SALT, SAVED_HASH, SAVED_OTP_SECRET = NEW_SALT.hex(), NEW_HASH, NEW_OTP_SECRET
+        
+        # Génération de l'URL pour l'application mobile (Google Authenticator)
+        totp = pyotp.TOTP(NEW_OTP_SECRET)
+        provisioning_url = totp.provisioning_uri(name="Pizzeria", issuer_name="KDS-Secure")
+        
+        print("\n" + "="*60)
+        print("🚨 PREMIER LANCEMENT : CONFIGURATION OTP REQUISE 🚨")
+        print(f"1. Code par défaut : {INITIAL_PASSWORD} (À changer immédiatement)")
+        print(f"2. Clé secrète OTP à copier dans Authenticator : {NEW_OTP_SECRET}")
+        print(f"3. Lien pour générer un QR Code : https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={provisioning_url}")
+        print("="*60 + "\n")
     except Exception:
-        # En cas d'échec de la sauvegarde, le programme doit s'arrêter ou fonctionner en mode non sécurisé.
-        print("ÉCHEC CRITIQUE: Impossible de sauvegarder la configuration de sécurité initiale.")
-        # Pour cet exemple, nous allons laisser les variables globales à None, ce qui empêchera la vérification.
-        SAVED_SALT, SAVED_HASH = None, None
+        print("ÉCHEC CRITIQUE: Impossible de sauvegarder la configuration initiale.")
+        SAVED_SALT, SAVED_HASH, SAVED_OTP_SECRET = None, None, None
 
 
 class DialUnlockDialog(tk.Toplevel):
     """Fenêtre modale avec cadran tactile et gestion de la clé maître."""
 
-    def __init__(self, parent, stored_hash: str, stored_salt: str, key_update_callback, action_name: str = "Authentification"):
+    def __init__(self, parent, stored_hash: str, stored_salt: str, stored_otp_secret: str, key_update_callback, action_name: str = "Authentification"):
         super().__init__(parent)
         
         # S'assurer que les données de sécurité sont valides avant de continuer
@@ -114,6 +209,8 @@ class DialUnlockDialog(tk.Toplevel):
             self.destroy()
             return
         self.master.protocol("WM_DELETE_WINDOW", self.disable_event)
+
+        
         
         # Empêche Alt+F4, Alt+Tab, etc.
         self.master.bind("<Alt-F4>", self.disable_event)
@@ -124,11 +221,15 @@ class DialUnlockDialog(tk.Toplevel):
         self.action_name = action_name
         self.title(action_name)
         self.configure(bg="#222")
+
+        self.request_otp_reset = False
         
-        # Fonctions et données de sécurité
         self.stored_hash = stored_hash
         self.stored_salt = stored_salt
+        self.stored_otp_secret = stored_otp_secret # <-- AJOUT
         self.key_update_callback = key_update_callback 
+        
+        self.otp_mode = True # <-- AJOUT : Indique si on est en train de demander le code OTP à 6 chiffres
 
         # Configuration de la fenêtre
         self.attributes('-topmost', True)
@@ -280,53 +381,50 @@ class DialUnlockDialog(tk.Toplevel):
     # --- LOGIQUE DE CHANGEMENT DE CLÉ ---
     
     def _refresh_key_mode_ui(self):
-        """Met à jour les textes des boutons et le titre selon le mode (Login/Old/New Key)."""
+        """Met à jour l'interface pour l'authentification OTP."""
         self.input_code = ""
         self._refresh_display()
         
-        if self.change_key_state == 1: # Saisie de l'Ancienne Clé
-            self.header_var.set("VÉRIFICATION : ANCIENNE CLÉ")
-            self.enter_btn.config(text="VÉRIFIER", bg="#f39c12", state=tk.NORMAL)
-            self.clear_btn.config(text="❌ ANNULER", command=self._on_cancel_change)
-            self.tip_var.set("Saisissez votre clé d'accès ACTUELLE.")
-            if self.change_key_btn.winfo_ismapped():
-                 self.change_key_btn.pack_forget() 
-        elif self.change_key_state == 2: # Saisie de la Nouvelle Clé (1ère fois)
-            self.header_var.set("NOUVELLE CLÉ (1/2)")
-            self.enter_btn.config(text="SUIVANT >>", bg="#3498db", state=tk.NORMAL)
-            self.clear_btn.config(text="❌ ANNULER", command=self._on_cancel_change)
-            self.tip_var.set(f"Entrez le NOUVEAU code secret (4-{MAX_PASSWORD_LENGTH} chiffres).")
-            if self.change_key_btn.winfo_ismapped():
-                 self.change_key_btn.pack_forget() 
-        elif self.change_key_state == 3: # Confirmation de la Nouvelle Clé (2ème fois)
-            self.header_var.set("CONFIRMER NOUVELLE CLÉ (2/2)")
-            self.enter_btn.config(text="💾 ENREGISTRER", bg="#3fbf7f", state=tk.NORMAL)
-            self.clear_btn.config(text="❌ ANNULER", command=self._on_cancel_change)
-            self.tip_var.set("Confirmez le nouveau code.")
-            if self.change_key_btn.winfo_ismapped():
-                 self.change_key_btn.pack_forget() 
-        else: # Mode Login (change_key_state == 0)
-            self.header_var.set(self.action_name)
-            self.enter_btn.config(text="✅ ENTRER", bg="#3fbf7f", state=tk.NORMAL)
-            self.clear_btn.config(text="❌ EFFACER", command=self._on_clear)
-            self.tip_var.set("Touchez un chiffre pour l'ajouter. Maintenez le fond pour effacer le dernier.")
-            self.change_key_btn.pack(pady=(10, 4)) 
+        # --- MODE OTP ---
+        self.header_var.set("🔑 AUTHENTIFICATION OTP")
+        self.enter_btn.config(text="✅ VALIDER OTP", bg="#9b59b6", state=tk.NORMAL)
+        self.clear_btn.config(text="❌ EFFACER", command=self._on_clear)
+        self.tip_var.set("Saisissez le code à 6 chiffres.")
+        
+        # --- MODIFICATION : Réafficher le bouton pour permettre le changement volontaire d'OTP ---
+        self.change_key_btn.config(text="⚙️ MODIFIER OTP", font=(FONT_NAME, 12), width=16)
+        self.change_key_btn.pack(pady=(10, 4))
 
     def _on_change_key_mode(self):
-        """Passe à l'étape 1 : Saisie de l'ancienne clé pour vérification."""
-        self.new_key_temp = "" # Réinitialiser la clé temporaire
-        self.change_key_state = 1
-        self._refresh_key_mode_ui()
+        """Vérifie le code OTP actuel, et si valide, autorise la réinitialisation."""
+        otp_to_check = self.input_code.strip()
+        totp = pyotp.TOTP(self.stored_otp_secret)
+
+        # 1. Vérification de validité
+        if totp.verify(otp_to_check, valid_window=10):
+            # Code valide : on autorise la demande de reset
+            self.request_otp_reset = True
+            self.result = True  # On marque le succès
+            self.destroy()      # On ferme pour laisser check_access_password gérer le QR Code
+        else:
+            # Code invalide : on refuse l'accès à la modification
+            CustomMessageBox.show_error(self, "Accès Refusé", "Code OTP invalide. Modification impossible.")
+            self._shake()
+            self.input_code = ""
+            self._refresh_display()
 
     def _on_cancel_change(self):
-        """Annule le mode de changement et revient au mode login."""
+        """Annule le mode de changement ou le mode OTP et revient au mode login."""
         self.new_key_temp = ""
+        self.otp_mode = False # <-- AJOUT
         self.change_key_state = 0
         self._refresh_key_mode_ui()
 
     def _on_enter(self):
         """Gère l'action du bouton ENTRER/CONFIRMER/VÉRIFIER selon l'état."""
-        if self.change_key_state == 1:
+        if self.otp_mode:
+            self._verify_otp() # <-- AJOUT
+        elif self.change_key_state == 1:
             self._verify_old_key()
         elif self.change_key_state == 2:
             self._store_new_key_first_time()
@@ -336,11 +434,40 @@ class DialUnlockDialog(tk.Toplevel):
             self._verify_access()
 
     def _verify_access(self):
-        """Vérifie le code en mode normal (login) avec le HASH stocké."""
+        """Vérifie le code en mode normal. Si OK, bascule sur la validation OTP."""
         if verify_password(self.input_code, self.stored_salt, self.stored_hash):
-            self.result = True
-            self.destroy()
+            # Étape 1 validée ! On passe à l'étape 2 (OTP)
+            self.otp_mode = True
+            self._refresh_key_mode_ui()
         else:
+            CustomMessageBox.show_error(
+                self, 
+                "Erreur d'Accès", 
+                "Code d'accès incorrect. Veuillez réessayer."
+            )
+            self._shake()
+            self.input_code = ""
+            self._refresh_display()
+
+    def _verify_otp(self):
+        """Vérifie le code OTP à 6 chiffres avec une tolérance de 5 minutes."""
+        # Nettoyage des espaces si jamais il y en a
+        otp_to_check = self.input_code.strip()
+        
+        totp = pyotp.TOTP(self.stored_otp_secret)
+        
+        # valid_window=10 permet de valider un code qui a jusqu'à 5 minutes 
+        # d'avance ou de retard (10 * 30 secondes = 300 secondes / 5 minutes)
+        if totp.verify(otp_to_check, valid_window=10):
+            self.result = True
+            self.destroy() # Authentification totalement réussie !
+        else:
+            CustomMessageBox.show_error(
+                self,
+                "Erreur OTP", 
+                "Code OTP invalide.\n\n"
+                "Vérifiez que l'heure de votre téléphone est bien synchronisée et réessayez."
+            )
             self._shake()
             self.input_code = ""
             self._refresh_display()
@@ -353,7 +480,11 @@ class DialUnlockDialog(tk.Toplevel):
             self._refresh_key_mode_ui()
         else:
             # Requis par l'utilisateur: Secouer, réinitialiser l'input et annuler
-            messagebox.showerror("Erreur de Vérification", "Ancienne clé incorrecte. Réessayez.")
+            CustomMessageBox.show_error(
+                self, 
+                "Erreur de Vérification", 
+                "Ancienne clé incorrecte. Réessayez."
+            )
             self._shake()
             self.input_code = "" # Réinitialiser le champ de saisie
             self.after(50, self._on_cancel_change) # Revenir au mode login après un petit délai
@@ -362,7 +493,11 @@ class DialUnlockDialog(tk.Toplevel):
         """Sauvegarde le premier essai de la nouvelle clé et passe à l'étape de confirmation."""
         new_key = self.input_code
         if len(new_key) < 4:
-            messagebox.showerror("Erreur", "La clé doit contenir au moins 4 chiffres.")
+            CustomMessageBox.show_error(
+                self,
+                "Erreur", 
+                f"La clé doit contenir au moins 4 chiffres."
+            )
             self._shake()
             self.input_code = ""
             self._refresh_display()
@@ -378,7 +513,11 @@ class DialUnlockDialog(tk.Toplevel):
         
         if confirmed_key != self.new_key_temp:
             # Clés différentes : Annulation du processus
-            messagebox.showerror("Erreur de Confirmation", "Les deux clés saisies ne correspondent pas. Processus annulé.")
+            CustomMessageBox.show_error(
+                self,
+                "Erreur de Confirmation", 
+                "Les deux clés saisies ne correspondent pas. Processus annulé."
+            )
             self._shake()
             self.after(50, self._on_cancel_change) 
             return
@@ -386,28 +525,50 @@ class DialUnlockDialog(tk.Toplevel):
         # Les clés correspondent, procéder à l'enregistrement
         new_key = self.new_key_temp
             
-        # 1. Générer un nouveau sel et hacher la nouvelle clé
+        # 1. Générer un nouveau sel, hacher la nouvelle clé ET générer un NOUVEAU secret OTP
         new_salt = os.urandom(SALT_SIZE)
         new_hash = hash_password(new_key, new_salt)
+        new_otp_secret = pyotp.random_base32() # <-- Génération du nouveau secret OTP pour Authenticator
         
-        # 2. Appeler la fonction de rappel pour la sauvegarde
-        success = self.key_update_callback(new_salt.hex(), new_hash)
+        # 2. Appeler la fonction de rappel pour la sauvegarde (avec le paramètre OTP en plus)
+        success = self.key_update_callback(new_salt.hex(), new_hash, new_otp_secret)
 
         if success:
             # Mettre à jour les variables de classe pour la session en cours
             self.stored_salt = new_salt.hex()
             self.stored_hash = new_hash
+            self.stored_otp_secret = new_otp_secret # <-- Mise à jour de la variable locale
+            
+            # 3. Générer l'URL pour que tu puisses scanner ton nouveau QR code dans la console
+            totp = pyotp.TOTP(new_otp_secret)
+            provisioning_url = totp.provisioning_uri(name="Pizzeria", issuer_name="KDS-Secure")
+            
+            print("\n" + "="*60)
+            print("🚨 NOUVELLE CONFIGURATION OTP GÉNÉRÉE SUITE AU CHANGEMENT DE CLÉ 🚨")
+            print(f"Nouveau secret OTP (manuel) : {new_otp_secret}")
+            print(f"Lien pour le nouveau QR Code : https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={provisioning_url}")
+            print("="*60 + "\n")
+            
+            # Alerte visuelle personnalisée (Style Info Bleu) pour l'utilisateur
+            CustomMessageBox.show_info(
+                self,
+                "Succès", 
+                "Clé d'accès et OTP mis à jour avec succès.\n\n"
+                "IMPORTANT : Scannez le nouveau QR code affiché dans la console avant de tenter de vous reconnecter !"
+            )
             
             # Réinitialiser au mode Login et forcer la reconnexion avec la nouvelle clé
-            messagebox.showinfo("Succès", "Clé d'accès mise à jour et sécurisée. Veuillez maintenant vous authentifier avec votre nouvelle clé.")
-            
             self.new_key_temp = ""
             self.change_key_state = 0 
             self._refresh_key_mode_ui()
             
         else:
-            messagebox.showerror("Erreur", "La clé n'a pas pu être mise à jour.")
-            self._on_cancel_change() 
+            CustomMessageBox.show_error(
+                self,
+                "Erreur", 
+                "La clé n'a pas pu être mise à jour."
+            )
+            self._on_cancel_change()
 
     # --- LOGIQUE D'INTERACTION CORRIGÉE ---
     
@@ -576,32 +737,14 @@ class DialUnlockDialog(tk.Toplevel):
         shake_once(offsets)
 
 
+
 # --- FONCTION D'UTILISATION PRINCIPALE ---
 def check_access_password(action_name: str = "Action protégée") -> bool:
-    """Ouvre le dialogue de cadran et gère la mise à jour de la clé."""
+    """Authentification OTP et modification volontaire via le bouton ⚙️."""
     
-    global SAVED_SALT, SAVED_HASH
+    global SAVED_SALT, SAVED_HASH, SAVED_OTP_SECRET
     
-    # 1. Gestion des erreurs de configuration critiques au démarrage
-    if SAVED_SALT is None or SAVED_HASH is None:
-        messagebox.showerror("Erreur Critique", "Le système de sécurité n'a pas pu s'initialiser correctement. Le mot de passe maître est manquant.")
-        return False
-    
-    # 2. Fonction de rappel pour la sauvegarde du hash
-    def handle_key_update(new_salt_hex: str, new_hash_hex: str) -> bool:
-        """Met à jour les variables globales et le fichier de configuration."""
-        # 🚨 CORRECTION : Utiliser 'global' car SAVED_SALT/HASH sont définis au niveau du module.
-        global SAVED_SALT, SAVED_HASH
-        try:
-            save_security_config(new_salt_hex, new_hash_hex)
-            SAVED_SALT = new_salt_hex
-            SAVED_HASH = new_hash_hex
-            return True
-        except Exception as e:
-            messagebox.showerror("Erreur de Sauvegarde", f"Impossible de sauvegarder la nouvelle clé: {e}")
-            return False
-
-    # 3. Préparation du root Tkinter
+    # 1. Préparation du root Tkinter
     root = tk._default_root
     created_root = False
     if root is None:
@@ -609,24 +752,97 @@ def check_access_password(action_name: str = "Action protégée") -> bool:
         root.withdraw()
         created_root = True
 
-    # 4. Lancement de la boîte de dialogue
+    if SAVED_OTP_SECRET is None:
+        CustomMessageBox.show_error(root, "Erreur Critique", "Configuration OTP manquante.")
+        if created_root: root.destroy()
+        return False
+    
+    def handle_key_update(new_salt_hex: str, new_hash_hex: str, new_otp_secret: str) -> bool:
+        global SAVED_SALT, SAVED_HASH, SAVED_OTP_SECRET
+        try:
+            save_security_config(new_salt_hex, new_hash_hex, new_otp_secret)
+            SAVED_SALT, SAVED_HASH, SAVED_OTP_SECRET = new_salt_hex, new_hash_hex, new_otp_secret
+            return True
+        except Exception as e:
+            CustomMessageBox.show_error(dialog, "Erreur", f"Échec de sauvegarde : {e}")
+            return False
+
+    # 2. Lancement du cadran tactile
     dialog = DialUnlockDialog(
         root, 
         stored_hash=SAVED_HASH, 
         stored_salt=SAVED_SALT, 
+        stored_otp_secret=SAVED_OTP_SECRET,
         key_update_callback=handle_key_update,
         action_name=action_name
     )
+    dialog.otp_mode = True
+    dialog._refresh_key_mode_ui()
+    
     root.wait_window(dialog)
 
-    # 5. Destruction du root si créé pour cette session
-    if created_root:
-        try:
-            root.destroy()
-        except Exception:
-            pass
+    # 3. Logique post-authentification
+    success = dialog.result
+    
+    # Si le bouton de modification a été pressé, on invalide immédiatement l'accès
+    if success and getattr(dialog, 'request_otp_reset', False):
+        success = False 
+        
+        # Demande de confirmation personnalisée
+        confirm_win = tk.Toplevel(root)
+        confirm_win.title("Configuration")
+        confirm_win.attributes('-topmost', True)
+        confirm_win.configure(bg="#222")
+        
+        tk.Label(confirm_win, text="Vous avez demandé à modifier l'OTP.\nConfirmer la génération d'un nouveau code ?", 
+                 bg="#222", fg="white", font=("Helvetica", 12), pady=20).pack()
+        
+        should_reset = [False]
+        def do_reset():
+            should_reset[0] = True
+            confirm_win.destroy()
 
-    return dialog.result
+        btn_f = tk.Frame(confirm_win, bg="#222")
+        btn_f.pack(pady=10)
+        tk.Button(btn_f, text="OUI", command=do_reset, bg="#e74c3c", fg="white").pack(side=tk.LEFT, padx=10)
+        tk.Button(btn_f, text="NON", command=confirm_win.destroy, bg="#3498db", fg="white").pack(side=tk.LEFT, padx=10)
+        
+        root.wait_window(confirm_win)
+
+        # Gestion du résultat de la confirmation
+        if should_reset[0]:
+            # GÉNÉRATION DU NOUVEAU SECRET
+            new_secret = pyotp.random_base32()
+            save_security_config(SAVED_SALT, SAVED_HASH, new_secret)
+            SAVED_OTP_SECRET = new_secret
+            
+            # Affichage du QR Code
+            qr_win = tk.Toplevel(root)
+            qr_win.title("Nouveau QR Code")
+            qr_win.attributes('-topmost', True)
+            qr_win.configure(bg="#222")
+            
+            uri = pyotp.TOTP(new_secret).provisioning_uri(name="Pizzeria", issuer_name="KDS-Secure")
+            qr_img = ImageTk.PhotoImage(qrcode.make(uri))
+            
+            tk.Label(qr_win, text="Scannez ce nouveau code :", bg="#222", fg="white").pack(pady=10)
+            lbl = tk.Label(qr_win, image=qr_img)
+            lbl.image = qr_img
+            lbl.pack(pady=10)
+            tk.Button(qr_win, text="FERMER", command=qr_win.destroy).pack(pady=10)
+            
+            root.wait_window(qr_win)
+            # success reste False, l'accès est donc invalidé
+        else:
+            # Si l'utilisateur clique sur "NON", il n'a pas accès
+            success = False
+
+    # 4. Nettoyage
+    if created_root:
+        try: root.destroy()
+        except: pass
+
+    return success
 
 # --- EXEMPLE D'UTILISATION ---
 if __name__ == "__main__":

@@ -389,8 +389,14 @@
 
 <link rel="icon" type="image/svg+xml" href="/favicon.ico">
 <!-- Bouton "Sourire" flottant -->
-<div style="position: fixed; top: 10px; right: 20px; z-index: 9999;">
-    <button onclick="toggleSettings()" style="background: none; border: none; font-size: 2.5rem; cursor: pointer; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.5));">😊</button>
+<div style="position: fixed; top: 10px; right: 20px; z-index: 9999; display: flex; flex-direction: row; align-items: center; gap: 15px;">
+    <div id="trash-livreur-btn" style="cursor: pointer; font-size: 2.5rem; background: rgba(255, 0, 0, 0.2); padding: 5px; border-radius: 50%; border: 2px solid red; display: flex; align-items: center; justify-content: center; width: 50px; height: 50px;">
+        🗑️
+    </div>
+    
+    <button onclick="toggleSettings()" style="background: none; border: none; font-size: 2.5rem; cursor: pointer; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.5));">
+        😊
+    </button>
 </div>
 
 <div id="kds-settings-panel" class="no-print" style="display: none;">
@@ -463,7 +469,7 @@
                 </label>
 
                 <label style="color: #9b59b6;">
-                    <input type="checkbox" id="toggle-999" onchange="always_call_filter_change_if_needed()">
+                    <input type="checkbox" id="toggle-999" onchange="">
                     <span>999</span>
                 </label>
 
@@ -502,6 +508,17 @@
     </table>
 </div>
 
+<div id="confirmModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; justify-content:center; align-items:center;">
+    <div style="background:#222; color:white; padding:25px; border-radius:10px; border: 2px solid #f1c40f; text-align:center; max-width:400px;">
+        <h2 style="color:#f1c40f;">⚠️ CONFIRMATION</h2>
+        <p>Voulez-vous vraiment marquer TOUTES les commandes LIVREUR comme "Traitée" ?</p>
+        <div style="margin-top:20px;">
+            <button id="modalYes" style="padding:10px 20px; background:red; border:none; color:white; font-weight:bold; cursor:pointer; margin-right:10px;">OUI, TRAITER</button>
+            <button id="modalNo" style="padding:10px 20px; background:#555; border:none; color:white; cursor:pointer;">ANNULER</button>
+        </div>
+    </div>
+</div>
+
 
 <script>
     const body = document.body;
@@ -509,6 +526,44 @@
     const audioBtn = document.getElementById('btn-audio-toggle');
     const ajaxZone = document.getElementById('kds-ajax-zone');
     const themeContainer = document.getElementById('themeContainer');
+    const trashBtn = document.getElementById('trash-livreur-btn');
+    const modal = document.getElementById('confirmModal');
+
+    trashBtn.addEventListener('click', function() {
+        modal.style.display = 'flex'; // Afficher le modal
+    });
+
+    document.getElementById('modalNo').addEventListener('click', function() {
+        modal.style.display = 'none'; // Cacher le modal
+    });
+
+    document.getElementById('modalYes').addEventListener('click', function() {
+        modal.style.display = 'none'; // Cacher le modal
+        
+        fetch('/mark_all_treated_livreur', {
+            method: 'POST',
+            headers: { 'X-App-Access': 'MonApplicationUnique123!' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Au lieu de location.reload(), on appelle la fonction de rafraîchissement
+                if (typeof refreshOrders === 'function') {
+                    refreshOrders();
+                    console.log("Rafraîchissement des commandes déclenché.");
+                } else {
+                    console.warn("La fonction refreshOrders n'est pas définie.");
+                    location.reload(); // Fallback si la fonction n'est pas trouvée
+                }
+            } else {
+                alert("Erreur : " + data.message);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Une erreur est survenue lors de la communication avec le serveur.");
+        });
+    });
 
     function toggleSettings() {
         const panel = document.getElementById('kds-settings-panel');
@@ -850,7 +905,7 @@
         const newStatus = 'Traitee';
         console.log(`Envoi au db_manager via /update_status/${orderId}/${newStatus}`);
 
-        fetch(`/update_status/${orderId}/${newStatus}`, {
+        fetch(`/update_status_livraisons/${orderId}/${newStatus}`, {
             method: 'POST',
             headers: { 
                 'X-App-Access': 'MonApplicationUnique123!' 
