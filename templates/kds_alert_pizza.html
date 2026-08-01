@@ -15,6 +15,13 @@
         --kds-font-subs: 2.2rem;
     }
 
+    .item-highlighted {
+        background-color: #f1c40f !important; /* Jaune vif */
+        color: #000 !important;             /* Texte en noir */
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s ease, color 0.2s ease;
+    }
     /* ... (garde tes thèmes inchangés) ... */
 
     /* MODIFICATION DES TAILLES DYNAMIQUES */
@@ -381,6 +388,8 @@
             padding: 6px 10px;
             border-radius: 5px;
         }
+        /* --- STYLE POUR LE SURLIGNAGE DES ITEMS --- */
+        
     }
 </style>
 {% endblock %}
@@ -479,7 +488,7 @@
                 </label>
 
                 <label style="color: #f1c40f;">
-                    <input type="checkbox" id="toggle-salle" onchange="appliquerFiltresAffichage()">
+                    <input type="checkbox" id="toggle-salle" checked onchange="appliquerFiltresAffichage()">
                     <span>SALLE</span>
                 </label>
             </div>
@@ -564,6 +573,51 @@
             alert("Une erreur est survenue lors de la communication avec le serveur.");
         });
     });
+
+    // --- GESTION DU SURLIGNAGE AU CLIC (MAIN ET SUBS ITEMS) ---
+    // --- GESTION DU SURLIGNAGE AU CLIC (Avec mémoire localStorage) ---
+    document.addEventListener('click', function(event) {
+        const target = event.target.closest('.item-main, .item-subs');
+        
+        if (target) {
+            target.classList.toggle('item-highlighted');
+            
+            // On récupère la liste des items surlignés stockée en mémoire
+            let highlightedItems = JSON.parse(localStorage.getItem('kds_highlighted_items') || '[]');
+            
+            // On s'assure que l'élément possède un identifiant unique ou un texte de repère
+            // Si vos items n'ont pas d'ID, on utilise leur texte brut comme clé unique
+            let itemId = target.getAttribute('data-item-id') || target.innerText.trim();
+            
+            if (target.classList.contains('item-highlighted')) {
+                // Ajout en mémoire s'il n'y est pas déjà
+                if (!highlightedItems.includes(itemId)) {
+                    highlightedItems.push(itemId);
+                }
+            } else {
+                // Retrait de la mémoire s'il est désurligné
+                highlightedItems = highlightedItems.filter(id => id !== itemId);
+            }
+            
+            // Sauvegarde dans le navigateur
+            localStorage.setItem('kds_highlighted_items', JSON.stringify(highlightedItems));
+        }
+    });
+
+    // --- FONCTION DE RESTAURATION DU SURLIGNAGE ---
+    function restoreHighlights() {
+        const highlightedItems = JSON.parse(localStorage.getItem('kds_highlighted_items') || '[]');
+        
+        const allItems = document.querySelectorAll('.item-main, .item-subs');
+        allItems.forEach(item => {
+            let itemId = item.getAttribute('data-item-id') || item.innerText.trim();
+            if (highlightedItems.includes(itemId)) {
+                item.classList.add('item-highlighted');
+            } else {
+                item.classList.remove('item-highlighted');
+            }
+        });
+    }
 
     function toggleSettings() {
         const panel = document.getElementById('kds-settings-panel');
@@ -842,6 +896,7 @@
             // -------------------------
 
             appliquerFiltresAffichage();
+            restoreHighlights();
             
             const table = document.getElementById('kds-table-zone');
             if (table && table.classList.contains('view-active-table')) {
@@ -918,7 +973,7 @@
 
     function marquerTraite(orderId) {
         // EN CUISINE : On envoie "Traitee" sans accent pour éviter que l'URL casse (404)
-        const newStatus = 'Pizza';
+        const newStatus = 'Traitee';
         console.log(`Envoi au db_manager via /update_status/${orderId}/${newStatus}`);
 
         fetch(`/update_status_livraisons/${orderId}/${newStatus}`, {

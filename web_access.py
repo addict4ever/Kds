@@ -82,7 +82,8 @@ WHITELIST_ROUTES = [
     '/static/js/jspdf.umd.min.js',
     '/static/js/jspdf.plugin.autotable.min.js',
     '/static/js/chartjs-plugin-zoom.min.js',
-    '/static/js/html2pdf.bundle.min.js'
+    '/static/js/html2pdf.bundle.min.js',
+    '/kds_pa_pizza'
     
     
 ]
@@ -291,6 +292,8 @@ def filtrer_acces_global():
         return
     if path == '/favicon.ico':
         return
+    if path == '/kds_pa_pizza':
+        return
 
     # 4. VÉRIFICATION DE L'IP (Couche 1)
     #if not is_ip_allowed():
@@ -335,6 +338,33 @@ def kds_pa_alert():
         return render_template('partials/kds_order_list.html', pa_list=pa_alerts)
     
     return render_template('kds_alert_pa.html', pa_list=pa_alerts, refresh_rate=5)
+
+@app.route('/kds_pa_pizza')
+def kds_pa_alert_pizza():
+    # 1. Récupération des commandes
+    all_orders = db_manager.get_pending_orders_kds_alert_pizza()
+    
+    # 2. On transforme le dictionnaire en une liste pour le tri
+    # On crée une liste plate avec toutes les commandes
+    order_list = []
+    for category in all_orders:
+        for order in all_orders.get(category, []):
+            order_list.append(order)
+
+    # 3. Tri personnalisé : 
+    # Critère 1 : Si service_type est '888', il vient en premier (False < True en Python)
+    # Critère 2 : Si service_type n'est pas 888, on trie par bill_id décroissant (nouveau -> ancien)
+    # On supprime le int() et on utilise une comparaison de chaînes de caractères
+    order_list.sort(key=lambda x: (x.get('service_type') != '888', str(x.get('bill_id', ''))), reverse=False)
+
+    # 4. Reconstruction du dictionnaire pour le template
+    # On garde la structure attendue par kds_order_list.html
+    pa_alerts = {order['bill_id']: {'data': order} for order in order_list}
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return render_template('partials/kds_order_list.html', pa_list=pa_alerts)
+    
+    return render_template('kds_alert_pizza.html', pa_list=pa_alerts, refresh_rate=5)
 
 @app.route('/marquer_pa_traitee/<bill_id>', methods=['POST'])
 def marquer_pa_traitee(bill_id):
@@ -918,7 +948,7 @@ def print_bill():
                 ports_config = json.load(f)
                 systeme = platform.system().lower() 
                 key_suffix = "windows_ports" if systeme == "windows" else "linux_ports"
-                port_reel = ports_config.get(key_suffix, {}).get("SERIAL_PORT_PRINTER_2")
+                port_reel = ports_config.get(key_suffix, {}).get("SERIAL_PORT_PRINTER")
         except Exception as e:
             logger.error(f"Erreur lecture ports.json: {e}")
 
@@ -1223,7 +1253,7 @@ def update_status_livraisons(bill_id, new_status):
     if new_status == 'Traitee':
         new_status = 'Traitée'
 
-    valid_statuses = ['En cours', 'Traitée', 'Annulée', 'En attente']
+    valid_statuses = ['En cours', 'Traitée', 'Annulée', 'En attente', 'Pizza']
     if new_status not in valid_statuses:
         return jsonify({"success": False, "message": f"Statut non valide: {new_status}"}), 400
         
@@ -1250,7 +1280,7 @@ def update_status(bill_id, new_status):
     if new_status == 'Traitee':
         new_status = 'Traitée'
 
-    valid_statuses = ['En cours', 'Traitée', 'Annulée', 'En attente']
+    valid_statuses = ['En cours', 'Traitée', 'Annulée', 'En attente' , 'Pizza']
     if new_status not in valid_statuses:
         return jsonify({"success": False, "message": f"Statut non valide: {new_status}"}), 400
         

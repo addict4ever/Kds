@@ -935,36 +935,27 @@ class DBManager:
             
             # --- MISE À JOUR SYNCHRONISÉE ---
             query = "UPDATE orders SET items = ?, status = ? WHERE id = ?"
-            
-            # Base KDS : On met à 'Traitée' pour forcer le refresh visuel (fermeture)
             cursor.execute(query, (final_json, 'Traitée', str_bid))
             
-            # Base Livreur : On met à 'En attente' directement
             conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
-            conn_livreur.execute(query, (final_json, 'Traitée', str_bid))
+            conn_livreur.execute(query, (final_json, 'En attente', str_bid))
             
             conn.commit()
             conn_livreur.commit()
             
             # 3. RÉACTIVATION DIFFÉRÉE (KDS uniquement)
-            def reactivate_kds():
+            # Définition propre de la fonction interne
+            def reactivate_kds(order_id, db_path):
                 try:
-                    # Réactivation KDS
-                    conn_timer = sqlite3.connect(self.db_path)
-                    conn_timer.execute("UPDATE orders SET status = ? WHERE id = ?", ('En attente', str_bid))
-                    conn_timer.commit()
-                    conn_timer.close()
-                    
-                    # Réactivation Livreur
-                    conn_livreur_timer = sqlite3.connect(LIVREUR_DB_PATH)
-                    conn_livreur_timer.execute("UPDATE orders SET status = ? WHERE id = ?", ('En attente', str_bid))
-                    conn_livreur_timer.commit()
-                    conn_livreur_timer.close()
+                    c = sqlite3.connect(db_path)
+                    c.execute("UPDATE orders SET status = ? WHERE id = ?", ('En attente', order_id))
+                    c.commit()
+                    c.close()
                 except Exception as e:
-                    logger.error(f"Erreur réactivation différée des deux bases: {e}")
+                    print(f"Erreur timer: {e}")
 
             # Déclenchement du délai de 3 secondes
-            threading.Timer(3.0, reactivate_kds).start()
+            threading.Timer(3.0, reactivate_kds, args=[str_bid, self.db_path]).start()
             
             return True
 
@@ -1048,12 +1039,9 @@ class DBManager:
             return 0
     
     def mark_specific_types_as_done_all(self):
-        """Marque les commandes par service_type comme 'Traitée'."""
+        """Marque les commandes par service_type comme 'Traitée' dans les deux bases."""
         try:
-            # Les 4 types que tu veux traiter
-            types_to_process = ('POUR EMPORTER', 'LIVRAISON', 'COMMANDE', 'LIVREUR' ,'888')
-            
-            # On génère dynamiquement le bon nombre de "?" (ici il en faut 4)
+            types_to_process = ('POUR EMPORTER', 'LIVRAISON', 'COMMANDE', 'LIVREUR', '888')
             placeholders = ', '.join(['?'] * len(types_to_process))
             
             query = f"""
@@ -1063,23 +1051,32 @@ class DBManager:
                 AND status != 'Traitée'
             """
             
+            total_count = 0
+            
+            # 1. Traitement Base Principale
             conn = self._get_connection()
             cursor = conn.cursor()
-            
-            # Maintenant, query contient "... IN (?, ?, ?, ?)"
             cursor.execute(query, types_to_process)
-            
-            count = cursor.rowcount
+            total_count += cursor.rowcount
             conn.commit()
             conn.close()
             
-            if count > 0:
-                logger.info(f"NETTOYAGE AUTO: {count} commandes ({types_to_process}) traitées.")
-            return count
+            # 2. Traitement Base Livreur
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor_livreur = conn_livreur.cursor()
+            cursor_livreur.execute(query, types_to_process)
+            total_count += cursor_livreur.rowcount
+            conn_livreur.commit()
+            conn_livreur.close()
+            
+            if total_count > 0:
+                logger.info(f"NETTOYAGE AUTO (double base): {total_count} commandes ({types_to_process}) traitées.")
+            
+            return total_count
+            
         except Exception as e:
-            logger.error(f"Erreur lors du marquage automatique : {e}")
+            logger.error(f"Erreur lors du marquage automatique dans les deux bases : {e}")
             return 0
-
 
     def mark_all_as_done(self):
         """Marque TOUTES les commandes (quel que soit le service_type) comme 'Traitée' dans les deux bases."""
@@ -1233,7 +1230,84 @@ class DBManager:
                 SELECT id, bill_id, table_number, serveuse_name, service_type, 
                        items, creation_date, status, raw_content 
                 FROM orders 
-                WHERE status NOT IN ('Traitée', 'Annulée') 
+                WHERE status NOT IN ('Traitée', 'Annulée','Pizza') 
+                ORDER BY creation_date ASC
+            """)
+            rows = cursor.fetchall()
+            
+        except sqlite3.Error as e:
+            logger.error(f"Erreur lors de la récupération des commandes dans le clone '{LIVREUR_DB_PATH}' : {e}")
+        finally:
+            if conn: 
+                conn.close()
+
+        # --- 2. TRAITEMENT DES DONNÉES ---
+        pending_orders_by_service = {
+            'COMMANDE': [],
+            'LIVRAISON': [],
+            'LIVREUR': [],
+            'POUR EMPORTER': []
+        }
+        
+        for row in rows:
+            try:
+                raw_items = row[5]
+                items_list = json.loads(raw_items) if raw_items else []
+                
+                order_data = {
+                    'id': row[0],
+                    'bill_id': row[1],
+                    'table_number': str(row[2]).strip(),
+                    'serveuse_name': str(row[3]).strip(),
+                    'service_type': str(row[4]).upper(), 
+                    'items': items_list,
+                    'creation_date': row[6],
+                    'status': row[7],
+                    'raw_content': row[8]
+                }
+                
+                stype = order_data['service_type']
+                table = order_data['table_number']
+                serveuse = order_data['serveuse_name']
+                
+                # --- LOGIQUE DE CLASSEMENT ---
+                if table == "777" or serveuse == "777" or "LIVRAISON" in stype:
+                    pending_orders_by_service['LIVRAISON'].append(order_data)
+                
+                elif table == "999" or serveuse == "999" or "LIVREUR" in stype:
+                    pending_orders_by_service['LIVREUR'].append(order_data)
+                
+                elif table == "888" or "EMPORTER" in stype:
+                    pending_orders_by_service['POUR EMPORTER'].append(order_data)
+                
+                else:
+                    pending_orders_by_service['COMMANDE'].append(order_data)
+                    
+            except Exception as e:
+                logger.warning(f"Erreur lors du traitement d'une ligne (Clone {LIVREUR_DB_PATH}, ID {row[0]}): {e}")
+                continue
+                
+        return pending_orders_by_service
+    
+    def get_pending_orders_kds_alert_pizza(self):
+        """
+        Récupère toutes les commandes en cours depuis la base LIVREUR.
+        Les regroupe par types incluant le contenu brut (BLOB).
+        """
+        conn = None
+        rows = []
+        
+        # --- 1. LECTURE DE LA BASE LIVREUR ---
+        try:
+            # On se connecte spécifiquement au fichier du clone
+            conn = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT id, bill_id, table_number, serveuse_name, service_type, 
+                       items, creation_date, status, raw_content 
+                FROM orders 
+                WHERE status NOT IN ('Traitée', 'Annulée' , 'En Attente') 
                 ORDER BY creation_date ASC
             """)
             rows = cursor.fetchall()

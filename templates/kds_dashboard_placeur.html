@@ -543,39 +543,90 @@
         });
     }
 
-    function savePosition(bid, zoneName) {
-        // 1. On garde la position en mémoire locale pour le prochain rafraîchissement
-        localStorage.setItem('pos_p_' + bid, zoneName);
-
-        // 2. Si on place dans la RÉCEPTION (dz-cmd), on retire le livreur sur le serveur
-        if (zoneName === "dz-cmd") {
-            fetch(`/assign_livreur/${bid}/NONE`, { method: 'POST' })
-                .then(() => fetchData()) // On rafraîchit pour être sûr
-                .catch(err => console.error("Erreur désassignation:", err));
+    async function savePosition(bid, zoneName) {
+        // 1. Récupérer la commande cible
+        const targetOrder = facturesCache[bid];
+        if (!targetOrder) return;
+        
+        // Extraire le numéro de livraison (ex: 302)
+        const livraisonNo = extractLivraisonNo(targetOrder);
+        if (!livraisonNo) {
+            executeFinalAssign(bid, zoneName);
             return;
         }
 
-        // 3. Si on place dans le casier d'un livreur (zoneName est le nom du livreur)
-        if (zoneName) {
-            console.log(`Assignation de ${bid} à ${zoneName}...`);
-            
-            // On bloque temporairement fetchData pour éviter les sauts visuels
-            isModalOpen = true; 
+        // 2. Chercher TOUTES les commandes du même groupe (302) dans TOUTE la page
+        // On ne se fie pas juste au cache, on regarde ce qui est présent à l'écran
+        const allMatchingItems = Array.from(document.querySelectorAll('.item')).filter(el => {
+            const orderData = facturesCache[el.dataset.id];
+            return orderData && extractLivraisonNo(orderData) === livraisonNo;
+        });
 
-            fetch(`/assign_livreur/${bid}/${zoneName}`, { method: 'POST' })
-                .then(response => {
-                    if (response.ok) {
-                        console.log("Assignation réussie !");
-                    }
-                    isModalOpen = false;
-                    fetchData(); // On relance le fetch pour confirmer les données
-                })
-                .catch(err => {
-                    console.error("Erreur assignation:", err);
-                    isModalOpen = false;
-                });
+        // 3. Déplacement groupé
+        isModalOpen = true; // Verrouillage anti-refresh
+        
+        try {
+            for (const itemEl of allMatchingItems) {
+                const currentBid = itemEl.dataset.id;
+                
+                // Mise à jour locale (localStorage)
+                localStorage.setItem('pos_p_' + currentBid, zoneName);
+                
+                // Appel serveur pour assigner la zone
+                const status = zoneName === "dz-cmd" ? "NONE" : zoneName;
+                await fetch(`/assign_livreur/${currentBid}/${status}`, { method: 'POST' });
+            }
+            
+            // Rafraîchir les données pour que le DOM se reconstruise proprement
+            await fetchData();
+            
+        } catch (err) {
+            console.error("Erreur transfert groupe:", err);
+        } finally {
+            isModalOpen = false;
         }
     }
+
+    // Nouvelle fonction d'assignation directe
+    function executeFinalAssign(bid, zoneName) {
+        localStorage.setItem('pos_p_' + bid, zoneName);
+        if (zoneName === "dz-cmd") {
+            fetch(`/assign_livreur/${bid}/NONE`, { method: 'POST' }).then(() => fetchData());
+        } else {
+            fetch(`/assign_livreur/${bid}/${zoneName}`, { method: 'POST' }).then(() => fetchData());
+        }
+    }
+
+    function extractLivraisonNo(orderData) {
+        try {
+            let items = typeof orderData.items === 'string' ? JSON.parse(orderData.items) : orderData.items;
+            for (let it of items) {
+                let item = typeof it === 'string' ? JSON.parse(it) : it;
+                if (item.main_item && item.main_item.includes("LIVRAISON #")) return item.main_item.split('#')[1].trim();
+                if (item.sub_items) {
+                    for (let sub of item.sub_items) if (sub.includes("LIVRAISON #")) return sub.split('#')[1].trim();
+                }
+            }
+        } catch(e) {}
+        return null;
+    }
+
+    // Votre fonction demandée
+    function applyAssignGroup(all) {
+        if (!pendingAssignData) return;
+
+        if (all) {
+            pendingAssignData.bids.forEach(bid => {
+                executeFinalAssign(bid, pendingAssignData.livreur);
+            });
+        } else {
+            executeFinalAssign(pendingAssignData.targetBid, pendingAssignData.livreur);
+        }
+
+        document.getElementById('confirmAssignGroupModal').style.display = 'none';
+        pendingAssignData = null;
+    }
+
 
     // Fonction pour ouvrir/fermer le casier
     function toggleCasier(casierId) {

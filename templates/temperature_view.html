@@ -415,48 +415,75 @@
     }
 
     
-    function exportData(format) {
+    async function exportData(format) {
         if (!window.table) return alert("Le tableau n'est pas encore prêt.");
 
-        // --- Export PDF et HTML (Capture complète) ---
-        if (format === 'pdf' || format === 'html') {
-            const element = document.getElementById('dashboard-wrapper');
-            if (!element) return alert("Zone d'export introuvable.");
+        // 1. Préparation : Tout afficher pour l'export (pour les pages précédentes/suivantes)
+        // On sauvegarde la page actuelle pour y revenir après l'export
+        const currentPage = window.table.getPage();
+        window.table.setPageSize(10000); // Affiche toutes les lignes
+        await new Promise(resolve => setTimeout(resolve, 500)); // Attendre le rendu DOM
 
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const fileName = `Export_Complet_${timestamp}`;
+        // 2. Gestion des graphiques (Canvas vers Image pour PDF)
+        const element = document.getElementById('dashboard-wrapper');
+        const canvases = element.querySelectorAll('canvas');
+        const canvasImages = [];
 
-            if (format === 'pdf') {
-                const opt = {
-                    margin: 10,
-                    filename: `${fileName}.pdf`,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, letterRendering: true, useCORS: true, windowWidth: element.scrollWidth },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                };
-                html2pdf().set(opt).from(element).save().then(toggleExportMenu);
-            } else {
-                // Export HTML : On télécharge un fichier avec le contenu stylisé
-                const htmlContent = `
-                    <html>
-                    <head><title>Export Dashboard</title>
-                    <style>body{font-family:sans-serif; padding:20px;} .card{border:1px solid #ccc; padding:20px; margin-bottom:20px;}</style>
-                    </head>
-                    <body>${element.innerHTML}</body>
-                    </html>`;
-                const blob = new Blob([htmlContent], { type: 'text/html' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `${fileName}.html`;
-                link.click();
-                toggleExportMenu();
+        canvases.forEach(canvas => {
+            const img = document.createElement('img');
+            img.src = canvas.toDataURL("image/png");
+            img.style.width = canvas.style.width;
+            img.style.display = 'block';
+            canvas.parentNode.insertBefore(img, canvas);
+            canvas.style.display = 'none'; // Cache le canvas vide
+            canvasImages.push({ canvas, img });
+        });
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const fileName = `Export_Complet_${timestamp}`;
+
+        // --- Export PDF ---
+        if (format === 'pdf') {
+            const opt = {
+                margin: 10,
+                filename: `${fileName}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            await html2pdf().set(opt).from(element).save();
+        } 
+        // --- Export HTML ---
+        else if (format === 'html') {
+            let cssText = '';
+            for (let sheet of document.styleSheets) {
+                try {
+                    for (let rule of sheet.cssRules) cssText += rule.cssText + '\n';
+                } catch (e) { console.warn("Style cross-origin ignoré"); }
             }
-            return;
+
+            const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${cssText}</style></head>
+            <body><div id="dashboard-wrapper">${element.innerHTML}</div></body></html>`;
+            
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${fileName}.html`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        } 
+        // --- Export CSV / JSON (Tabulator natif) ---
+        else {
+            window.table.download(format, `Donnees_${timestamp}.${format}`, { rows: "all" });
         }
 
-        // --- Export CSV / JSON (Données brutes) ---
-        const now = new Date().toISOString().slice(0, 10);
-        window.table.download(format, `Donnees_${now}.${format}`, { rows: "all" });
+        // 3. NETTOYAGE : Remise en état de la page
+        canvasImages.forEach(({ canvas, img }) => {
+            canvas.style.display = 'block';
+            img.remove();
+        });
+        window.table.setPageSize(20); // Remet la pagination initiale
+        window.table.setPage(currentPage); // Retourne à la page d'origine
         toggleExportMenu();
     }
 

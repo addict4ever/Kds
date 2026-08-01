@@ -1,0 +1,14 @@
+{
+    "sensors": [
+        {
+            "name": "Frigo_1", 
+            "port": "COM20", 
+            "slave_id": 1, 
+            "addr": 1, 
+            "color": "white", 
+            "visible": true,
+            "min": 0.0,
+            "max": 5.0
+        }
+            ]
+}

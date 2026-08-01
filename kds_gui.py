@@ -2818,6 +2818,18 @@ class KDSGUI:
             tk.Button(choice_win, text="🗑️ EFFACER LES LOGS", font=("Arial", 11, "bold"), 
                     bg="#c0392b", fg="white", width=30, pady=10, command=clear_logs).pack(pady=5)
 
+            tk.Button(
+                choice_win, 
+                text="🗑️ EFFACER DB", 
+                font=("Arial", 11, "bold"), 
+                bg="#922b21",       # Couleur différente (rouge sombre/bordeaux contrasté)
+                fg="white", 
+                activebackground="#641e16",
+                activeforeground="white",
+                width=30, 
+                pady=10, 
+                command=self.clear_db # Assurez-vous d'utiliser self.clear_db si la fonction est dans la classe KDSGUI
+            ).pack(pady=5)
             # --- SECTION GESTION COM (CORRIGÉE) ---
             tk.Label(choice_win, text="--- ACTIONS MATÉRIEL (PORTS COM) ---", 
                      font=("Arial", 10, "italic"), bg="#2c3e50", fg="#bdc3c7").pack(pady=15)
@@ -2843,6 +2855,45 @@ class KDSGUI:
             
         else:
             self.update_status("Accès refusé.", "red")
+
+    def clear_db(self):
+        """
+        Supprime physiquement kds_orders.db et kds_livreur_orders.db 
+        en récupérant les chemins depuis db_manager, puis recrée les tables.
+        """
+        # Utilisation de la boîte de dialogue personnalisée tactile existante dans KDSGUI
+        if self.custom_confirm(
+            "Confirmation", 
+            "⚠️ Êtes-vous sûr de vouloir EFFACER TOUTES les bases de données KDS (Commandes et Livreurs) ? Cette action est irréversible."
+        ):
+            try:
+                # 1. Récupération dynamique des chemins depuis db_manager
+                db_path_orders = getattr(self.db_manager, 'db_path', 'kds_orders.db')
+                db_path_livreur = getattr(self.db_manager, 'livreur_db_path', 'kds_livreur_orders.db')
+                
+                databases_to_delete = [db_path_orders, db_path_livreur]
+                
+                # 2. Fermeture optionnelle des connexions si stockées dans le manager
+                if hasattr(self.db_manager, 'close_connections'):
+                    self.db_manager.close_connections()
+
+                # 3. Suppression physique des fichiers
+                for db_file in databases_to_delete:
+                    if db_file and os.path.exists(db_file):
+                        try:
+                            os.remove(db_file)
+                            logger.info(f"Fichier de base de données supprimé : {db_file}")
+                        except Exception as e:
+                            logger.error(f"Impossible de supprimer {db_file}: {e}")
+
+                # 4. Re-déclenchement de la création des tables via le DBManager
+                self.db_manager._create_tables()
+                
+                messagebox.showinfo("Succès", "✅ Les bases de données ont été effacées et reconstruites avec succès.")
+                logger.info("Bases de données kds_orders.db et kds_livreur_orders.db réinitialisées dynamiquement.")
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Erreur lors de la réinitialisation de la DB : {e}")
+                logger.error(f"Erreur clear_db : {e}")
 
     def _open_config_menu(self):
         """
