@@ -1,6 +1,7 @@
 # web_access.py (MODIFIÉ AVEC INTERFACE TKINTER)
 
 import tkinter as tk
+import socket
 from tkinter import messagebox
 from flask import Flask, render_template, jsonify, request
 from db_manager import DBManager, CONSULTATION_DB_PATH 
@@ -83,7 +84,8 @@ WHITELIST_ROUTES = [
     '/static/js/jspdf.plugin.autotable.min.js',
     '/static/js/chartjs-plugin-zoom.min.js',
     '/static/js/html2pdf.bundle.min.js',
-    '/kds_pa_pizza'
+    '/kds_pa_pizza',
+    '/envoyer_tcp_commande'
     
     
 ]
@@ -293,6 +295,8 @@ def filtrer_acces_global():
     if path == '/favicon.ico':
         return
     if path == '/kds_pa_pizza':
+        return
+    if path == '/envoyer_tcp_commande':
         return
 
     # 4. VÉRIFICATION DE L'IP (Couche 1)
@@ -705,6 +709,50 @@ def add_livreur():
         LIVREURS = current
         return jsonify(success=True)
     return jsonify(success=False, error="Nom invalide ou déjà présent")
+
+
+@app.route('/envoyer_tcp_commande', methods=['POST'])
+def envoyer_tcp_commande():
+    # 1. Vérification de la sécurité (Headers)
+    if request.headers.get("X-App-Access") != APP_AUTH_KEY:
+        return jsonify({"success": False, "message": "🚫 ACCÈS REFUSÉ : SÉCURITÉ"}), 403
+
+    # 2. Récupération des données JSON pour extraire les paramètres
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "Aucune donnée reçue"}), 400
+
+    table_number = data.get('table_number')
+    order_id = data.get('order_id')
+
+    if not table_number or not order_id:
+        return jsonify({"success": False, "message": "Numéro de table ou ID de commande manquant"}), 400
+
+    # 3. Formatage de la trame brute
+    trame_tcp = f"ENVOIE #{table_number}"
+
+    # Paramètres du serveur TCP cible (ajustez selon vos besoins ou chargez depuis le JSON)
+    IP_DESTINATION = "127.0.0.1"  # Remplacez par l'IP de votre serveur cible
+    PORT_DESTINATION = 9100       # Le port TCP d'écoute
+
+    try:
+        # 4. Envoi direct via socket TCP (Protocole brut, non JSON)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+            client_socket.settimeout(3.0)  # Timeout de 3 secondes
+            client_socket.connect((IP_DESTINATION, PORT_DESTINATION))
+            client_socket.sendall(trame_tcp.encode('utf-8'))
+
+        logger.info(f"📤 Trame TCP brute envoyée : '{trame_tcp}' vers {IP_DESTINATION}:{PORT_DESTINATION} pour la commande ID #{order_id}")
+
+        return jsonify({
+            "success": True, 
+            "trame_envoyee": trame_tcp,
+            "message": f"Ordre '{trame_tcp}' envoyé avec succès en TCP brut."
+        }), 200
+
+    except Exception as e:
+        logger.error(f"💥 Erreur lors de l'envoi TCP de la trame '{trame_tcp}': {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/nouvelle_livraison', methods=['GET', 'POST'])
 def nouvelle_livraison():

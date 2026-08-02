@@ -797,7 +797,7 @@
 
     function syncTableData() {
         const tableBody = document.getElementById('table-body');
-        // On récupère toutes les cartes de commandes (la grille invisible ou visible)
+        // On récupère toutes les cartes de commandes
         const orders = document.querySelectorAll('.order-wrapper');
         if (!tableBody) return;
         
@@ -809,13 +809,26 @@
 
             const orderId = order.getAttribute('data-order-id');
             
-            // Récupération du titre (T: 888 | INCONNU)
+            // Récupération du titre (ex: T: 15 | ...)
             const headerElement = order.querySelector('.card-header-pa');
             let tableName = headerElement ? headerElement.innerText : "Inconnu";
             
             // NETTOYAGE : On enlève le "✕" du bouton du post-it pour ne pas qu'il s'affiche dans le texte du tableau
             tableName = tableName.replace('✕', '').trim();
             
+            // Extraction du numéro de table (soit via l'attribut data-table-number, soit en extrayant les chiffres du titre)
+            let tableNumberStr = order.getAttribute('data-table-number') || '';
+            if (!tableNumberStr) {
+                const matches = tableName.match(/\d+/);
+                if (matches) {
+                    tableNumberStr = matches[0];
+                }
+            }
+            
+            // Vérification si le numéro de table est compris entre 0 et 200
+            const tableNumInt = parseInt(tableNumberStr, 10);
+            const isCommandTable = !isNaN(tableNumInt) && tableNumInt >= 0 && tableNumInt <= 200;
+
             // Sélection du contenu du ticket
             const cardBody = order.querySelector('.card-body-pa');
             let contentHtml = "";
@@ -834,10 +847,21 @@
                 }
             }
 
+            // Génération conditionnelle du bouton TCP si la table est entre 0 et 200
+            let tcpButtonHtml = '';
+            if (isCommandTable) {
+                tcpButtonHtml = `
+                    <button onclick="envoyerTcpCommande('${tableNumberStr}', '${orderId}')" 
+                            style="background: #27ae60; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 1.1rem; padding: 10px 15px; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
+                        📤
+                    </button>
+                `;
+            }
+
             const row = document.createElement('tr');
             row.id = `table-row-${orderId}`;
             
-            // Modification : Génération des 3 colonnes avec le bouton X à droite
+            // Génération des 3 colonnes avec les boutons alignés proprement
             row.innerHTML = `
                 <td style="font-weight:bold; font-size: 1.6rem; vertical-align: top; color: var(--kds-header-bg); padding: 15px; border-bottom: 1px solid #333; width: 20%;">
                     ${tableName}
@@ -848,17 +872,46 @@
                     </div>
                 </td>
                 <td style="text-align: center; vertical-align: middle; border-bottom: 1px solid #333; padding: 15px; width: 10%;">
-                    <button onclick="marquerTraite('${orderId}')" 
-                            style="background: #e74c3c; color: white; border: none; border-radius: 5px; 
-                                width: 45px; height: 45px; font-size: 1.4rem; font-weight: bold; 
-                                cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: inline-flex; align-items: center; justify-content: center;">
-                        ✕
-                    </button>
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <button onclick="marquerTraite('${orderId}')" 
+                                style="background: #e74c3c; color: white; border: none; border-radius: 5px; 
+                                    width: 45px; height: 45px; font-size: 1.4rem; font-weight: bold; 
+                                    cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            ✕
+                        </button>
+                        ${tcpButtonHtml}
+                    </div>
                 </td>
             `;
             tableBody.appendChild(row);
         });
     }
+
+    function envoyerTcpCommande(tableNumber, orderId) {
+        fetch('/envoyer_tcp_commande', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-App-Access': 'MonApplicationUnique123!'
+            },
+            body: JSON.stringify({
+                table_number: tableNumber,
+                order_id: orderId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log(`Commande TCP envoyée pour la table #${tableNumber}`);
+            } else {
+                console.error("Erreur lors de l'envoi TCP:", data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Erreur réseau:", error);
+        });
+    }
+
 
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---

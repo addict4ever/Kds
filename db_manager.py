@@ -204,6 +204,41 @@ class DBManager:
         finally:
             conn_const.close()
 
+    def reactivate_order_by_table(self, table_number):
+        """
+        Réactive une commande dans la base de données kds_orders 
+        en cherchant spécifiquement par numéro de table.
+        """
+        conn = self._get_connection()
+        if not conn:
+            print("Erreur de connexion à la BDD pour la réactivation.")
+            return False
+            
+        try:
+            cursor = conn.cursor()
+            
+            # Requête SQL : met à jour le statut en se basant uniquement sur le numéro de table
+            query = """
+                UPDATE orders 
+                SET status = 'En attente' 
+                WHERE table_number = ? AND status = 'Traitée'
+            """
+            
+            cursor.execute(query, (str(table_number),))
+            conn.commit()
+            
+            if cursor.rowcount > 0:
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            print(f"Erreur SQL lors de la réactivation de la commande par table : {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
     def create_new_order_from_split(self, original_data: dict, items: list, suffixe: str) -> str:
         original_bill_id = original_data['bill_id']
         new_bill_id = f"{original_bill_id}{suffixe}"
