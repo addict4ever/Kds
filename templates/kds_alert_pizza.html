@@ -929,7 +929,7 @@
             tempDiv.innerHTML = html;
             
             // 2. Récupérer toutes les commandes, les inverser, puis trier pour la priorité
-            const orders = Array.from(tempDiv.querySelectorAll('.order-wrapper')).reverse();
+            const orders = Array.from(tempDiv.querySelectorAll('.order-wrapper'));
             
             orders.sort((a, b) => {
                 const headerA = a.querySelector('.card-header-pa')?.innerText || "";
@@ -938,9 +938,16 @@
                 const isAImportant = headerA.includes("T: 888 | INCONNU");
                 const isBImportant = headerB.includes("T: 888 | INCONNU");
                 
+                // Si 'a' est un 888 et pas 'b', 'a' passe en premier (-1)
                 if (isAImportant && !isBImportant) return -1;
+                // Si 'b' est un 888 et pas 'a', 'b' passe en premier (1)
                 if (!isAImportant && isBImportant) return 1;
-                return 0;
+                
+                // Si les deux sont des 888 ou les deux n'en sont pas, 
+                // on garde l'ordre croissant d'origine (du plus ancien au plus récent)
+                const idA = parseInt(a.getAttribute('data-order-id')) || 0;
+                const idB = parseInt(b.getAttribute('data-order-id')) || 0;
+                return idA - idB;
             });
             
             // 3. Vider la zone et réinjecter les éléments triés

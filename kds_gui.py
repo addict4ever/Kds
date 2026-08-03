@@ -663,7 +663,6 @@ class KDSGUI:
         self.check_for_new_orders()
         self.root.after(1000, self._open_serveur_window) # On attend 1s pour que le reste soit prêt
         self.check_auto_cleanup()
-        self._schedule_auto_cleanup()
 
 
     def start_thermometer():
@@ -699,44 +698,7 @@ class KDSGUI:
         else:
             print("Fichier mini_kds.json absent, utilisation des valeurs par défaut.")
 
-    def _schedule_auto_cleanup(self):
-        # Récupération de l'heure actuelle
-        now = datetime.now()
-        
-        # 1. Vérification fenêtre matinale : 7h40 (déclenchement à 7h40)
-        if now.hour == 7 and 30 <= now.minute <= 40:
-            # Vérification du verrou pour le matin
-            if getattr(self, 'last_cleanup_morning', None) != now.date():
-                print(f"🕒 {now.strftime('%H:%M')} - Début du nettoyage automatique matinal...")
-                try:
-                    count = self.db_manager.mark_specific_types_as_done_all()
-                    if count > 0:
-                        self.update_status(f"Nettoyage Auto Matin : {count} commandes traitées.", "#2ecc71")
-                        
-                    
-                    self.last_cleanup_morning = now.date()
-                    print(f"✅ Nettoyage matinal terminé le {now.date()}.")
-                except Exception as e:
-                    logging.error(f"Erreur lors du nettoyage automatique matinal: {e}")
-
-        # 2. Vérification fenêtre après-midi : 22h00 - 22h05
-        elif now.hour == 22 and 0 <= now.minute <= 5:
-            # Vérification du verrou pour l'après-midi
-            if getattr(self, 'last_cleanup_afternoon', None) != now.date():
-                print(f"🕒 {now.strftime('%H:%M')} - Début du nettoyage automatique après-midi...")
-                try:
-                    count = self.db_manager.mark_specific_types_as_done_all()
-                    if count > 0:
-                        self.update_status(f"Nettoyage Auto Après-midi : {count} commandes traitées.", "#2ecc71")
-                        
-                    
-                    self.last_cleanup_afternoon = now.date()
-                    print(f"✅ Nettoyage après-midi terminé le {now.date()}.")
-                except Exception as e:
-                    logging.error(f"Erreur lors du nettoyage automatique après-midi: {e}")
-
-        # Rappelle la fonction dans 60 secondes (1 minute)
-        self.root.after(60000, self._schedule_auto_cleanup)
+    
             
     def check_auto_cleanup(self):
         # Récupération de l'heure actuelle
@@ -744,30 +706,49 @@ class KDSGUI:
         
         # 1. Vérification de la fenêtre horaire : 
         # Le matin (hour == 7) ET entre 45 et 50 minutes.
-        # Si le soir (ex: 19h), now.hour est 19, donc le 'if' est ignoré.
         if now.hour == 7 and 45 <= now.minute <= 50:
             
             # 2. Vérification si on a déjà fait le nettoyage aujourd'hui
             # Cela empêche de supprimer plusieurs fois entre 7:45 et 7:50
             if getattr(self, 'last_cleanup_date', None) != now.date():
                 
-                print(f"🕒 {now.strftime('%H:%M')} - Début du nettoyage automatique matinal...")
+                print(f"🕒 {now.strftime('%H:%M')} - Début du nettoyage automatique matinal (Suppression physique des DB)...")
                 
                 try:
-                    # Appel à la fonction de nettoyage
-                    deleted_count = self.db_manager.delete_completed_and_cancelled_orders()
-                    self.update_status(f"🗑️ Nettoyage auto matinal : {deleted_count} commandes supprimées.", 'red')
+                    # 1. Récupération dynamique des chemins depuis db_manager
+                    db_path_orders = getattr(self.db_manager, 'db_path', 'kds_orders.db')
+                    db_path_livreur = getattr(self.db_manager, 'livreur_db_path', 'kds_livreur_orders.db')
+                    
+                    databases_to_delete = [db_path_orders, db_path_livreur]
+                    
+                    # 2. Fermeture optionnelle des connexions si stockées dans le manager
+                    if hasattr(self.db_manager, 'close_connections'):
+                        self.db_manager.close_connections()
+
+                    # 3. Suppression physique des fichiers
+                    for db_file in databases_to_delete:
+                        if db_file and os.path.exists(db_file):
+                            try:
+                                os.remove(db_file)
+                                logger.info(f"Fichier de base de données supprimé automatiquement : {db_file}")
+                            except Exception as e:
+                                logger.error(f"Impossible de supprimer {db_file}: {e}")
+
+                    # 4. Re-déclenchement de la création des tables via le DBManager
+                    self.db_manager._create_tables()
+                    
+                    # Mise à jour du statut dans l'interface
+                    self.update_status("🗑️ Nettoyage auto matinal : Bases de données réinitialisées.", 'red')
+                    logger.info("Bases de données kds_orders.db et kds_livreur_orders.db réinitialisées automatiquement.")
                     
                     # Mise à jour du verrou pour la date du jour
                     self.last_cleanup_date = now.date()
-                    print(f"✅ Nettoyage terminé pour ce matin le {now.date()}.")
                     
                 except Exception as e:
-                    print(f"❌ Erreur lors du nettoyage auto : {e}")
+                    logger.error(f"Erreur check_auto_cleanup : {e}")
 
         # Rappelle la fonction dans 60 secondes (1 minute)
         self.root.after(60000, self.check_auto_cleanup)
-    
 
     def _configure_root(self):
         """Configuration : Boutons à gauche, Heure/Compteur à DROITE en JAUNE."""
