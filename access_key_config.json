@@ -1,4 +1,5 @@
 {
-    "salt": "4606d3471eef044b1b56e6374aee6f41",
-    "hash": "b24b9e9af15bf6bd7b26b80802c85521c253054395200251e5a8aade43d1105a"
+    "salt": "e1a03a98d7544dbca0b717d06d83978d",
+    "hash": "ce9b03372628c02e5d7a67c1778283bc7ed0b1abb0a5b86fa8ef616257198a39",
+    "otp_secret": "KSJNKMUQESHGUBCK6IG62APU4QS2Z5XM"
 }

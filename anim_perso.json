@@ -1077,5 +1077,21 @@
         { "state": "IDLE_14", "chance": 0.1, "movement": "stop" },
         { "state": "IDLE_15", "chance": 0.1, "movement": "stop" }
     ]
+  },
+  "popeye": {
+    "animations": {
+        "IDLE_01": ["popeye/IDLE_01_Sheet.png", 128, 128, 10],
+        "IDLE_02": ["popeye/IDLE_02_Sheet.png", 128, 128, 11],
+        "IDLE_03": ["popeye/IDLE_03_Sheet.png", 128, 128, 10],
+        "IDLE_04": ["popeye/IDLE_04_Sheet.png", 128, 128, 9],
+        "IDLE_08": ["popeye/IDLE_08_Sheet.png", 128, 128, 11]
+    },
+    "brain": [
+        { "state": "IDLE_01", "chance": 0.1, "movement": "stop" },
+        { "state": "IDLE_02", "chance": 0.1, "movement": "stop" },
+        { "state": "IDLE_03", "chance": 0.1, "movement": "stop" },
+        { "state": "IDLE_04", "chance": 0.1, "movement": "stop" },
+        { "state": "IDLE_08", "chance": 0.1, "movement": "stop" }
+    ]
   }
 }

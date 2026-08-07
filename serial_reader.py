@@ -328,27 +328,6 @@ class TCPReader(threading.Thread):
         
         # --- 2. LOGIQUE DE FILTRE PRIORITAIRE (Livraison & Papier Jaune) ---
         
-        if "ENVOIE" in ticket_content or "ENVOIS" in ticket_content:
-            match = re.search(r'ENVOI[E|S]\s*#\s*(\d+)', ticket_content)
-            if match:
-                table_number = int(match.group(1))
-                _log_activity(f"Détection de la demande de réactivation pour la table #{table_number}", "TCP_REACTIVATE")
-                try:
-                    if hasattr(self.reader, 'db_manager') and hasattr(self.reader.db_manager, 'reactivate_order_by_table'):
-                        self.reader.db_manager.reactivate_order_by_table(table_number)
-                    elif hasattr(self.reader, 'reactivate_order_by_table'):
-                        self.reader.reactivate_order_by_table(table_number)
-                    else:
-                        _log_activity("La fonction reactivate_order_by_table est introuvable sur le gestionnaire de BDD", "TCP_ERROR")
-                except Exception as e:
-                    _log_activity(f"Erreur lors de la réactivation pour la table {table_number} : {e}", "TCP_ERROR")
-                
-                # Sortie unique : stoppe l'exécution de la méthode ici pour éviter la suite (insertion, etc.)
-                return
-
-        if "LIVRAISON" in ticket_content and "ANNULATION" in ticket_content:
-            _log_activity("TCP FILTRE : Livraison bloquée (ANNULATION + LIVRAISON).", "TCP_SKIP_LIV")
-            return
 
         if "PRINCIPALE" in ticket_content and "LIVRAISON" in ticket_content:
             _log_activity("TCP FILTRE : Livraison bloquée (PRINCIPALE + LIVRAISON).", "TCP_SKIP_LIV")
@@ -1167,6 +1146,22 @@ class SerialReader(threading.Thread):
             
             upper_text = cleaned_text.upper()
             lines = cleaned_text.split('\n')
+
+            if "ENVOIE" in upper_text or "ENVOIS" in upper_text:
+                match = re.search(r'ENVOI[E|S]\s*#\s*(\d+)', upper_text)
+                if match:
+                    table_number = int(match.group(1))
+                    _log_activity(f"Détection de la demande de réactivation pour la table #{table_number}", "TCP_REACTIVATE")
+                    try:
+                        if hasattr(self, 'db_manager') and hasattr(self.db_manager, 'reactivate_order_by_table'):
+                            self.db_manager.reactivate_order_by_table(table_number)
+                        else:
+                            _log_activity("La fonction reactivate_order_by_table est introuvable sur le gestionnaire de BDD", "TCP_ERROR")
+                    except Exception as e:
+                        _log_activity(f"Erreur lors de la réactivation pour la table {table_number} : {e}", "TCP_ERROR")
+                    
+                    # Sortie immédiate : stoppe la méthode ici pour éviter la création d'un ticket
+                    return
 
             # --- 2️⃣ DÉTECTION DU TYPE ---
             is_livraison = "LIVRAISON" in upper_text

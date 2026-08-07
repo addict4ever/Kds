@@ -348,21 +348,21 @@ def kds_pa_alert_pizza():
     # 1. Récupération des commandes
     all_orders = db_manager.get_pending_orders_kds_alert_pizza()
     
-    # 2. On transforme le dictionnaire en une liste pour le tri
-    # On crée une liste plate avec toutes les commandes
+    # 2. On transforme le dictionnaire en une liste pour le tri, 
+    # EN NE GARDANT QUE CEUX QUI ONT LE STATUT 'PIZZA'
     order_list = []
     for category in all_orders:
         for order in all_orders.get(category, []):
-            order_list.append(order)
+            # Filtrage sur le statut PIZZA (insensible à la casse si besoin avec .upper() ou .lower())
+            if str(order.get('status', '')).strip().upper() == 'PIZZA':
+                order_list.append(order)
 
     # 3. Tri personnalisé : 
     # Critère 1 : Si service_type est '888', il vient en premier (False < True en Python)
     # Critère 2 : Si service_type n'est pas 888, on trie par bill_id décroissant (nouveau -> ancien)
-    # On supprime le int() et on utilise une comparaison de chaînes de caractères
     order_list.sort(key=lambda x: (x.get('service_type') != '888', str(x.get('bill_id', ''))), reverse=False)
 
     # 4. Reconstruction du dictionnaire pour le template
-    # On garde la structure attendue par kds_order_list.html
     pa_alerts = {order['bill_id']: {'data': order} for order in order_list}
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -1490,7 +1490,7 @@ class ServerManager:
 
         try:
             # Envoi d'une requête POST à l'endpoint de shutdown 
-            requests.post(f'http://0.0.0.0:5000/shutdown') # On utilise localhost et le port par défaut pour le shutdown (sauf si on change la route)
+            requests.post(f'http://127.0.0.1:5000/shutdown') # On utilise localhost et le port par défaut pour le shutdown (sauf si on change la route)
             # Utilisons l'hôte/port actuels
             
             # Note : Flask/Werkzeug ne peut se fermer que si une requête peut être envoyée.
@@ -1507,7 +1507,7 @@ class ServerManager:
 
             # On utilise le `localhost` et le port `5000` comme fallback/convention pour l'arrêt 
             # si l'IP réelle ne fonctionne pas toujours depuis le host.
-            requests.post(f'http://0.0.0.0:5000/shutdown')
+            requests.post(f'http://127.0.0.1:5000/shutdown')
             
             self.server_thread.join(timeout=3)
             
