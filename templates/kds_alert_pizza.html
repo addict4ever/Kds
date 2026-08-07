@@ -399,10 +399,6 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.ico">
 <!-- Bouton "Sourire" flottant -->
 <div style="position: fixed; top: 10px; right: 20px; z-index: 9999; display: flex; flex-direction: row; align-items: center; gap: 15px;">
-    <div id="trash-livreur-btn" style="cursor: pointer; font-size: 2.5rem; background: rgba(255, 0, 0, 0.2); padding: 5px; border-radius: 50%; border: 2px solid red; display: flex; align-items: center; justify-content: center; width: 50px; height: 50px;">
-        🗑️
-    </div>
-    
     <button onclick="toggleSettings()" style="background: none; border: none; font-size: 2.5rem; cursor: pointer; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.5));">
         😊
     </button>
@@ -538,9 +534,7 @@
     const trashBtn = document.getElementById('trash-livreur-btn');
     const modal = document.getElementById('confirmModal');
 
-    trashBtn.addEventListener('click', function() {
-        modal.style.display = 'flex'; // Afficher le modal
-    });
+    
 
     document.getElementById('modalNo').addEventListener('click', function() {
         modal.style.display = 'none'; // Cacher le modal
@@ -916,6 +910,10 @@
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     function refreshOrders() {
+        // 1. Mémoriser la position exacte du scroll avant de rafraîchir
+        const scrollContainer = document.querySelector('.kds-scroll-container');
+        const currentScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
         fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(response => response.text())
         .then(html => {
@@ -923,14 +921,13 @@
                 .filter(el => el.style.display !== 'none')
                 .map(el => el.getAttribute('data-order-id'));
             
-            // --- MODIFICATION ICI ---
-            // 1. Créer un conteneur temporaire pour manipuler le HTML reçu
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
             
-            // 2. Récupérer toutes les commandes, les inverser, puis trier pour la priorité
+            // On récupère les commandes dans l'ordre où elles arrivent du serveur
             const orders = Array.from(tempDiv.querySelectorAll('.order-wrapper'));
             
+            // Tri strict en ordre croissant avec priorité aux 888 si désiré
             orders.sort((a, b) => {
                 const headerA = a.querySelector('.card-header-pa')?.innerText || "";
                 const headerB = b.querySelector('.card-header-pa')?.innerText || "";
@@ -938,25 +935,24 @@
                 const isAImportant = headerA.includes("T: 888 | INCONNU");
                 const isBImportant = headerB.includes("T: 888 | INCONNU");
                 
-                // Si 'a' est un 888 et pas 'b', 'a' passe en premier (-1)
+                // Priorité aux 888 en haut si besoin, sinon on garde l'ordre croissant naturel
                 if (isAImportant && !isBImportant) return -1;
-                // Si 'b' est un 888 et pas 'a', 'b' passe en premier (1)
                 if (!isAImportant && isBImportant) return 1;
                 
-                // Si les deux sont des 888 ou les deux n'en sont pas, 
-                // on garde l'ordre croissant d'origine (du plus ancien au plus récent)
+                // Ordre croissant pur basés sur l'ID (du plus petit/ancien au plus grand/récent)
                 const idA = parseInt(a.getAttribute('data-order-id')) || 0;
                 const idB = parseInt(b.getAttribute('data-order-id')) || 0;
                 return idA - idB;
             });
             
-            // 3. Vider la zone et réinjecter les éléments triés
+            // Vider la zone et réinjecter les éléments triés en ordre croissant
             ajaxZone.innerHTML = '';
             orders.forEach(order => ajaxZone.appendChild(order));
-            // -------------------------
 
             appliquerFiltresAffichage();
-            restoreHighlights();
+            if (typeof restoreHighlights === 'function') {
+                restoreHighlights();
+            }
             
             const table = document.getElementById('kds-table-zone');
             if (table && table.classList.contains('view-active-table')) {
@@ -975,12 +971,17 @@
                     playTripleBeep();
                 }
             }
+
+            // 2. Restaurer instantanément le scroll pour ne pas remonter en haut
+            if (scrollContainer) {
+                scrollContainer.scrollTop = currentScrollTop;
+            }
         })
         .catch(error => {
             console.error("Erreur de rafraîchissement KDS :", error);
         });
     }
-
+    
     function toggleAudio() {
         const newState = !(localStorage.getItem('kds_pa_audio') === 'true');
         localStorage.setItem('kds_pa_audio', newState);

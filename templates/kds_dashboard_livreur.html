@@ -673,11 +673,17 @@
                     // Restauration des états et application du cadre rouge
                     document.querySelectorAll('.kds-card').forEach(card => {
                         const bid = card.id.replace('order-', '');
+                        const isDelivered = card.classList.contains('order-delivered');
 
-                        // --- LOGIQUE DE MÉMOIRE ---
-                        // Si on a un état enregistré, on l'utilise. 
-                        // Sinon (nouvelle commande), on la met en 'collapsed' (réduite) par défaut.
-                        const isCollapsed = (savedStates[bid] !== undefined) ? savedStates[bid] : true;
+                        // --- LOGIQUE DE MÉMOIRE MODIFIÉE ---
+                        // Si la facture est livrée (grisée), on force l'état ouvert (false).
+                        // Sinon, on utilise la mémoire ou l'état réduit par défaut (true).
+                        let isCollapsed;
+                        if (isDelivered) {
+                            isCollapsed = false;
+                        } else {
+                            isCollapsed = (savedStates[bid] !== undefined) ? savedStates[bid] : true;
+                        }
 
                         if (isCollapsed) {
                             card.classList.add('collapsed');
@@ -689,7 +695,7 @@
                             if (headerSpan) headerSpan.innerText = '➖';
                         }
 
-                        // ⭐ Ré-appliquer le Cadre Rouge si modifiée (Ton code existant)
+                        // ⭐ Ré-appliquer le Cadre Rouge si modifiée
                         if (modifiedOrders.includes(bid)) {
                             card.classList.add('pulse-red');
                         }
@@ -701,16 +707,10 @@
                     }
 
                     if (typeof updateTimers === 'function') updateTimers();
-
-                    // Restaurer visuel livré (grisé)
-                    let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
-                    deliveredOrders.forEach(bid => {
-                        if (typeof applyDeliveredVisual === 'function') applyDeliveredVisual(bid); 
-                    });
                 }
             })
             .catch(err => console.error("Erreur refresh KDS:", err));
-    }
+}
 
     
     function askForPrint(printFunction) {
@@ -1335,84 +1335,15 @@ async function toggleLivreurStatus(nom) {
 
 
     function markAsDelivered(bid) {
-        // 1. Enregistrer le BID dans la mémoire du navigateur (localStorage)
-        let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
-        if (!deliveredOrders.includes(bid)) {
-            deliveredOrders.push(bid);
-            localStorage.setItem('delivered_orders', JSON.stringify(deliveredOrders));
-        }
-
-        // 2. Appliquer le visuel (Grisé + Réduit) immédiatement
-        applyDeliveredVisual(bid);
+        
     }
 
     function applyDeliveredVisual(bid, forceRemove = false) {
-        const card = document.getElementById('order-' + bid);
-        if (!card) return;
-
-        const btnDelivered = document.getElementById('btn-delivered-' + bid);
-        const btnRemettre = card.querySelector('.btn-unassign');
-        const headerSpan = card.querySelector('.card-header span:last-child');
-
-        if (forceRemove) {
-            // --- RETIRER LE GRISÉ (Dégriser) ---
-            card.classList.remove('order-delivered');
-            card.style.pointerEvents = "auto"; 
-            card.style.opacity = "1";
-            card.style.filter = "none";
-            
-            if (btnRemettre) btnRemettre.style.setProperty('display', 'block', 'important');
-            if (headerSpan) headerSpan.innerText = '➖'; // Réouvrir visuellement
-            if (btnDelivered) {
-                btnDelivered.innerText = "✅ LIVRÉE";
-                btnDelivered.style.backgroundColor = "#27ae60";
-                btnDelivered.disabled = false;
-            }
-        } else {
-            // --- APPLIQUER LE GRISÉ (Livré) ---
-            card.classList.add('collapsed');
-            card.classList.add('order-delivered');
-            card.style.pointerEvents = "auto"; // Changé à 'auto' pour permettre le double-clic
-            card.style.opacity = "0.5";
-            card.style.filter = "grayscale(1)";
-
-            if (headerSpan) headerSpan.innerText = '➕';
-            if (btnRemettre) btnRemettre.style.setProperty('display', 'none', 'important');
-            if (btnDelivered) {
-                btnDelivered.innerText = "LIVRÉE / TERMINÉE";
-                btnDelivered.style.backgroundColor = "#2c3e50";
-                btnDelivered.disabled = true;
-            }
-        }
+        
     }
 
     function handleDblClick(bid) {
-        const card = document.getElementById('order-' + bid);
         
-        // ⭐ VÉRIFICATION : On autorise le double-clic SEULEMENT si la carte est assignée (dans un casier)
-        if (!card || !card.classList.contains('assigned')) {
-            console.log("⚠️ Action refusée : La facture n'est pas encore dans un casier.");
-            return; // On sort de la fonction sans rien faire
-        }
-
-        let deliveredOrders = JSON.parse(localStorage.getItem('delivered_orders') || '[]');
-        
-        if (deliveredOrders.includes(bid)) {
-            // --- CAS : DÉJÀ GRISÉ -> ON RÉACTIVE ---
-            deliveredOrders = deliveredOrders.filter(id => id !== bid);
-            localStorage.setItem('delivered_orders', JSON.stringify(deliveredOrders));
-            
-            applyDeliveredVisual(bid, false);
-            showToast("🔄 COMMANDE RÉACTIVÉE");
-        } 
-        else {
-            // --- CAS : NON GRISÉ -> ON GRISE (LIVRÉ) ---
-            deliveredOrders.push(bid);
-            localStorage.setItem('delivered_orders', JSON.stringify(deliveredOrders));
-            
-            applyDeliveredVisual(bid, true);
-            showToast("✅ COMMANDE LIVRÉE");
-        }
     }
 
     function updateLocalExtra(bid, field, value) {

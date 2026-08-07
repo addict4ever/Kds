@@ -809,6 +809,10 @@
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     function refreshOrders() {
+        // 1. Mémoriser la position exacte du scroll avant de rafraîchir
+        const scrollContainer = document.querySelector('.kds-scroll-container');
+        const currentScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
         fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(response => response.text())
         .then(html => {
@@ -816,12 +820,10 @@
                 .filter(el => el.style.display !== 'none')
                 .map(el => el.getAttribute('data-order-id'));
             
-            // --- MODIFICATION ICI ---
-            // 1. Créer un conteneur temporaire pour manipuler le HTML reçu
+            // --- TON CODE DE TRI ET DE MISE À JOUR EXISTANT ---
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
             
-            // 2. Récupérer toutes les commandes, les inverser, puis trier pour la priorité
             const orders = Array.from(tempDiv.querySelectorAll('.order-wrapper')).reverse();
             
             orders.sort((a, b) => {
@@ -836,10 +838,9 @@
                 return 0;
             });
             
-            // 3. Vider la zone et réinjecter les éléments triés
             ajaxZone.innerHTML = '';
             orders.forEach(order => ajaxZone.appendChild(order));
-            // -------------------------
+            // --------------------------------------------------
 
             appliquerFiltresAffichage();
             
@@ -859,6 +860,11 @@
                 if (localStorage.getItem('kds_pa_audio') === 'true') {
                     playTripleBeep();
                 }
+            }
+
+            // 2. RESTAURER INSTANTANÉMENT LE SCROLL LÀ OÙ IL ÉTAIT
+            if (scrollContainer) {
+                scrollContainer.scrollTop = currentScrollTop;
             }
         })
         .catch(error => {

@@ -206,8 +206,9 @@ class DBManager:
 
     def reactivate_order_by_table(self, table_number):
         """
-        Réactive une commande dans la base de données kds_orders 
-        en cherchant spécifiquement par numéro de table.
+        Réactive ou met à jour TOUTES les commandes correspondantes dans la base de données kds_orders 
+        pour un même numéro de table (qu'elles soient 'Traitée' ou 'En attente').
+        Ajoute l'item 'TABLE À SORTIR' uniquement s'il n'est pas déjà présent.
         """
         conn = self._get_connection()
         if not conn:
@@ -217,23 +218,68 @@ class DBManager:
         try:
             cursor = conn.cursor()
             
-            # Requête SQL : met à jour le statut en se basant uniquement sur le numéro de table
-            query = """
-                UPDATE orders 
-                SET status = 'En attente' 
-                WHERE table_number = ? AND status = 'Traitée'
-            """
+            # 1. Récupérer TOUTES les commandes correspondantes (Traitée ou En attente)
+            cursor.execute("""
+                SELECT id, items FROM orders 
+                WHERE table_number = ? AND status IN ('Traitée', 'En attente')
+            """, (str(table_number),))
             
-            cursor.execute(query, (str(table_number),))
+            rows = cursor.fetchall()
+            if not rows:
+                print(f"Aucune commande trouvée pour la table {table_number}.")
+                return False
+                
+            success_count = 0
+            sortir_text = "TABLE À SORTIR"
+
+            # 2. Boucler sur chaque commande trouvée
+            for row in rows:
+                order_id, raw_items = row
+                
+                # Décoder les items existants
+                current_items_objs = []
+                if raw_items:
+                    try:
+                        loaded = json.loads(raw_items)
+                        for item in (loaded if isinstance(loaded, list) else [loaded]):
+                            current_items_objs.append(json.loads(item) if isinstance(item, str) else item)
+                    except Exception:
+                        current_items_objs = []
+                
+                # Vérifier si "TABLE À SORTIR" est déjà présent dans les items
+                already_exists = any(
+                    str(i.get('main_item', '')).strip().upper() == sortir_text 
+                    for i in current_items_objs
+                )
+                
+                # Si l'item n'existe pas encore, on l'ajoute au début
+                if not already_exists:
+                    new_main_item_obj = {"main_item": sortir_text, "sub_items": []}
+                    current_items_objs.insert(0, new_main_item_obj)
+                
+                # Reconvertir la liste en JSON pour la BDD
+                final_items_json = json.dumps([json.dumps(obj, ensure_ascii=False) for obj in current_items_objs], ensure_ascii=False)
+                
+                # Mettre à jour le statut à 'En attente' et actualiser les items pour cet ID spécifique
+                query = """
+                    UPDATE orders 
+                    SET status = 'En attente', items = ? 
+                    WHERE id = ?
+                """
+                cursor.execute(query, (final_items_json, order_id))
+                if cursor.rowcount > 0:
+                    success_count += 1
+
             conn.commit()
             
-            if cursor.rowcount > 0:
+            if success_count > 0:
+                print(f"✅ {success_count} commande(s) de la table {table_number} mises à jour avec succès.")
                 return True
             else:
                 return False
                 
         except Exception as e:
-            print(f"Erreur SQL lors de la réactivation de la commande par table : {e}")
+            print(f"Erreur SQL lors de la réactivation multiple par table : {e}")
             conn.rollback()
             return False
         finally:
