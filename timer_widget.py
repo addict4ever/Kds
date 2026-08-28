@@ -398,10 +398,15 @@ class TimerWidget(tk.Toplevel):
 # Fenêtre de gestion des minuteurs (TimerManagerWindow)
 # ----------------------------------------------------------------------
 QUICK_PRESETS = [
-    ("🥔 Patates Four", 60 * 60), 
+    ("🥔 Patates Four", 60 * 60),
     ("🍕 Pain Pizza", 24 * 60),
     ("🍖 Côtes Levées", 12 * 60),
     ("🍤 Crevettes", 12 * 60),
+    ("🦐 Langoustine", 12 * 60),
+    ("🐟 Saumon", 8 * 60),
+    ("🥩 Filet mignon", 6 * 60),
+    ("🍢 Brochette Filet Mignon", 6 * 60),
+    ("🍢 Brochette Poulet", 6 * 60),
     ("🧅 Soupe Oignon", 2 * 60),
     ("🐚 Entree Coquille", 2 * 60), # Changé 🧅 pour 🐚
     ("🥪 Smoke Meat", 2 * 60),      # Changé 🧅 pour 🥪
@@ -410,17 +415,21 @@ QUICK_PRESETS = [
     ("🍝 Lasagne Gratinée", 15 * 60), # Ajout
     ("🍗 Ailes de Poulet", 15 * 60),  # Ajout
     ("🥖 Pain à l'Ail", 4 * 60),      # Ajout
-    ("🧀 Bâtonnets Fromage", 6 * 60), # Ajout
+    ("🧀 Bâtonnets Fromage", 3 * 60), # Ajout
     ("⏱️ Minuterie 1m", 1 * 60),
     ("⏱️ Minuterie 2m", 2 * 60),
     ("⏱️ Minuterie 3m", 3 * 60),
+    ("⏱️ Minuterie 4m", 4 * 60),
     ("⏱️ Minuterie 5m", 5 * 60),
+    ("⏱️ Minuterie 6m", 6 * 60),
     ("⏱️ Minuterie 8m", 8 * 60),
     ("⏱️ Minuterie 10m", 10 * 60),
     ("⏱️ Minuterie 12m", 12 * 60),
     ("⏱️ Minuterie 15m", 15 * 60),
     ("⏱️ Minuterie 18m", 18 * 60),
     ("⏱️ Minuterie 20m", 20 * 60),
+    ("🥔 Patate déjeuner", 5 * 60),
+    ("🥔 Patate déjeuner", 4 * 60),
 ]
 
 SIMPLE_SOUND_CHOICES = {
@@ -468,13 +477,13 @@ class TimerManagerWindow(tk.Toplevel):
             full_text = f"{name}\n{duration_str}"
 
             # LOGIQUE DES 4 COULEURS :
-            if i < 8:
+            if i < 13:
                 # 🔵 SECTION 1 : Les préparations longues / Plats signatures
                 current_bg = "#2980b9" 
-            elif i < 13:
+            elif i < 18:
                 # 🟠 SECTION 2 : Accompagnements et Entrées (Pain, Ailes, etc.)
                 current_bg = "#e67e22"
-            elif i < 18:
+            elif i < 30:
                 # 🟢 SECTION 3 : Minuteries courtes (1m à 8m)
                 current_bg = "#27ae60"
             else:
@@ -492,8 +501,8 @@ class TimerManagerWindow(tk.Toplevel):
             )
             
             # Calcul pour 3 colonnes
-            row = i // 3 
-            col = i % 3 
+            row = i // 4
+            col = i % 4 
             btn.grid(row=row, column=col, padx=5, pady=5, sticky="ew")
 
         # Configuration des colonnes
@@ -501,28 +510,7 @@ class TimerManagerWindow(tk.Toplevel):
         preset_button_frame.grid_columnconfigure(1, weight=1)
         preset_button_frame.grid_columnconfigure(2, weight=1)
 
-        # --- RESTE DE L'INTERFACE (SONS) ---
-        sound_label = tk.Label(main_frame, text="Sonnerie:", bg="#ecf0f1", font=("Arial", 12, "bold"))
-        sound_label.pack(anchor="w", pady=(10, 5))
         
-        sound_frame = tk.Frame(main_frame, bg="#ecf0f1")
-        sound_frame.pack(fill=tk.X)
-        
-        for sound_id, name in SIMPLE_SOUND_CHOICES.items():
-            rb = tk.Radiobutton(sound_frame, 
-                                text=name, 
-                                variable=self.selected_sound_id, 
-                                value=sound_id, 
-                                bg="#ecf0f1", 
-                                font=("Arial", 11),
-                                activebackground="#ecf0f1",
-                                indicatoron=0, 
-                                selectcolor="#2ecc71", 
-                                bd=2, relief=tk.RAISED)
-            rb.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
-
-        tk.Button(main_frame, text="Tester le Son", command=self.test_sound, 
-                  bg="#1abc9c", fg="white", font=("Arial", 12)).pack(fill=tk.X, pady=(10, 5))
 
         tk.Button(main_frame, text="Annuler / Fermer", command=self.on_close, 
                   bg="#bdc3c7", fg="#333", font=("Arial", 12)).pack(fill=tk.X, pady=(20, 5))

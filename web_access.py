@@ -16,7 +16,6 @@ import platform # <--- Ajoutez cet import en haut du fichier
 import os
 import json
 from flask import send_from_directory,send_file# Ajoutez cet import en haut du fichier
-
 from serial_reader import SerialReader
 
 # Configuration de base du logger
@@ -85,7 +84,8 @@ WHITELIST_ROUTES = [
     '/static/js/chartjs-plugin-zoom.min.js',
     '/static/js/html2pdf.bundle.min.js',
     '/kds_pa_pizza',
-    '/envoyer_tcp_commande'
+    '/envoyer_tcp_commande',
+    '/reset_adaptateurs'
     
     
 ]
@@ -804,6 +804,53 @@ def nouvelle_livraison():
             
     return render_template('formulaire_adresse.html')
 
+@app.route('/reset_adaptateurs', methods=['POST'])
+def reset_adaptateurs():
+    import time
+    import logging
+    import threading
+    from flask import jsonify
+    from serial_reader import SerialReader
+    
+    # Si vous avez accès à l'instance de votre application/GUI principale (ex: kds_app)
+    # importez-la ici, ou utilisez l'instance globale correspondante.
+    # Exemple : from main import kds_app
+    
+    try:
+        logging.info("🔄 Demande de réinitialisation des adaptateurs série via le Web...")
+        
+        # 1. On arrête l'ancien lecteur s'il existe et s'il est actif
+        # (Adaptez 'kds_app' par votre objet principal ou variable globale si nécessaire)
+        if 'kds_app' in globals() and hasattr(kds_app, 'reader') and kds_app.reader:
+            try:
+                if hasattr(kds_app.reader, 'stop_reader'):
+                    kds_app.reader.stop_reader()
+                elif hasattr(kds_app.reader, 'stop'):
+                    kds_app.reader.stop()
+                elif hasattr(kds_app.reader, 'close'):
+                    kds_app.reader.close()
+            except Exception as stop_err:
+                logging.warning(f"Avertissement lors de l'arrêt de l'ancien lecteur : {stop_err}")
+
+        # 2. On attend 0.5s comme dans votre logique GUI
+        time.sleep(0.5)
+
+        # 3. On recrée et relance le nouveau lecteur série
+        # (Assurez-vous d'avoir accès à db_manager dans votre contexte, ex: depuis votre module db_manager)
+        
+        if 'kds_app' in globals():
+            kds_app.reader = SerialReader(db_manager)
+            kds_app.reader.start()
+            if hasattr(kds_app, 'update_status'):
+                kds_app.update_status("Adaptateurs KDS en ligne.", "#2ecc71")
+
+        logging.info("✅ Adaptateurs série réinitialisés avec succès via le web.")
+        return jsonify({"success": True, "message": "Adaptateurs série réinitialisés avec succès."})
+        
+    except Exception as e:
+        logging.error(f"💥 Erreur critique lors de la réinitialisation des adaptateurs série : {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+        
 @app.route('/api/livreurs/toggle_status', methods=['POST'])
 def api_toggle_livreur():
     if request.headers.get("X-App-Access") != APP_AUTH_KEY:

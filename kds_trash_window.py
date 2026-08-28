@@ -93,6 +93,8 @@ class TrashWindow(tk.Toplevel):
         self.config(bg="#ecf0f1")
         self.wm_attributes("-topmost", True)
         self.protocol("WM_DELETE_WINDOW", self._safe_destroy)
+        self.state('zoomed')
+
         
         # --- 2. Configuration des styles TTK ---
         style = ttk.Style()
@@ -207,10 +209,10 @@ class TrashWindow(tk.Toplevel):
 
         columns_config = {
             "bill_id_hidden": ("ID", 0), 
-            "table_number": ("Table", 100),       # Un peu plus petit
-            "serveuse_name": ("Serveur(se)", 150), # Un peu plus petit
-            "preview": ("Contenu (Aperçu)", 350), # ⭐ LARGEUR GÉNÉREUSE
-            "completion_time": ("Heure", 100),    # Un peu plus petit
+            "table_number": ("Table", 60),          # Commence très tôt à gauche
+            "serveuse_name": ("Serveur(se)", 130),  # ⭐ Élargi à 130 pour loger 20 caractères sans couper
+            "preview": ("Contenu (Aperçu)", 620),   # ⭐ Ajusté légèrement pour compenser (prend le reste via stretch)
+            "completion_time": ("Heure", 100),    
             "status_hidden": ("Statut", 0),
             "date_hidden": ("Date", 0)
         }
@@ -221,7 +223,9 @@ class TrashWindow(tk.Toplevel):
                              command=lambda c=col: self.sort_treeview(c) if is_clickable else None)
             
             if is_clickable:
-                self.tree.column(col, width=width, stretch=(tk.YES if col=="serveuse_name" else tk.NO))
+                # Seule la colonne preview s'étire dynamiquement pour remplir l'écran
+                is_stretch = (tk.YES if col == "preview" else tk.NO)
+                self.tree.column(col, width=width, stretch=is_stretch)
             else:
                 self.tree.column(col, width=0, stretch=tk.NO)
                 

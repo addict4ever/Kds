@@ -7,29 +7,30 @@
     <div id="custom-toast" style="display:none; position:fixed; top:20px; right:20px; background:#2ecc71; color:white; padding:20px; border-radius:10px; z-index:10000; font-size:20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 2px solid #fff;">
         <span id="toast-message"></span>
     </div>
+    
     <div class="search-bar p-3 bg-dark rounded-3 shadow-lg">
-        <form method="GET" action="/kds" class="row g-3 align-items-center">
-            <div class="col-12 col-xl-6">
-                <input type="text" name="search" class="form-control touch-element-xxl" 
-                    style="background-color: #f8f9fa;"
-                    placeholder="🔍 Rechercher..." value="{{ search_query }}">
-            </div>
+    <form method="GET" action="/kds" class="row g-3 align-items-center">
+        <div class="col-12 col-xl-6">
+            <input type="text" name="search" class="form-control touch-element-xxl" 
+                style="background-color: #f8f9fa;"
+                placeholder="🔍 Rechercher..." value="{{ search_query }}">
+        </div>
 
-            <div class="col-12 col-md-6 col-xl-3">
-                <button type="submit" class="btn btn-white-touch w-100 touch-element-xxl">
-                    RECHERCHER
-                </button>
-            </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <button type="submit" class="btn btn-white-touch w-100 touch-element-xxl">
+                RECHERCHER
+            </button>
+        </div>
 
-            <div class="col-12 col-md-6 col-xl-3">
-                <button type="button" class="btn btn-white-touch w-100 touch-element-xxl" onclick="resetAndSearch()">
-                    RESET FILTRE
-                </button>
-            </div>
-
-            
-        </form>
-    </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <button type="button" class="btn btn-danger w-100 touch-element-xxl fw-bold" 
+                    style="background-color: #e74c3c !important; border: 2px solid #fff;" 
+                    onclick="resetAdaptateursServer()">
+                ⚠️ RESET ADAPTATEUR
+            </button>
+        </div>
+    </form>
+</div>
     
     
 
@@ -155,7 +156,7 @@
                             <button class="btn btn-danger w-100 mt-2 fw-bold touch-element-xxl" 
                                     style="height: 60px; font-size: 1.2rem; border: 2px solid #fff; background-color: #dc3545 !important;"
                                     onclick="confirmTraitee('{{ bid }}')">
-                                ✅ MARQUER TRAITÉE
+                                ✅ FERMER FACTURE
                             </button>
 
                             <button class="btn btn-warning w-100 mt-2 fw-bold" 
@@ -652,29 +653,77 @@
     }
 
 
-
-    // 1. Fonction qui ouvre la boîte de dialogue
-    function confirmTraitee(bid) {
+    function resetAdaptateursServer() {
         const modal = document.getElementById('custom-confirm-modal');
+        
         if (!modal) {
-            // Fallback si la modal n'existe pas encore dans votre HTML
-            if (confirm("Marquer cette commande comme traitée ?")) {
-                executeTraitee(bid);
-            }
+            // Fallback si la modale n'existe pas
+            if (!confirm("Voulez-vous vraiment réinitialiser les adaptateurs série ?")) return;
+            executeResetAdaptateurs();
             return;
         }
 
+        // Personnaliser le texte du modal pour l'adapter au reset
+        const confirmText = document.getElementById('confirm-text');
+        if (confirmText) {
+            confirmText.innerText = "Voulez-vous vraiment réinitialiser les adaptateurs série ?";
+        }
+
+        const yesBtn = document.getElementById('confirm-yes');
+        const noBtn = document.getElementById('confirm-no');
+
+        if (yesBtn) yesBtn.innerText = "OUI, RÉINITIALISER";
+
+        // Afficher la modale
         modal.style.display = 'flex';
 
-        // On lie le clic sur "OUI" à l'exécution réelle
-        document.getElementById('confirm-yes').onclick = function() {
+        // Action sur OUI
+        yesBtn.onclick = function() {
             modal.style.display = 'none';
-            executeTraitee(bid);
+            // Remettre le texte initial au cas où d'autres modales l'utilisent
+            if (confirmText) confirmText.innerText = "Voulez-vous marquer cette commande comme TRAITÉE ?";
+            if (yesBtn) yesBtn.innerText = "OUI, TERMINER";
+            
+            executeResetAdaptateurs();
         };
 
-        document.getElementById('confirm-no').onclick = function() {
+        // Action sur NON
+        noBtn.onclick = function() {
             modal.style.display = 'none';
+            // Remettre le texte initial
+            if (confirmText) confirmText.innerText = "Voulez-vous marquer cette commande comme TRAITÉE ?";
+            if (yesBtn) yesBtn.innerText = "OUI, TERMINER";
         };
+    }
+
+    // Fonction interne qui effectue l'appel fetch pour le reset
+    function executeResetAdaptateurs() {
+        fetch('/reset_adaptateurs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json' 
+            }
+        })
+        .then(response => {
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new TypeError("Le serveur n'a pas renvoyé du JSON (probablement une erreur 500 ou 404).");
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                showToast("Succès : " + data.message, "success");
+                setTimeout(() => location.reload(), 1500); // Recharge la page après un court délai
+            } else {
+                showToast("Erreur : " + data.message, "danger");
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            showToast("Une erreur est survenue lors de la communication avec le serveur.", "danger");
+        });
     }
 
     function printOrder(bid) {

@@ -173,7 +173,7 @@ except ImportError:
             messagebox.showerror("Erreur", "Le module 'config_menu.py' est introuvable.")
             self.destroy()
 
-
+gui_instance = None
 
 # Configuration du logger pour kds_gui
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -1102,6 +1102,7 @@ class KDSGUI:
             
         except Exception as e:
             self.update_status(f"Erreur Reset: {e}", "#e74c3c")
+    
 
     def _start_new_reader(self):
         """Lance physiquement le nouveau lecteur."""

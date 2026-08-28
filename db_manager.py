@@ -1628,7 +1628,7 @@ class DBManager:
 
     def get_archived_orders(self):
         """
-        Récupère les commandes archivées avec un aperçu des 2 premiers PLATS réels.
+        Récupère les commandes archivées avec l'aperçu de TOUS les VRAIS plats réels.
         """
         completed_orders_data = self.get_completed_orders()
         archived_orders = {} 
@@ -1649,19 +1649,16 @@ class DBManager:
                     apercu_lines.append(main_item_name)
                     
                     # 2. On vérifie si c'est un vrai plat pour l'aperçu court (short_preview)
-                    # On vérifie que le texte n'est pas dans notre liste d'exclusion
                     is_service_info = any(mot in main_item_name.upper() for mot in EXCLURE)
                     
                     if not is_service_info:
                         main_items_only.append(main_item_name)
                     
                     for sub_item in item_dict.get('sub_items', []):
-                        apercu_lines.append(f"  ↳ {sub_item}")
+                        apercu_lines.append(f"   ↳ {sub_item}")
                 
-                # ⭐ On prend les 2 premiers VRAIS plats trouvés
-                short_preview = ", ".join(main_items_only[:2])
-                if len(main_items_only) > 2:
-                    short_preview += "..."
+                # ⭐ On prend TOUS les VRAIS plats trouvés (sans limite de [:2])
+                short_preview = ", ".join(main_items_only)
                         
                 apercu = "\n".join(apercu_lines)
                 
@@ -1670,7 +1667,7 @@ class DBManager:
                     'table_number': data['table_number'],
                     'serveuse_name': data['serveuse_name'],
                     'apercu_contenu': apercu,
-                    'short_preview': short_preview, # Contient maintenant juste les plats
+                    'short_preview': short_preview, # Contient maintenant TOUS les plats
                     'date_creation_str': data['creation_date'],
                     'completion_date': data['creation_date'], 
                     'status': data['status'],
@@ -1683,7 +1680,7 @@ class DBManager:
                 logger.error(f"Erreur de formatage Bill ID {data.get('bill_id')}: {e}")
             
         return archived_orders
-
+        
     def delete_bill_note(self, bill_id):
         """
         Supprime la note associée à un bill_id donné dans la table bill_notes.
