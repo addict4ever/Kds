@@ -1194,6 +1194,7 @@ class DBManager:
             logger.error(f"Erreur lors du marquage automatique de toutes les commandes : {e}")
             return 0
 
+    
     # --- MÉTHODES DE COMMANDE (MODIFIÉE) ---
     def insert_order(self, bill_id, table_number, serveuse_name, service_type, items, status='En attente', creation_date=None, raw_content=None):
         """

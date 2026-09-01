@@ -202,20 +202,19 @@
     .view-hidden { display: none !important; }
 
      /* Force l'affichage horizontal en grille de 4 */
+    /* Force l'affichage horizontal en grille de 4 colonnes */
     .horizontal-grid-layout {
         display: flex !important;
         flex-wrap: wrap !important;
-        gap: 15px !important;
-        column-count: auto !important; /* Désactive le mode masonry */
-        width: 100%;
+        gap: 12px !important;
+        width: 100% !important;
     }
 
-    /* Chaque commande prend exactement 25% de la largeur (moins le gap) */
+    /* Chaque commande prend 25% de la largeur pour en avoir 4 par ligne */
     .horizontal-grid-layout .order-wrapper {
-        flex: 0 0 calc(25% - 15px) !important;
-        width: calc(25% - 15px) !important;
-        display: inline-block;
-        vertical-align: top;
+        flex: 0 0 calc(25% - 10px) !important;
+        max-width: calc(25% - 10px) !important;
+        box-sizing: border-box !important;
     }
 
     /* Ajustement tablette : 2 par ligne */
@@ -333,6 +332,31 @@
         margin: 0;
     }
 
+    /* --- AJOUT : MODE 5 COLONNES (UNE POUR CHAQUE TYPE DE SERVICE) --- */
+    .horizontal-grid-5-cols {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 15px !important;
+        column-count: auto !important;
+        width: 100%;
+    }
+
+    .horizontal-grid-5-cols .order-wrapper {
+        flex: 0 0 calc(20% - 12px) !important; /* 20% de largeur pour faire exactement 5 colonnes */
+        width: calc(20% - 12px) !important;
+        display: inline-block;
+        vertical-align: top;
+    }
+
+    /* Ajustement tablette / écran moyen pour le mode 5 colonnes : 3 par ligne */
+    @media (max-width: 1600px) {
+        .horizontal-grid-5-cols .order-wrapper {
+            flex: 0 0 calc(33.333% - 10px) !important;
+            width: calc(33.333% - 10px) !important;
+        }
+    }
+
+
     /* 📱 ADAPTATION COMPACTE POUR TABLETTE 10 POUCES (Écrans inférieurs à 1200px) */
     @media (max-width: 1200px) {
         #kds-settings-panel {
@@ -440,7 +464,9 @@
         
         <div class="control-row-section">
             <button id="btn-audio-toggle" onclick="toggleAudio()">CHARGEMENT...</button>
-            <button id="btn-view-toggle" onclick="toggleView()">🖼️ VUE: GRILLE</button>
+            <button id="btn-mode-grid" onclick="switchView('grid')" style="background-color: #2980b9; color: white;">🖼️ GRILLE</button>
+            <button id="btn-mode-columns" onclick="switchView('columns')" style="background-color: #8e44ad; color: white;">📊 5 COLONNES</button>
+            <button id="btn-mode-table" onclick="switchView('table')" style="background-color: #d35400; color: white;">📋 TABLEAU</button>
         </div>
         
         <div class="control-row-section font-controls-box">
@@ -491,11 +517,49 @@
 <audio id="alert-beep" src="{{ url_for('static', filename='sound/beep_short.ogg') }}" preload="auto"></audio>
 
 <div class="kds-scroll-container">
-    <div id="kds-ajax-zone" class="horizontal-grid-layout">
+    
+    <!-- 1. VUE GRILLE NORMALE (Votre grille d'origine) -->
+    <div id="kds-grid-view" class="kds-masonry-layout" style="display: none;">
         {% include 'partials/kds_order_list.html' %}
     </div>
 
-    <table id="kds-table-zone" class="kds-table-view">
+    <!-- 2. VUE 5 COLONNES (Une colonne par type de service) -->
+    <div id="kds-columns-container" style="display: none; gap: 15px; width: 100%; align-items: flex-start; box-sizing: border-box; padding: 5px;">
+        
+        <!-- Colonne 1 : 888 -->
+        <div class="service-column" data-column-type="t888" style="flex: 1; min-width: 0; background: rgba(255,255,255,0.02); border: 2px dashed #e74c3c; border-radius: 8px; padding: 10px; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; color: #e74c3c; margin-top: 0; margin-bottom: 10px; font-size: 1.2rem; text-transform: uppercase;">888</h3>
+            <div class="column-orders-zone" id="zone-t888" style="display: flex; flex-direction: column; gap: 10px; width: 100%;"></div>
+        </div>
+
+        <!-- Colonne 2 : LIV -->
+        <div class="service-column" data-column-type="liv" style="flex: 1; min-width: 0; background: rgba(255,255,255,0.02); border: 2px dashed #2ecc71; border-radius: 8px; padding: 10px; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; color: #2ecc71; margin-top: 0; margin-bottom: 10px; font-size: 1.2rem; text-transform: uppercase;">LIVREURS</h3>
+            <div class="column-orders-zone" id="zone-liv" style="display: flex; flex-direction: column; gap: 10px; width: 100%;"></div>
+        </div>
+
+        <!-- Colonne 3 : 999 -->
+        <div class="service-column" data-column-type="t999" style="flex: 1; min-width: 0; background: rgba(255,255,255,0.02); border: 2px dashed #9b59b6; border-radius: 8px; padding: 10px; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; color: #9b59b6; margin-top: 0; margin-bottom: 10px; font-size: 1.2rem; text-transform: uppercase;">999</h3>
+            <div class="column-orders-zone" id="zone-t999" style="display: flex; flex-direction: column; gap: 10px; width: 100%;"></div>
+        </div>
+
+        <!-- Colonne 4 : PA -->
+        <div class="service-column" data-column-type="pa" style="flex: 1; min-width: 0; background: rgba(255,255,255,0.02); border: 2px dashed #3498db; border-radius: 8px; padding: 10px; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; color: #3498db; margin-top: 0; margin-bottom: 10px; font-size: 1.2rem; text-transform: uppercase;">PA</h3>
+            <div class="column-orders-zone" id="zone-pa" style="display: flex; flex-direction: column; gap: 10px; width: 100%;"></div>
+        </div>
+
+        <!-- Colonne 5 : SALLE -->
+        <div class="service-column" data-column-type="salle" style="flex: 1; min-width: 0; background: rgba(255,255,255,0.02); border: 2px dashed #f1c40f; border-radius: 8px; padding: 10px; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; color: #f1c40f; margin-top: 0; margin-bottom: 10px; font-size: 1.2rem; text-transform: uppercase;">SALLE</h3>
+            <div class="column-orders-zone" id="zone-salle" style="display: flex; flex-direction: column; gap: 10px; width: 100%;"></div>
+        </div>
+
+    </div>
+
+    <!-- 3. VUE TABLEAU -->
+    <table id="kds-table-zone" class="kds-table-view" style="display: none;">
         <thead>
             <tr>
                 <th style="width: 20%; font-size: calc(var(--kds-font-main) * 0.7) !important;">Table / Commande</th>
@@ -506,6 +570,12 @@
         <tbody id="table-body">
         </tbody>
     </table>
+</div>
+
+    
+<!-- Élément caché invisible pour garder la compatibilité avec les fonctions JS qui cherchent #kds-ajax-zone -->
+<div id="kds-ajax-zone" style="display: none !important;">
+    {% include 'partials/kds_order_list.html' %}
 </div>
 
 <div id="confirmModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; justify-content:center; align-items:center;">
@@ -565,6 +635,40 @@
         });
     });
 
+    // --- AJOUT : GESTION DU MODE 5 COLONNES ---
+    function toggleColumnsMode() {
+        const columnsContainer = document.getElementById('kds-columns-container');
+        const table = document.getElementById('kds-table-zone');
+        const btnCols = document.getElementById('btn-cols-toggle');
+        const btnView = document.getElementById('btn-view-toggle');
+
+        // Si le tableau est actif, on le ferme
+        if (table.classList.contains('view-active-table')) {
+            table.classList.remove('view-active-table');
+            if (btnView) btnView.innerText = "🖼️ VUE: GRILLE";
+        }
+
+        // On bascule l'affichage du conteneur des 5 colonnes
+        const isHidden = columnsContainer.style.display === 'none';
+        
+        if (isHidden) {
+            columnsContainer.style.setProperty('display', 'flex', 'important');
+            if (btnCols) {
+                btnCols.innerText = "📊 VUE: GRILLE";
+                btnCols.style.backgroundColor = "#27ae60";
+            }
+            localStorage.setItem('kds_view_mode', 'columns');
+        } else {
+            columnsContainer.style.setProperty('display', 'none', 'important');
+            if (btnCols) {
+                btnCols.innerText = "📊 5 COLONNES";
+                btnCols.style.backgroundColor = "#8e44ad";
+            }
+            localStorage.setItem('kds_view_mode', 'grid');
+        }
+    }
+
+
     function toggleSettings() {
         const panel = document.getElementById('kds-settings-panel');
         // Alterne entre 'none' et 'block'
@@ -602,7 +706,20 @@
         const voirPA = document.getElementById('toggle-pa').checked;
         const voirSalle = document.getElementById('toggle-salle').checked;
 
-        // Sélectionne toutes les cartes de commandes actuellement présentes à l'écran
+        // 1. Afficher ou masquer entièrement chaque colonne de service selon la case cochée
+        const col888 = document.querySelector('.service-column[data-column-type="t888"]');
+        const colLiv = document.querySelector('.service-column[data-column-type="liv"]');
+        const col999 = document.querySelector('.service-column[data-column-type="t999"]');
+        const colPa = document.querySelector('.service-column[data-column-type="pa"]');
+        const colSalle = document.querySelector('.service-column[data-column-type="salle"]');
+
+        if (col888) col888.style.setProperty('display', voir888 ? 'flex' : 'none', 'important');
+        if (colLiv) colLiv.style.setProperty('display', voirLIV ? 'flex' : 'none', 'important');
+        if (col999) col999.style.setProperty('display', voir999 ? 'flex' : 'none', 'important');
+        if (colPa) colPa.style.setProperty('display', voirPA ? 'flex' : 'none', 'important');
+        if (colSalle) colSalle.style.setProperty('display', voirSalle ? 'flex' : 'none', 'important');
+
+        // 2. Sélectionne toutes les cartes de commandes présentes à l'écran pour les filtrer individuellement
         const commandes = document.querySelectorAll('.order-wrapper');
 
         commandes.forEach(card => {
@@ -616,7 +733,7 @@
             if (type === 'pa' && voirPA) doitAfficher = true;
             if (type === 'salle' && voirSalle) doitAfficher = true;
 
-            // Application du style CSS instantané
+            // Application du style CSS instantané sur la carte
             if (doitAfficher) {
                 card.style.setProperty('display', '', 'important'); 
             } else {
@@ -720,24 +837,55 @@
         }, 800);
     }
 
-    function toggleView() {
-        const grid = document.getElementById('kds-ajax-zone');
-        const table = document.getElementById('kds-table-zone');
-        const btn = document.getElementById('btn-view-toggle');
+    function switchView(mode) {
+        const gridView = document.getElementById('kds-grid-view');
+        const columnsContainer = document.getElementById('kds-columns-container');
+        const tableZone = document.getElementById('kds-table-zone');
 
-        // On inverse les classes sur les deux éléments
-        // Si l'un est caché, il devient visible, et vice-versa
-        grid.classList.toggle('view-hidden');
-        table.classList.toggle('view-active-table');
+        // Tout masquer par défaut
+        if (gridView) gridView.style.setProperty('display', 'none', 'important');
+        if (columnsContainer) columnsContainer.style.setProperty('display', 'none', 'important');
+        if (tableZone) tableZone.style.setProperty('display', 'none', 'important');
 
-        // Mise à jour du bouton et sauvegarde de la préférence
-        if (table.classList.contains('view-active-table')) {
-            btn.innerText = "📋 VUE: TABLEAU";
-            syncTableData(); // On remplit le tableau puisqu'il devient visible
-            localStorage.setItem('kds_view_mode', 'table');
-        } else {
-            btn.innerText = "🖼️ VUE: GRILLE";
+        // Activer la vue demandée
+        if (mode === 'grid') {
+            // MODIFICATION ICI : On remet 'block' ou 'grid' selon votre CSS (la classe .kds-masonry-layout gère les colonnes)
+            if (gridView) gridView.style.setProperty('display', 'block', 'important');
             localStorage.setItem('kds_view_mode', 'grid');
+        } else if (mode === 'columns') {
+            if (columnsContainer) columnsContainer.style.setProperty('display', 'flex', 'important');
+            localStorage.setItem('kds_view_mode', 'columns');
+        } else if (mode === 'table') {
+            if (tableZone) tableZone.style.setProperty('display', 'table', 'important');
+            syncTableData();
+            localStorage.setItem('kds_view_mode', 'table');
+        }
+    }
+
+    function toggleView() {
+        const columnsContainer = document.getElementById('kds-columns-container');
+        const table = document.getElementById('kds-table-zone');
+        const btnView = document.getElementById('btn-view-toggle');
+
+        const isTableActive = table.classList.contains('view-active-table');
+
+        if (isTableActive) {
+            // On quitte le tableau -> On revient à la vue Grille
+            table.classList.remove('view-active-table');
+            if (columnsContainer) {
+                columnsContainer.style.setProperty('display', 'flex', 'important');
+            }
+            if (btnView) btnView.innerText = "📋 VUE: TABLEAU";
+            localStorage.setItem('kds_view_mode', 'grid');
+        } else {
+            // On passe au tableau -> On cache la grille
+            table.classList.add('view-active-table');
+            if (columnsContainer) {
+                columnsContainer.style.setProperty('display', 'none', 'important');
+            }
+            if (btnView) btnView.innerText = "🖼️ VUE: GRILLE";
+            syncTableData();
+            localStorage.setItem('kds_view_mode', 'table');
         }
     }
 
@@ -820,7 +968,7 @@
                 .filter(el => el.style.display !== 'none')
                 .map(el => el.getAttribute('data-order-id'));
             
-            // --- TON CODE DE TRI ET DE MISE À JOUR EXISTANT ---
+            // --- TRI ET MISE À JOUR ---
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
             
@@ -838,10 +986,44 @@
                 return 0;
             });
             
-            ajaxZone.innerHTML = '';
-            orders.forEach(order => ajaxZone.appendChild(order));
-            // --------------------------------------------------
+            // 1. Vider les zones de chaque colonne et la vue grille
+            const zoneGrid = document.getElementById('kds-grid-view');
+            const zone888 = document.getElementById('zone-t888');
+            const zoneLiv = document.getElementById('zone-liv');
+            const zone999 = document.getElementById('zone-t999');
+            const zonePa = document.getElementById('zone-pa');
+            const zoneSalle = document.getElementById('zone-salle');
 
+            if (zoneGrid) zoneGrid.innerHTML = '';
+            if (zone888) zone888.innerHTML = '';
+            if (zoneLiv) zoneLiv.innerHTML = '';
+            if (zone999) zone999.innerHTML = '';
+            if (zonePa) zonePa.innerHTML = '';
+            if (zoneSalle) zoneSalle.innerHTML = '';
+
+            // 2. Répartir chaque commande dans la grille et dans sa colonne respective
+            orders.forEach(order => {
+                const type = order.getAttribute('data-order-type');
+                
+                // Alimentation de la vue grille (avec clone pour l'afficher en double vue si besoin, ou déplacement direct)
+                if (zoneGrid) {
+                    zoneGrid.appendChild(order.cloneNode(true));
+                }
+                
+                // Répartition dans les colonnes de service
+                if (type === 't888' && zone888) zone888.appendChild(order);
+                else if (type === 'liv' && zoneLiv) zoneLiv.appendChild(order);
+                else if (type === 't999' && zone999) zone999.appendChild(order);
+                else if (type === 'pa' && zonePa) zonePa.appendChild(order);
+                else if (type === 'salle' && zoneSalle) zoneSalle.appendChild(order);
+                else {
+                    // Fallback de sécurité si le type ne correspond à aucune colonne
+                    const ajaxZone = document.getElementById('ajax-zone');
+                    if (ajaxZone) ajaxZone.appendChild(order);
+                }
+            });
+            // --------------------------------------------------
+            updateOrderTimers();
             appliquerFiltresAffichage();
             
             const table = document.getElementById('kds-table-zone');
@@ -849,7 +1031,7 @@
                 syncTableData();
             }
 
-            const newVisibleIds = Array.from(ajaxZone.querySelectorAll('.order-wrapper'))
+            const newVisibleIds = Array.from(document.querySelectorAll('.order-wrapper'))
                 .filter(el => el.style.display !== 'none')
                 .map(el => el.getAttribute('data-order-id'));
             
@@ -893,25 +1075,33 @@
         // 2. Restaurer l'Audio
         updateAudioUI(localStorage.getItem('kds_pa_audio') === 'true');
 
-        // 3. RESTAURER LA VUE (Grille ou Tableau)
+        // 3. RESTAURER LA VUE (Grille, 5 Colonnes ou Tableau)
         const savedView = localStorage.getItem('kds_view_mode') || 'grid';
-        const grid = document.getElementById('kds-ajax-zone');
+        const gridView = document.getElementById('kds-grid-view');
         const table = document.getElementById('kds-table-zone');
-        const btn = document.getElementById('btn-view-toggle');
+        const columnsContainer = document.getElementById('kds-columns-container');
+        const btnView = document.getElementById('btn-view-toggle');
+        const btnCols = document.getElementById('btn-cols-toggle');
+
+        // Tout masquer/réinitialiser par sécurité au départ
+        if (gridView) gridView.style.setProperty('display', 'none', 'important');
+        if (table) table.classList.remove('view-active-table');
+        if (columnsContainer) columnsContainer.style.setProperty('display', 'none', 'important');
 
         if (savedView === 'table') {
-            // On cache la grille et on affiche le tableau
-            grid.classList.add('view-hidden');
-            table.classList.add('view-active-table');
-            if (btn) btn.innerText = "📋 VUE: TABLEAU";
-            
-            // On remplit le tableau immédiatement avec les données chargées au boot
+            if (table) table.classList.add('view-active-table');
+            if (btnView) btnView.innerText = "📋 VUE: TABLEAU";
             syncTableData();
+        } else if (savedView === 'columns') {
+            if (columnsContainer) columnsContainer.style.setProperty('display', 'flex', 'important');
+            if (btnCols) {
+                btnCols.innerText = "📊 VUE: GRILLE";
+                btnCols.style.backgroundColor = "#27ae60";
+            }
         } else {
-            // Mode par défaut : Grille
-            grid.classList.remove('view-hidden');
-            table.classList.remove('view-active-table');
-            if (btn) btn.innerText = "🖼️ VUE: GRILLE";
+            // Mode par défaut : Grille classique
+            if (gridView) gridView.style.setProperty('display', 'block', 'important');
+            if (btnView) btnView.innerText = "🖼️ VUE: GRILLE";
         }
 
         const savedFontPreset = localStorage.getItem('kds_font_preset') || 'normal';
@@ -921,6 +1111,42 @@
         const refreshRate = {{ (refresh_rate if refresh_rate else 5) * 1000 }};
         setInterval(refreshOrders, refreshRate);
     });
+
+    function updateOrderTimers() {
+        const orders = document.querySelectorAll('.order-wrapper');
+        const now = new Date().getTime();
+
+        orders.forEach(order => {
+            const createdAtStr = order.getAttribute('data-created-at');
+            if (!createdAtStr) return;
+
+            const createdAt = new Date(createdAtStr).getTime();
+            if (isNaN(createdAt)) return;
+
+            const diffSeconds = Math.floor((now - createdAt) / 1000);
+            if (diffSeconds < 0) return;
+
+            const minutes = Math.floor(diffSeconds / 60);
+            const seconds = diffSeconds % 60;
+            const timeFormatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            // Mettre à jour le texte du timer
+            const timerSpan = order.querySelector('.order-timer');
+            if (timerSpan) {
+                timerSpan.innerText = timeFormatted;
+                
+                // Optionnel : Changement de couleur dynamique selon l'attente
+                if (minutes >= 15) {
+                    timerSpan.style.backgroundColor = '#e74c3c'; // Rouge (très en retard)
+                } else if (minutes >= 8) {
+                    timerSpan.style.backgroundColor = '#e67e22'; // Orange (attention)
+                }
+            }
+        });
+    }
+
+    // Lancer le compteur toutes les secondes
+    setInterval(updateOrderTimers, 1000);
 
     function marquerTraite(orderId) {
         // EN CUISINE : On envoie "Traitee" sans accent pour éviter que l'URL casse (404)

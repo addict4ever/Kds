@@ -216,6 +216,7 @@
                                                 | replace('LIVRAISON', '')
                                                 | replace('COMMERCANT', '')
                                                 | replace('ORIGINALE', '')
+                                                | replace('SOUS-TOTALAL', 'SOUS-TOTAL')
                                                 | replace('TOT', 'TOTAL')
                                                 | replace('=', '')
                                                 | replace('*', '')
@@ -238,14 +239,17 @@
                                                 and "ORIGINALE" not in s_upper
                                                 and "====" not in s_upper %}
                                                 
+                                                {# Nettoyage global de la ligne de sous-élément #}
+                                                {% set clean_sub = sub | replace('SOUS-TOTALAL', 'SOUS-TOTAL') | replace('TOT', 'TOTAL') | replace('*', '') %}
+                                                
                                                 {# AJUSTEMENT ICI : Détection stricte de "TPS $" et "TVQ $" #}
                                                 {% if "TOT" in s_upper or "TPS $" in s_upper or "TVQ $" in s_upper %}
                                                     <div class="order-item-main" style="font-size: 15px; font-weight: bold; margin-top: 6px; padding: 3px 0; color: #ffcc00; list-style: none;">
-                                                        {{ sub | replace('TOT', 'TOTAL') | replace('*', '') }}
+                                                        {{ clean_sub }}
                                                     </div>
                                                 {# OPTIONS NORMALES #}
                                                 {% else %}
-                                                    <li>{{ sub | replace('TOT', 'TOTAL') | replace('*', '') }}</li>
+                                                    <li>{{ clean_sub }}</li>
                                                 {% endif %}
                                                 
                                             {% endif %}

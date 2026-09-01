@@ -12,55 +12,66 @@
     {% set order_type = "salle" %}
 {% endif %}
 
-<div class="order-wrapper" id="order-{{ item.data.id }}" data-order-id="{{ item.data.id }}" data-order-type="{{ order_type }}">
-    <div class="card alert-pa-card">
-        <div class="card-header-pa" style="position: relative; padding-right: 45px;">
-            T: {{ item.data.table_number }} | {{ item.data.serveuse_name }}
+{# Conteneur principal avec les attributs data-* pour le filtrage et le timer #}
+<div class="order-wrapper mb-3" 
+     id="order-{{ item.data.id }}" 
+     data-order-id="{{ item.data.id }}" 
+     data-order-type="{{ order_type }}"
+     data-timestamp="{{ item.data.created_at if item.data.created_at is defined else item.data.timestamp }}">
 
-            <button onclick="event.stopPropagation(); marquerTraite('{{ item.data.id }}')" 
-                    style="position: absolute; 
-                           right: 8px; 
-                           top: 50%; 
-                           transform: translateY(-50%); 
-                           background-color: #e74c3c; 
-                           color: white; 
-                           border: none; 
-                           border-radius: 4px; 
-                           width: 32px; 
-                           height: 32px; 
-                           font-size: 1.2rem; 
-                           font-weight: bold; 
-                           cursor: pointer; 
-                           display: flex; 
-                           align-items: center; 
-                           justify-content: center;
-                           box-shadow: 0 2px 4px rgba(0,0,0,0.3); 
-                           z-index: 10;">
-                ✕
-            </button>
+    <div class="card alert-pa-card shadow-sm" style="position: relative; overflow: hidden;">
+        
+        <!-- En-tête de la carte -->
+        <div class="card-header-pa d-flex align-items-center justify-content-between p-2" style="position: relative; background: rgba(0,0,0,0.2);">
+            <span><strong>T: {{ item.data.table_number }}</strong></span>
+            
+            <!-- Zone Timer et Bouton de suppression alignés à droite -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="order-timer" style="font-weight: bold; font-size: 0.95rem; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; color: #2ecc71;">
+                    ⏱️ 00:00
+                </span>
+
+                <button onclick="event.stopPropagation(); marquerTraite('{{ item.data.id }}')" 
+                        style="background-color: #e74c3c; 
+                               color: white; 
+                               border: none; 
+                               border-radius: 4px; 
+                               width: 32px; 
+                               height: 32px; 
+                               font-size: 1.2rem; 
+                               font-weight: bold; 
+                               cursor: pointer; 
+                               display: flex; 
+                               align-items: center; 
+                               justify-content: center;
+                               box-shadow: 0 2px 4px rgba(0,0,0,0.3); 
+                               z-index: 10;">
+                    ✕
+                </button>
+            </div>
         </div>
         
+        <!-- Corps de la carte (Articles) -->
         <div class="card-body d-flex flex-column p-2" style="background-color: #34495e;">
-            <ul class="list-group list-group-flush mb-2" style="background: transparent;">
+            <ul class="list-group list-group-flush mb-0" style="background: transparent;">
                 {% for raw_it in item.data['items'] %}
                     {% set it = raw_it if raw_it is mapping else raw_it | from_json %}
-                    {# On extrait le texte pour vérifier si c'est strictement l'heure de la commande #}
                     {% set text_verif = (it.main_item if it is mapping else it) | string | upper %}
                     
                     <li class="list-group-item bg-transparent border-0 px-0 py-1">
                         {% if "HEURE" in text_verif %}
                             {# --- UNIQUMENT L'HEURE : EN ROUGE VIF --- #}
-                            <div class="item-main" style="color: #ff3333 !important;">{{ it.main_item if it is mapping else it }}</div>
+                            <div class="item-main" style="color: #ff3333 !important; font-weight: bold;">{{ it.main_item if it is mapping else it }}</div>
                             {% if it is mapping and it.sub_items %}
                             <div class="item-subs" style="color: #ff3333 !important;">
                                 {% for sub in it.sub_items %}<div>→ {{ sub }}</div>{% endfor %}
                             </div>
                             {% endif %}
                         {% else %}
-                            {# --- TOUT LE RESTE (NOURRITURE, MIN, ETC.) : ORANGE NORMAL --- #}
-                            <div class="item-main">{{ it.main_item if it is mapping else it }}</div>
+                            {# --- TOUT LE RESTE (NOURRITURE, OPTIONS, ETC.) --- #}
+                            <div class="item-main" style="color: #fff;">{{ it.main_item if it is mapping else it }}</div>
                             {% if it is mapping and it.sub_items %}
-                            <div class="item-subs">
+                            <div class="item-subs" style="color: #ddd;">
                                 {% for sub in it.sub_items %}<div>→ {{ sub }}</div>{% endfor %}
                             </div>
                             {% endif %}
@@ -69,6 +80,7 @@
                 {% endfor %}
             </ul>
         </div>
+        
     </div>
 </div>
 {% endfor %}

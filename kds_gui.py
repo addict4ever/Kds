@@ -63,13 +63,6 @@ except ImportError:
     DesktopPet = None
     print("⚠️ animate_pack.py non trouvé, le compagnon ne sera pas chargé.")
 
-try:
-    # On importe la fonction main qu'on a créée plus haut
-    from salade_game import main as start_salade  
-except ImportError:
-    start_salade = None
-
-
 
 # ⭐ NOUVEAU: Importation du widget de minuteur
 try:
@@ -141,10 +134,7 @@ except ImportError:
         logging.error(f"Module 'loginpass.py' non disponible. Authentification pour '{action_name}' désactivée.")
         return True # Permet l'accès par défaut si le module est manquant
 
-try:
-    from popit import main as start_popit # On importe la fonction main de popit
-except ImportError:
-    start_popit = None
+
 
 # NÉCESSITE OrderPostIt, PostitSelector, TotalWidget et constantes 
 from postit_widget import OrderPostIt, PostitSelector 
@@ -1474,95 +1464,24 @@ class KDSGUI:
             return
             
         table_num = str(order_data.get('table_number', '')).upper() if order_data else ""
-        preset = self.current_sound_preset.get()
-
-        # 🚀 FORCE LE BIP SUR LE PÉRIPHÉRIQUE MATÉRIEL NON-BLUETOOTH VIA CTYPES / WINMM
-        def windows_hardware_beep(frequency, duration):
-            def run_direct_sound():
+        preset = "PRESET 1"
+        
+        # 🚀 SOLUTION SÉCURISÉE : Utilisation de winsound (natif Windows, sans ctypes ni crash)
+        def run_safe_sound():
+            try:
+                import winsound
+                # Paramètres : Fréquence (ex: 1000 Hz), Durée en millisecondes (ex: 250 ms)
+                winsound.Beep(1000, 250)
+            except Exception:
+                # Sécurité ultime pour ne jamais perturber le fonctionnement du KDS
                 try:
-                    import ctypes
-                    import struct
-                    import time
-                    import math
-
-                    # Structure Windows pour inspecter les descriptions des cartes de son
-                    class WAVEOUTCAPS(ctypes.Structure):
-                        _fields_ = [
-                            ("wMid", ctypes.c_ushort), ("wPid", ctypes.c_ushort),
-                            ("vDriverVersion", ctypes.c_ulong), ("szPname", ctypes.c_char * 32),
-                            ("dwFormats", ctypes.c_ulong), ("wChannels", ctypes.c_ushort),
-                            ("wReserved1", ctypes.c_ushort), ("dwSupport", ctypes.c_ulong)
-                        ]
-
-                    winmm = ctypes.windll.winmm
-                    num_devices = winmm.waveOutGetNumDevs()
-                    target_device_id = -1  # Par défaut, on cherche
-
-                    # 1. On scanne les périphériques physiques pour éliminer le Bluetooth
-                    for i in range(num_devices):
-                        caps = WAVEOUTCAPS()
-                        if winmm.waveOutGetDevCapsA(i, ctypes.byref(caps), ctypes.sizeof(caps)) == 0:
-                            dev_name = caps.szPname.decode('ansi', errors='ignore').lower()
-                            
-                            # On cible la carte locale (Realtek / Haut-parleurs) et on évite le Bluetooth
-                            if ("realtek" in dev_name or "speaker" in dev_name or "haut-parleur" in dev_name or "audio" in dev_name) and "bluetooth" not in dev_name:
-                                target_device_id = i
-                                break
-
-                    # Si aucun mot-clé ne concorde mais qu'il y a des cartes, on prend l'index 0 (carte mère standard)
-                    if target_device_id == -1 and num_devices > 0:
-                        target_device_id = 0
-
-                    # 2. Génération des échantillons audio (Onde PCM 8-bit, 8000 Hz)
-                    sample_rate = 8000
-                    num_samples = int(sample_rate * (duration / 1000.0))
-                    audio_data = bytearray()
-                    
-                    for t in range(num_samples):
-                        # Génération d'une oscillation pure à la fréquence exacte du Preset
-                        value = int(127 + 127 * math.sin(2 * math.pi * frequency * t / sample_rate))
-                        audio_data.append(value)
-
-                    # Structure Wave Format (PCM, Mono, 8000Hz, 8-bit)
-                    wave_format = struct.pack("<HHIIHHH", 1, 1, sample_rate, sample_rate, 1, 8, 0)
-                    
-                    h_waveout = ctypes.c_void_p()
-                    
-                    # 3. Ouverture EXPLICITE du canal matériel choisi (target_device_id)
-                    if winmm.waveOutOpen(ctypes.byref(h_waveout), target_device_id, wave_format, 0, 0, 0) == 0:
-                        
-                        class WAVEHDR(ctypes.Structure):
-                            _fields_ = [
-                                ("lpData", ctypes.c_char_p), ("dwBufferLength", ctypes.c_ulong),
-                                ("dwBytesRecorded", ctypes.c_ulong), ("dwUser", ctypes.c_void_p),
-                                ("dwFlags", ctypes.c_ulong), ("dwLoops", ctypes.c_ulong),
-                                ("lpNext", ctypes.c_void_p), ("reserved", ctypes.c_void_p)
-                            ]
-                        
-                        raw_buffer = ctypes.c_char_p(bytes(audio_data))
-                        header = WAVEHDR(raw_buffer, len(audio_data), 0, 0, 0, 0, 0, 0)
-                        
-                        winmm.waveOutPrepareHeader(h_waveout, ctypes.byref(header), ctypes.sizeof(header))
-                        winmm.waveOutWrite(h_waveout, ctypes.byref(header), ctypes.sizeof(header))
-                        
-                        # Laisse le temps à la carte de son de jouer le bip avant de fermer
-                        time.sleep(duration / 1000.0 + 0.05)
-                        
-                        winmm.waveOutUnprepareHeader(h_waveout, ctypes.byref(header), ctypes.sizeof(header))
-                        winmm.waveOutClose(h_waveout)
-                    else:
-                        # Si l'accès direct échoue, appel Kernel standard en secours
-                        ctypes.windll.kernel32.Beep(frequency, duration)
-
-                except Exception:
-                    # Sécurité ultime pour ne jamais faire planter l'affichage des commandes
-                    try:
-                        self.root.bell()
-                    except:
-                        pass
-            
-            # Lancé dans un thread pour que le KDS de cuisine reste parfaitement fluide
-            threading.Thread(target=run_direct_sound, daemon=True).start()
+                    self.root.bell()
+                except:
+                    pass
+        
+        # Lancé dans un thread séparé pour garder l'interface graphique Tkinter parfaitement fluide
+        import threading
+        threading.Thread(target=run_safe_sound, daemon=True).start()
 
         try:
             # --- PACK 1 : CLASSIQUE (Optimisé Agressif) ---
@@ -1923,19 +1842,19 @@ class KDSGUI:
 
         # Bouton Impression (Turquoise)
         # Détermination du texte et de la couleur selon l'état lu
-        btn_text = "🖨️ : ON" if self.print_enabled else "🖨️ : OFF"
-        btn_bg = '#1abc9c' if self.print_enabled else '#95a5a6'
+        #btn_text = "🖨️ : ON" if self.print_enabled else "🖨️ : OFF"
+        #btn_bg = '#1abc9c' if self.print_enabled else '#95a5a6'
 
         # Création du bouton avec les bonnes valeurs de départ
-        self.btn_print_toggle = tk.Button(self.status_frame, 
-                text=btn_text, 
-                command=self.toggle_print_status,
-                font=('Segoe UI', 12, 'bold'), 
-                bg=btn_bg, 
-                fg='white', 
-                relief=tk.FLAT, bd=0
-        )
-        self.btn_print_toggle.pack(side=tk.RIGHT, padx=5)
+        #self.btn_print_toggle = tk.Button(self.status_frame, 
+        #        text=btn_text, 
+        #        command=self.toggle_print_status,
+        #        font=('Segoe UI', 12, 'bold'), 
+        #        bg=btn_bg, 
+        #        fg='white', 
+        #        relief=tk.FLAT, bd=0
+        #)
+        #self.btn_print_toggle.pack(side=tk.RIGHT, padx=5)
 
         self.current_sound_preset = tk.StringVar(value="PRESET 1") # Pack par défaut
         
@@ -1949,8 +1868,8 @@ class KDSGUI:
         self.sound_button.pack(side=tk.RIGHT, padx=5)
 
         # Liaison pour l'appui long (3 secondes)
-        self.sound_button.bind("<ButtonPress-1>", self._start_sound_timer)
-        self.sound_button.bind("<ButtonRelease-1>", self._stop_sound_timer)
+        #self.sound_button.bind("<ButtonPress-1>", self._start_sound_timer)
+        #self.sound_button.bind("<ButtonRelease-1>", self._stop_sound_timer)
 
         self.clean_button = tk.Button(
             self.status_frame,
@@ -2121,105 +2040,7 @@ class KDSGUI:
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible d'ouvrir l'outil CMD : {e}")
     
-    def _authenticate_and_launch_popit(self):
-        """Authentifie avant d'importer et lancer le jeu."""
-        if check_access_password("PopIt Option"):
-            self._open_popit_game_internal()
-        else:
-            self.update_status("Accès PopIt refusé.", 'red')
-            
-    def _open_popit_game_internal(self):
-        """Lance le jeu PopIt dans un thread séparé en forçant le réveil de l'audio."""
-        if start_popit is None:
-            messagebox.showerror("Erreur", "Le module popit.py est introuvable.")
-            return
-
-        try:
-            import pygame
-            import os
-            
-            # 1. Si le KDS a verrouillé l'audio en 'dummy', on bascule sur un pilote Windows valide
-            if os.environ.get('SDL_AUDIODRIVER') == 'dummy':
-                # On essaie 'directsound' qui est plus moderne et mieux supporté que 'waveout'
-                os.environ['SDL_AUDIODRIVER'] = 'directsound'
-            
-            # 2. On force une réinitialisation propre du mixer
-            try:
-                if pygame.mixer.get_init():
-                    pygame.mixer.quit()
-                
-                # Essai 1 : Avec le pilote configuré (directsound)
-                pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
-                pygame.mixer.init()
-            except Exception as audio_err:
-                logging.warning(f"Échec directsound ({audio_err}), essai en mode auto par défaut...")
-                try:
-                    # Essai 2 : Si directsound bloque, on nettoie la variable et on laisse Windows décider
-                    if 'SDL_AUDIODRIVER' in os.environ:
-                        del os.environ['SDL_AUDIODRIVER']
-                    pygame.mixer.init()
-                except Exception as final_err:
-                    logging.error(f"Impossible de réveiller la carte son : {final_err}")
-
-            # 3. On lance le thread du jeu
-            game_thread = threading.Thread(target=start_popit, daemon=True)
-            game_thread.start()
-            
-            self.update_status("PopIt Ultra lancé (Audio forcé).", '#2ecc71')
-        except Exception as e:
-            logging.error(f"Erreur lors du lancement de PopIt : {e}")
-            self.update_status("Erreur de lancement PopIt.", 'red')
     
-    def _authenticate_and_launch_salade(self):
-        """Authentifie avant d'importer et lancer le jeu de Salade."""
-        # On utilise "Salade Option" ou un autre libellé pour votre système de mot de passe
-        if check_access_password("Salade Option"):
-            self._open_salade_game_internal()
-        else:
-            self.update_status("Accès Salade refusé.", 'red')
-
-    def _open_salade_game_internal(self):
-        """Lance le jeu de Salade dans un thread séparé en forçant le réveil de l'audio."""
-        if start_salade is None:
-            messagebox.showerror("Erreur", "Le module salade_game.py est introuvable.")
-            return
-
-        try:
-            import pygame
-            import os
-            
-            # 1. Si le KDS a verrouillé l'audio en 'dummy', on bascule sur un pilote valide
-            if os.environ.get('SDL_AUDIODRIVER') == 'dummy':
-                # On force 'directsound' pour contourner le blocage du KDS
-                os.environ['SDL_AUDIODRIVER'] = 'directsound'
-            
-            # 2. Réinitialisation propre du mixer Pygame pour accrocher la carte son
-            try:
-                if pygame.mixer.get_init():
-                    pygame.mixer.quit()
-                
-                # Essai 1 : Avec le pilote directsound
-                pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
-                pygame.mixer.init()
-            except Exception as audio_err:
-                logging.warning(f"Échec directsound pour le jeu de Salade ({audio_err}), essai en mode auto...")
-                try:
-                    # Essai 2 : Si directsound coince, on laisse Windows choisir librement
-                    if 'SDL_AUDIODRIVER' in os.environ:
-                        del os.environ['SDL_AUDIODRIVER']
-                    pygame.mixer.init()
-                except Exception as final_err:
-                    logging.error(f"Impossible de réveiller la carte son pour la salade : {final_err}")
-
-            # 3. Le jeu se lancera maintenant avec l'audio prêt dans son thread
-            game_thread = threading.Thread(target=start_salade, daemon=True)
-            game_thread.start()
-            
-            self.update_status("Jeu de Salade lancé (Audio forcé).", '#2ecc71')
-        except Exception as e:
-            logging.error(f"Erreur Salade : {e}")
-            self.update_status("Erreur de lancement du jeu de Salade.", 'red')
-
     def _open_edit_config_file(self):
         """Lance l'éditeur de configuration dans une nouvelle fenêtre."""
         try:
@@ -2554,7 +2375,7 @@ class KDSGUI:
         # --- AJUSTEMENT TAILLE ---
         # Largeur 280 (plus large pour le texte) x Hauteur 450 (pour caser les 7 boutons)
         menu_width = 280
-        menu_height = 660
+        menu_height = 560
         
         # Calcul de la position : On place le menu au dessus du bouton (y - menu_height)
         x = event.x_root - (menu_width // 2)
@@ -2579,8 +2400,6 @@ class KDSGUI:
 
         # Tes 7 options
         options = [
-            ("🎮 PopIt Ultra (P)", self._authenticate_and_launch_popit), # Ajout de l'option PopIt
-            ("🥗 Jeu de Salade (S)", self._authenticate_and_launch_salade),
             ("🍳 Plats Principaux (P)", self._authenticate_and_open_maindish_config),
             ("📝 Édition Config (C)", self._authenticate_and_open_edit_config),
             ("🛠️ Outil Commande (T)", self._authenticate_and_open_cmd_tool),

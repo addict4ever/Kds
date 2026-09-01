@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = ['flask', 'pymodbus.client.sync', 'pymodbus', 'qrcode', 'pyotp', 'hashlib', 'requests', 'jinja2', 'werkzeug', 'serial.tools.list_ports', 'uuid', 'socket', 'tkcalendar', 'psutil', 'pygame', 'matplotlib', 'matplotlib.backends.backend_tkagg', 'numpy', 'PIL', 'PIL._tkinter_finder', 'uuid', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox', 'tkinter.filedialog', 'tkinter.simpledialog', 'tkinter.colorchooser', 'tkinter.scrolledtext', 'serial', 'sqlite3', 'json', 'logging', 'datetime', 'math', 'hashlib', 're', 'threading', 'platform', 'winsound', 'shutil', 'subprocess']
+hiddenimports = ['flask', 'pymodbus.transaction', 'pymodbus.payload', 'pymodbus.client.sync', 'pymodbus', 'qrcode', 'pyotp', 'hashlib', 'requests', 'jinja2', 'werkzeug', 'serial.tools.list_ports', 'uuid', 'socket', 'tkcalendar', 'psutil', 'pygame', 'matplotlib', 'matplotlib.backends.backend_tkagg', 'numpy', 'PIL', 'PIL._tkinter_finder', 'uuid', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox', 'tkinter.filedialog', 'tkinter.simpledialog', 'tkinter.colorchooser', 'tkinter.scrolledtext', 'serial', 'sqlite3', 'json', 'logging', 'datetime', 'math', 'hashlib', 're', 'threading', 'platform', 'winsound', 'shutil', 'subprocess']
 hiddenimports += collect_submodules('flask')
 
 

@@ -787,8 +787,13 @@ document.getElementById('themeContainer').addEventListener('wheel', (evt) => {
                 const groupModal = document.getElementById('confirmGroupModal');
                 if (groupModal) groupModal.style.display = 'flex';
             } else {
-                // Utilisation de updateLocalExtra pour refléter le changement sur l'interface
+                // 1. Mise à jour de l'interface visuellement
                 updateLocalExtra(timeTargetBid, 'desired_time', formattedTime);
+                
+                // 2. Appel direct de votre fonction pour envoyer l'extra au serveur
+                sendAllExtras(timeTargetBid);
+                
+                // 3. Fermeture de la modale
                 closeTimeModal();
             }
         }
