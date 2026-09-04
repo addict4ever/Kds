@@ -217,7 +217,6 @@
                                                 | replace('COMMERCANT', '')
                                                 | replace('ORIGINALE', '')
                                                 | replace('SOUS-TOTALAL', 'SOUS-TOTAL')
-                                                | replace('TOT', 'TOTAL')
                                                 | replace('=', '')
                                                 | replace('*', '')
                                                 | safe 
@@ -231,6 +230,8 @@
                                     <ul class="order-item-subs">
                                         {% for sub in it.sub_items %}
                                             {% set s_upper = sub | upper %}
+                                            
+                                            {# 1. Filtre d'exclusion des lignes inutiles du ticket #}
                                             {% if "MERCI" not in s_upper 
                                                 and "PROCHAINE" not in s_upper 
                                                 and "SERVI PAR" not in s_upper 
@@ -239,17 +240,15 @@
                                                 and "ORIGINALE" not in s_upper
                                                 and "====" not in s_upper %}
                                                 
-                                                {# Nettoyage global de la ligne de sous-élément #}
-                                                {% set clean_sub = sub | replace('SOUS-TOTALAL', 'SOUS-TOTAL') | replace('TOT', 'TOTAL') | replace('*', '') %}
-                                                
-                                                {# AJUSTEMENT ICI : Détection stricte de "TPS $" et "TVQ $" #}
+                                                {# 2. Lignes importantes (Totaux, TPS, TVQ) #}
                                                 {% if "TOT" in s_upper or "TPS $" in s_upper or "TVQ $" in s_upper %}
-                                                    <div class="order-item-main" style="font-size: 15px; font-weight: bold; margin-top: 6px; padding: 3px 0; color: #ffcc00; list-style: none;">
-                                                        {{ clean_sub }}
-                                                    </div>
-                                                {# OPTIONS NORMALES #}
+                                                    <li class="order-item-total" style="font-size: 15px; font-weight: bold; margin-top: 6px; padding: 3px 0; color: #ffcc00; list-style: none;">
+                                                        {{ sub }}
+                                                    </li>
+                                                
+                                                {# 3. Options et sous-éléments normaux #}
                                                 {% else %}
-                                                    <li>{{ clean_sub }}</li>
+                                                    <li>{{ sub }}</li>
                                                 {% endif %}
                                                 
                                             {% endif %}

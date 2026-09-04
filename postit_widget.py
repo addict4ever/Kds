@@ -516,7 +516,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         print_win.overrideredirect(True) 
         print_win.resizable(False, False)
         
-        width, height = 300, 370
+        width, height = 300, 430
         screen_width = print_win.winfo_screenwidth()
         screen_height = print_win.winfo_screenheight()
         x = (screen_width // 2) - (width // 2)
@@ -542,6 +542,25 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 # Ferme la fenêtre de choix avant d'afficher l'erreur si besoin
                 print_win.destroy()
                 show_custom_error("Erreur", f"Échec de l'impression sur Imprimante {p_index}")
+        def handle_resend_to_pizza():
+            table_number = self.order_data.get('table_number')
+            if not table_number:
+                show_custom_error("Erreur", "Numéro de table introuvable.")
+                return
+
+            print_win.destroy()
+            
+            # Appel de la fonction de réactivation via le db_manager
+            success = self.db_manager.reactivate_order_by_table_livreur(table_number)
+            
+            if success:
+                # Rafraîchir l'interface si la méthode existe
+                if hasattr(self.master_selector, 'refresh_display'):
+                    self.master_selector.refresh_display()
+                elif hasattr(self, 'master_selector') and hasattr(self.master_selector, 'load_orders'):
+                    self.master_selector.load_orders()
+            else:
+                show_custom_error("Attention", f"Aucune commande modifiée pour la table {table_number}.")
 
         # --- Boutons ---
         tk.Button(print_win, text="Imprimante 1 (Cuisine)", font=('Arial', 10, 'bold'),
@@ -556,9 +575,13 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         tk.Button(print_win, text="Imprimante 4 (Livreur)", font=('Arial', 10, 'bold'),
                   height=2, width=22, bg="#90EE90", fg="black", command=lambda: send_to(4)).pack(pady=5)
         
+        tk.Button(print_win, text="Renvoyer à Pizza", font=('Arial', 10, 'bold'),
+                  height=1, width=22, bg="#e67e22", fg="white", command=handle_resend_to_pizza).pack(pady=5)
+
         tk.Button(print_win, text="ANNULER", font=('Arial', 10),
                   height=1, width=15, bg="#95a5a6", fg="white",
                   command=print_win.destroy).pack(pady=20)
+    
     
     # ⭐ MODIFIÉ: SÉPARATION (SPLIT) - Utilisation de la logique de distribution des items
     def _handle_split_order(self):

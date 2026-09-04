@@ -400,9 +400,10 @@ class TimerWidget(tk.Toplevel):
 QUICK_PRESETS = [
     ("🥔 Patates Four", 60 * 60),
     ("🍕 Pain Pizza", 24 * 60),
-    ("🍖 Côtes Levées", 12 * 60),
+    ("🍖 Côtes Levées", 14 * 60),
     ("🍤 Crevettes", 12 * 60),
     ("🦐 Langoustine", 12 * 60),
+    ("🦐🍤 Langoustine Crevettes", 12 * 60),
     ("🐟 Saumon", 8 * 60),
     ("🥩 Filet mignon", 6 * 60),
     ("🍢 Brochette Filet Mignon", 6 * 60),
@@ -430,6 +431,11 @@ QUICK_PRESETS = [
     ("⏱️ Minuterie 20m", 20 * 60),
     ("🥔 Patate déjeuner", 5 * 60),
     ("🥔 Patate déjeuner", 4 * 60),
+    ("🍚 Riz", 6 * 60),
+    ("🥔 Patate pilée", 6 * 60),
+    ("🍗 Poulet fajitas", 6 * 60),
+    ("🥣 Sauce", 6 * 60),
+    ("🥦 Légumes", 5 * 60),
 ]
 
 SIMPLE_SOUND_CHOICES = {

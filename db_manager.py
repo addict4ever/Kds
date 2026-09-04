@@ -204,6 +204,38 @@ class DBManager:
         finally:
             conn_const.close()
 
+    def reactivate_order_by_table_livreur(self, table_number):
+        """
+        Réactive TOUTES les commandes correspondantes dans la base de données 
+        des livreurs (kds_livreur_orders.db) pour un même numéro de table 
+        en remettant leur statut à 'En attente', quel que soit leur statut actuel.
+        """
+        try:
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor_livreur = conn_livreur.cursor()
+            
+            # On met à jour le statut sans filtre sur l'ancien statut
+            cursor_livreur.execute("""
+                UPDATE orders 
+                SET status = 'En attente'
+                WHERE table_number = ?
+            """, (str(table_number),))
+            
+            success_count = cursor_livreur.rowcount
+            conn_livreur.commit()
+            conn_livreur.close()
+            
+            if success_count > 0:
+                print(f"✅ BDD Livreurs : {success_count} commande(s) de la table {table_number} réactivée(s) (statut -> 'En attente').")
+                return True
+            else:
+                print(f"⚠️ BDD Livreurs : Aucune commande trouvée pour la table {table_number}.")
+                return False
+                
+        except Exception as livreur_err:
+            print(f"❌ Erreur lors de la réactivation dans la BDD livreur : {livreur_err}")
+            return False
+
     def reactivate_order_by_table(self, table_number):
         """
         Réactive ou met à jour TOUTES les commandes correspondantes dans la base de données kds_orders 

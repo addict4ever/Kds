@@ -508,6 +508,12 @@
                     <input type="checkbox" id="toggle-salle" onchange="appliquerFiltresAffichage()">
                     <span>SALLE</span>
                 </label>
+
+                <label style="color: #e67e22; border-left: 2px solid #555; padding-left: 10px;">
+                    <input type="checkbox" id="toggle-pizza-only" onchange="appliquerFiltresAffichage()">
+                    <span>🍕 PIZZA SEULEMENT</span>
+                </label>
+
             </div>
         </div>
 
@@ -699,14 +705,29 @@
     }
 
     function appliquerFiltresAffichage() {
-        // Récupère l'état coché ou non des boutons (true ou false)
+        // 1. Récupérer l'état des services
         const voir888 = document.getElementById('toggle-888').checked;
         const voirLIV = document.getElementById('toggle-liv').checked;
         const voir999 = document.getElementById('toggle-999').checked;
         const voirPA = document.getElementById('toggle-pa').checked;
         const voirSalle = document.getElementById('toggle-salle').checked;
+        
+        // État du toggle Pizza
+        const pizzaOnlyActive = document.getElementById('toggle-pizza-only').checked;
 
-        // 1. Afficher ou masquer entièrement chaque colonne de service selon la case cochée
+        // Listes de mots-clés et garnitures
+        const keywords = [
+            "LARGE", "XLARGE", "SMALL", "BAMBINO", "MINI", "COMBO", "DUO", 
+            "NACHOS", "LASAGNE", "GRATINE", "VEGETARIEN", "PIZZA", "FAMILLE", "SPECS", "GRATINEES"
+        ];
+        const garnitures = [
+            "GARNIE", "GARNI", "ANANAS", "SPECIAL", "GRECQUE", "FROMAGE", 
+            "FROM", "4 FROM", "PEPE", "FAJITAS", "POULET", "MEXICAINE", 
+            "VEGE", "CHAMP", "CHAMPIGNON", "COTE LEVEE", "COTES LEVEE", 
+            "FR MER", "FRUITS MER", "GHETTI", "PEP FROM BAC"
+        ];
+
+        // Gérer l'affichage des colonnes
         const col888 = document.querySelector('.service-column[data-column-type="t888"]');
         const colLiv = document.querySelector('.service-column[data-column-type="liv"]');
         const col999 = document.querySelector('.service-column[data-column-type="t999"]');
@@ -719,13 +740,13 @@
         if (colPa) colPa.style.setProperty('display', voirPA ? 'flex' : 'none', 'important');
         if (colSalle) colSalle.style.setProperty('display', voirSalle ? 'flex' : 'none', 'important');
 
-        // 2. Sélectionne toutes les cartes de commandes présentes à l'écran pour les filtrer individuellement
+        // 2. Parcourir chaque carte de commande
         const commandes = document.querySelectorAll('.order-wrapper');
 
         commandes.forEach(card => {
             const type = card.getAttribute('data-order-type');
 
-            // On vérifie si la commande doit être affichée selon son type exact
+            // Filtre de base par type de service
             let doitAfficher = false;
             if (type === 't888' && voir888) doitAfficher = true;
             if (type === 'liv' && voirLIV) doitAfficher = true;
@@ -733,7 +754,32 @@
             if (type === 'pa' && voirPA) doitAfficher = true;
             if (type === 'salle' && voirSalle) doitAfficher = true;
 
-            // Application du style CSS instantané sur la carte
+            // Si la commande passe le filtre et que le toggle "Pizza" est actif
+            if (doitAfficher && pizzaOnlyActive) {
+                
+                // 🚫 EXCEPTION : On applique le filtre partout SAUF pour le 888
+                if (type !== 't888') {
+                    const contentUpper = card.innerText.toUpperCase();
+
+                    const has_pizza_medium = contentUpper.includes("MEDIUM") && garnitures.some(g => contentUpper.includes(g));
+                    const has_pain_ail = contentUpper.includes("PAIN A L'AIL");
+
+                    const is_probably_just_cuisson = contentUpper.includes("MEDIUM") && 
+                                                    !has_pizza_medium && 
+                                                    !keywords.some(word => contentUpper.includes(word));
+
+                    if (is_probably_just_cuisson && !contentUpper.includes("PIZZA")) {
+                        doitAfficher = false;
+                    } else {
+                        const hasKeyword = keywords.some(word => contentUpper.includes(word));
+                        if (!hasKeyword && !has_pizza_medium && !has_pain_ail) {
+                            doitAfficher = false;
+                        }
+                    }
+                }
+            }
+
+            // Application finale de l'affichage
             if (doitAfficher) {
                 card.style.setProperty('display', '', 'important'); 
             } else {
@@ -1149,9 +1195,9 @@
     setInterval(updateOrderTimers, 1000);
 
     function marquerTraite(orderId) {
-        // EN CUISINE : On envoie "Traitee" sans accent pour éviter que l'URL casse (404)
-        const newStatus = 'Pizza';
-        console.log(`Envoi au db_manager via /update_status/${orderId}/${newStatus}`);
+        // EN CUISINE : On envoie le statut au serveur
+        const newStatus = 'Pizza'; // (ou 'Pizza' selon ta logique)
+        console.log(`Envoi au db_manager via /update_status_livraisons/${orderId}/${newStatus}`);
 
         fetch(`/update_status_livraisons/${orderId}/${newStatus}`, {
             method: 'POST',
@@ -1160,7 +1206,6 @@
             }
         })
         .then(response => {
-            // Correction du "body stream already read" : On ne lit la réponse qu'une seule fois !
             return response.json().then(data => {
                 if (!response.ok) {
                     throw new Error(data.message || `Erreur serveur (${response.status})`);
@@ -1175,15 +1220,20 @@
         })
         .then(data => {
             if (data.success) {
-                // Cache de la vue Tableau
+                // 1. Cache visuel instantané de la vue Tableau
                 const row = document.getElementById(`table-row-${orderId}`);
                 if (row) row.style.display = 'none';
 
-                // Cache de la vue Grille (les Post-its)
+                // 2. Cache visuel instantané de la vue Grille (les Post-its)
                 const card = document.querySelector(`.order-wrapper[data-order-id="${orderId}"]`);
                 if (card) card.style.display = 'none';
                 
                 console.log(`Commande ${orderId} archivée avec succès !`);
+
+                // 🚀 3. RAFRAÎCHISSEMENT IMMÉDIAT DU SERVEUR
+                if (typeof refreshOrders === 'function') {
+                    refreshOrders();
+                }
             } else {
                 console.error("Erreur KDS :", data.message);
                 alert("Erreur KDS : " + data.message);

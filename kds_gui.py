@@ -1466,12 +1466,12 @@ class KDSGUI:
         table_num = str(order_data.get('table_number', '')).upper() if order_data else ""
         preset = "PRESET 1"
         
-        # 🚀 SOLUTION SÉCURISÉE : Utilisation de winsound (natif Windows, sans ctypes ni crash)
+        # 🚀 SOLUTION SÉCURISÉE : Un seul gros beep style alarme
         def run_safe_sound():
             try:
                 import winsound
-                # Paramètres : Fréquence (ex: 1000 Hz), Durée en millisecondes (ex: 250 ms)
-                winsound.Beep(1000, 250)
+                # Fréquence à 1500 Hz (bon compromis grave/aigu) et durée à 800 ms (un gros beep bien lourd)
+                winsound.Beep(1500, 800)
             except Exception:
                 # Sécurité ultime pour ne jamais perturber le fonctionnement du KDS
                 try:

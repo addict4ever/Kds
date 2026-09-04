@@ -978,6 +978,10 @@ def update_pa_details():
 @app.route('/print_bill', methods=['POST'])
 def print_bill():
     import json
+    import os
+    import socket
+    from datetime import datetime
+    
     data = request.json
     bid = data.get('bid')
     
@@ -989,73 +993,50 @@ def print_bill():
     order_data = item_full.get('data', {})
     extras = item_full.get('extras', {})
     
-    # --- 1. CHARGEMENT DYNAMIQUE DU PORT ---
-    port_reel = None
-    config_file = "ports.json"
-    if os.path.exists(config_file):
+    # --- 1. CHARGEMENT DE LA CONFIG TCP DEPUIS printer_ip.json ---
+    computer_ip = None
+    computer_port = None
+    printer_ip_file = "printer_ip.json"
+    
+    if os.path.exists(printer_ip_file):
         try:
-            with open(config_file, "r") as f:
-                ports_config = json.load(f)
-                systeme = platform.system().lower() 
-                key_suffix = "windows_ports" if systeme == "windows" else "linux_ports"
-                port_reel = ports_config.get(key_suffix, {}).get("SERIAL_PORT_PRINTER_2")
+            with open(printer_ip_file, "r") as f:
+                ip_config = json.load(f)
+                tcp_cfg = ip_config.get("tcp_config", {})
+                computer_ip = tcp_cfg.get("SERIAL_TCP_COMPUTER_1")
+                computer_port = tcp_cfg.get("SERIAL_TCP_COMPUTER_PORT_1")
         except Exception as e:
-            logger.error(f"Erreur lecture ports.json: {e}")
+            print(f"Erreur lecture printer_ip.json: {e}")
 
-    if not port_reel:
-        port_reel = "COM10" if platform.system().lower() == "windows" else "/dev/ttyUSB4"
+    if not computer_ip:
+        computer_ip = "192.168.10.208"
+    if not computer_port:
+        computer_port = 9100
 
-    # --- 2. LOGIQUE D'EXTRACTION (Identique au KDS HTML) ---
-    found_no = "???"
-    address = "Non disponible"
-    phone = "Non disponible"
+    # --- 2. LOGIQUE D'EXTRACTION ---
     formatted_items = []
-
     raw_items = order_data.get('items', [])
+    
     for raw_it in raw_items:
         try:
-            # Conversion du texte JSON en dictionnaire Python
             it = json.loads(raw_it) if isinstance(raw_it, str) else raw_it
             main_item = str(it.get('main_item', '')).replace('@', '').strip()
             sub_items = it.get('sub_items', [])
-            
-            # Stockage pour l'affichage final
             formatted_items.append({'main': main_item, 'subs': sub_items})
-
-            # Extraction du Numéro de Livraison
-            if "LIVRAISON #" in main_item.upper():
-                found_no = main_item.split('#')[1].strip()
-
-            # Extraction de l'Adresse (Numéro civique + Rue dans les subs)
-            if main_item.replace(' ', '').isdigit() and address == "Non disponible":
-                if len(sub_items) >= 1:
-                    address = f"{main_item} {sub_items[0]}"
-
-            # Extraction du Téléphone (Cherche 10 chiffres)
-            for sub in sub_items:
-                clean_phone = ''.join(filter(str.isdigit, str(sub)))
-                if len(clean_phone) == 10:
-                    phone = f"{clean_phone[0:3]}-{clean_phone[3:6]}-{clean_phone[6:10]}"
-                if "LIVRAISON #" in str(sub).upper():
-                    found_no = str(sub).split('#')[1].strip()
         except:
             formatted_items.append({'main': str(raw_it), 'subs': []})
 
-    # --- 3. CONSTRUCTION DU TICKET TEXTUEL ---
-    heure_imp = datetime.now().strftime('%H:%M:%S')
-    
-    # Récupération des valeurs
+    # --- 3. CONSTRUCTION DU TICKET (TAILLE HAUTEUR DOUBLÉE COMME À DROITE) ---
     h_desiree = extras.get('desired_time', '').strip()
     ustensiles = extras.get('utensils', '').strip()
     note_kds = extras.get('custom_note', '').strip()
 
-    # Début du ticket
     lines = [
-        "\n" + " " * 7 + "REIMPRESSION BON DE LIVRAISON",
-        "=" * 30,
+        "REIMPRESSION",
+        "BON DE LIVRAISON",
+        "--------------------------------",
     ]
 
-    # Ajout conditionnel : on n'ajoute que si ce n'est pas vide ET pas la valeur par défaut
     if h_desiree and h_desiree.upper() != "HEURE":
         lines.append(f"HEURE REQU : {h_desiree}")
     
@@ -1065,27 +1046,37 @@ def print_bill():
     if note_kds and note_kds.upper() != "NOTE":
         lines.append(f"NOTE KDS   : {note_kds}")
 
-    # Suite du ticket
-    lines.extend([
-        "-" * 30,
-        "ARTICLES :"
-    ])
-    
+    if h_desiree or ustensiles or note_kds:
+        lines.append("--------------------------------")
+
+    # Affichage séquentiel propre
     for it in formatted_items:
-        lines.append(f"\n[ ] {it['main']}")
+        if it['main']:
+            lines.append(it['main'])
         for sub in it['subs']:
-            lines.append(f"    -> {sub}")
+            if sub:
+                lines.append(sub)
         
-    lines.append("\n" + "-" * 30)
-    lines.append("\n\n\n\n") # Espace pour la découpe
+    lines.append("--------------------------------")
+    lines.append("\n\n\n\n") # Espace pour la coupe
 
-    ticket_text = "\n".join(lines)
+    # \x1b!\x10 applique la double hauteur (taille comme le ticket de droite)
+    ticket_text = "\x1b!\x10" + "\n".join(lines) + "\x1b!\x00"
 
+    # --- 4. ENVOI TCP DIRECT ---
+    success = False
     try:
-        # Utilise ta méthode de classe pour envoyer au port série
-        success = SerialReader.reprint_ticket_to_printer(ticket_text, port_reel)
+        encoded_data = ticket_text.encode('latin-1', errors='replace')
+        
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(2.0)
+            s.connect((computer_ip, int(computer_port)))
+            s.sendall(encoded_data)
+            
+        success = True
+        print(f"Copie TCP envoyée avec succès vers {computer_ip}:{computer_port}")
     except Exception as e:
-        print(f"Erreur imprimante: {e}")
+        print(f"Échec de l'envoi TCP sur {computer_ip}:{computer_port} : {e}")
         success = False
     
     return jsonify(success=success, printed_content=ticket_text)

@@ -12,12 +12,16 @@
     {% set order_type = "salle" %}
 {% endif %}
 
+{# Récupération de la date de création pour s'assurer qu'elle est bien disponible pour le timer #}
+{% set order_timestamp = item.data.created_at if item.data.created_at is defined else (item.data.timestamp if item.data.timestamp is defined else item.data.creation_date) %}
+
 {# Conteneur principal avec les attributs data-* pour le filtrage et le timer #}
 <div class="order-wrapper mb-3" 
      id="order-{{ item.data.id }}" 
      data-order-id="{{ item.data.id }}" 
      data-order-type="{{ order_type }}"
-     data-timestamp="{{ item.data.created_at if item.data.created_at is defined else item.data.timestamp }}">
+     data-timestamp="{{ order_timestamp }}"
+     data-created-at="{{ order_timestamp }}">
 
     <div class="card alert-pa-card shadow-sm" style="position: relative; overflow: hidden;">
         
@@ -60,7 +64,7 @@
                     
                     <li class="list-group-item bg-transparent border-0 px-0 py-1">
                         {% if "HEURE" in text_verif %}
-                            {# --- UNIQUMENT L'HEURE : EN ROUGE VIF --- #}
+                            {# --- UNIQUEMENT L'HEURE : EN ROUGE VIF --- #}
                             <div class="item-main" style="color: #ff3333 !important; font-weight: bold;">{{ it.main_item if it is mapping else it }}</div>
                             {% if it is mapping and it.sub_items %}
                             <div class="item-subs" style="color: #ff3333 !important;">
