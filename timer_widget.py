@@ -400,6 +400,7 @@ class TimerWidget(tk.Toplevel):
 QUICK_PRESETS = [
     ("🥔 Patates Four", 60 * 60),
     ("🍕 Pain Pizza", 24 * 60),
+    ("🍖 Côtes Levées", 12 * 60),
     ("🍖 Côtes Levées", 14 * 60),
     ("🍤 Crevettes", 12 * 60),
     ("🦐 Langoustine", 12 * 60),
@@ -435,6 +436,7 @@ QUICK_PRESETS = [
     ("🥔 Patate pilée", 6 * 60),
     ("🍗 Poulet fajitas", 6 * 60),
     ("🥣 Sauce", 6 * 60),
+    ("🥣 Sauce", 8 * 60),
     ("🥦 Légumes", 5 * 60),
 ]
 
@@ -483,13 +485,13 @@ class TimerManagerWindow(tk.Toplevel):
             full_text = f"{name}\n{duration_str}"
 
             # LOGIQUE DES 4 COULEURS :
-            if i < 13:
+            if i < 14:
                 # 🔵 SECTION 1 : Les préparations longues / Plats signatures
                 current_bg = "#2980b9" 
             elif i < 18:
                 # 🟠 SECTION 2 : Accompagnements et Entrées (Pain, Ailes, etc.)
                 current_bg = "#e67e22"
-            elif i < 30:
+            elif i < 32:
                 # 🟢 SECTION 3 : Minuteries courtes (1m à 8m)
                 current_bg = "#27ae60"
             else:
@@ -503,7 +505,7 @@ class TimerManagerWindow(tk.Toplevel):
                 bg=current_bg, 
                 fg="white", 
                 font=("Arial", 11, "bold"), 
-                width=15, height=3, bd=4, relief=tk.RAISED
+                width=15, height=2, bd=4, relief=tk.RAISED
             )
             
             # Calcul pour 3 colonnes
@@ -518,8 +520,32 @@ class TimerManagerWindow(tk.Toplevel):
 
         
 
-        tk.Button(main_frame, text="Annuler / Fermer", command=self.on_close, 
-                  bg="#bdc3c7", fg="#333", font=("Arial", 12)).pack(fill=tk.X, pady=(20, 5))
+        cancel_container = tk.Frame(main_frame, bg="#ecf0f1")
+        cancel_container.pack(pady=(20, 5))
+
+        # 2. Utilisation d'un Canvas pour créer le dégradé (Largeur: 220, Hauteur: 40)
+        canvas_btn = tk.Canvas(cancel_container, width=220, height=40, highlightthickness=0, cursor="hand2")
+        canvas_btn.pack()
+
+        # Dessin du dégradé horizontal (du Rouge vers le Jaune)
+        width, height = 220, 40
+        for x in range(width):
+            # Interpolation linéaire des couleurs (Rouge #ff3b30 -> Jaune #ffcc00)
+            r = 255
+            g = int(59 + (204 - 59) * (x / width))
+            b = 0
+            color = f"#{r:02x}{g:02x}{b:02x}"
+            canvas_btn.create_line(x, 0, x, height, fill=color)
+
+        # Ajout du texte et de l'effet cliquable par-dessus le dégradé
+        text_item = canvas_btn.create_text(width // 2, height // 2, text="❌  Annuler / Fermer", fill="white", font=("Arial", 11, "bold"))
+
+        # Association du clic de la souris et des effets visuels
+        def on_canvas_click(event):
+            self.on_close()
+
+        canvas_btn.tag_bind(text_item, "<Button-1>", on_canvas_click)
+        canvas_btn.bind("<Button-1>", on_canvas_click)
 
     def test_sound(self):
         sound_id = self.selected_sound_id.get()

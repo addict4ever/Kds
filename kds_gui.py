@@ -488,6 +488,7 @@ class KonstantesManagerWindow(tk.Toplevel):
         self.grab_release()
         self.destroy()
 
+
 class ExitOptionsDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
@@ -495,8 +496,8 @@ class ExitOptionsDialog(tk.Toplevel):
         # Supprime entièrement la barre de titre
         self.overrideredirect(True)
 
-        # Taille fixe
-        w, h = 350, 200
+        # Taille fixe plus confortable pour un look moderne
+        w, h = 380, 280
 
         # Centrage
         self.update_idletasks()
@@ -512,25 +513,69 @@ class ExitOptionsDialog(tk.Toplevel):
         # Valeur par défaut
         self.result = "cancel"
 
-        # ======= STYLE DE LA FENÊTRE ==========
-        frame = tk.Frame(self, bg="#2c3e50", bd=2, relief="ridge")
-        frame.pack(fill="both", expand=True)
+        # ======= STYLE DE LA FENÊTRE (Cadre principal moderne) ==========
+        main_frame = tk.Frame(self, bg="#1e272e", bd=3, relief="flat")
+        main_frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, 
+        # En-tête / Titre stylisé avec icône
+        header_frame = tk.Frame(main_frame, bg="#1e272e")
+        header_frame.pack(fill="x", pady=(15, 10))
+
+        tk.Label(header_frame, 
+                 text="⚙️  Options du Système", 
+                 font=("Arial", 14, "bold"),
+                 bg="#1e272e", fg="#00d2d3").pack()
+
+        tk.Label(header_frame, 
                  text="Que souhaitez-vous faire ?", 
-                 font=("Arial", 13, "bold"),
-                 bg="#2c3e50", fg="white").pack(pady=15)
+                 font=("Arial", 10),
+                 bg="#1e272e", fg="#808e9b").pack(pady=(2, 0))
 
-        btn_style = {"width": 20, "height": 1, "font": ("Arial", 11)}
+        # ======= BOUTONS D'ACTIONS PERSONNALISÉS ==========
+        btn_container = tk.Frame(main_frame, bg="#1e272e")
+        btn_container.pack(fill="both", expand=True, padx=25, pady=5)
 
-        tk.Button(frame, text="🔁 Redémarrer", command=self.choose_reboot, **btn_style).pack(pady=5)
-        tk.Button(frame, text="⏻ Éteindre", command=self.choose_shutdown, **btn_style).pack(pady=5)
-        tk.Button(frame, text="❌ Annuler", command=self.choose_cancel, **btn_style).pack(pady=5)
+        # Style commun pour l'alignement
+        common_style = {
+            "font": ("Arial", 11, "bold"),
+            "bd": 0,
+            "relief": "flat",
+            "cursor": "hand2",
+            "activeforeground": "white"
+        }
+
+        # 1. Redémarrer le programme (Bleu/Cyan moderne)
+        btn_restart = tk.Button(btn_container, text="  🔄  Redémarrer le programme", 
+                                command=self.choose_restart_app,
+                                bg="#0984e3", fg="white", activebackground="#74b9ff", **common_style)
+        btn_restart.pack(fill="x", pady=4, ipady=6)
+
+        # 2. Redémarrer le PC (Orange/Ambre)
+        btn_reboot = tk.Button(btn_container, text="  🔁  Redémarrer le PC", 
+                               command=self.choose_reboot,
+                               bg="#e17055", fg="white", activebackground="#fab1a0", **common_style)
+        btn_reboot.pack(fill="x", pady=4, ipady=6)
+
+        # 3. Éteindre le PC (Rouge / Danger)
+        btn_shutdown = tk.Button(btn_container, text="  ⏻  Éteindre le PC", 
+                                 command=self.choose_shutdown,
+                                 bg="#d63031", fg="white", activebackground="#ff7675", **common_style)
+        btn_shutdown.pack(fill="x", pady=4, ipady=6)
+
+        # 4. Annuler (Gris neutre)
+        btn_cancel = tk.Button(btn_container, text="  ❌  Annuler", 
+                               command=self.choose_cancel,
+                               bg="#636e72", fg="white", activebackground="#b2bec3", **common_style)
+        btn_cancel.pack(fill="x", pady=4, ipady=6)
 
         # Interdire toute fermeture externe (Alt+F4, etc.)
         self.protocol("WM_DELETE_WINDOW", lambda: None)
 
         self.wait_window(self)
+
+    def choose_restart_app(self):
+        self.result = "restart_app"
+        self.destroy()
 
     def choose_reboot(self):
         self.result = "reboot"
@@ -544,7 +589,6 @@ class ExitOptionsDialog(tk.Toplevel):
         self.result = "cancel"
         self.destroy()
 
-
 # Note: Vous devez toujours importer 'subprocess' en haut du fichier kds_gui.py
 # import subprocess
 
@@ -552,14 +596,14 @@ class KDSGUI:
     """
     Interface graphique KDS principale basée sur Tkinter.
     """
-    def __init__(self, root: tk.Tk, db_manager: DBManager, reader=None):
+    def __init__(self, root: tk.Tk, db_manager: DBManager, reader=None,restart_callback=None):
         # 'root' est le premier argument de type tk.Tk
         self.root = root
         # ⭐ CORRECTION CRITIQUE : Utilisez l'argument 'root' pour initialiser 'self.master'
         self.master = root 
         self.db_manager = db_manager
         self.reader = reader  # <-- AJOUTEZ CETTE LIGNE : elle stocke le lecteur pour le menu technique
-
+        self.restart_callback = restart_callback
         # --- SÉCURITÉ MAXIMUM ---
         # Empêche Alt+F4
         self.root.protocol("WM_DELETE_WINDOW", self.disable_event)
@@ -1483,139 +1527,7 @@ class KDSGUI:
         import threading
         threading.Thread(target=run_safe_sound, daemon=True).start()
 
-        try:
-            # --- PACK 1 : CLASSIQUE (Optimisé Agressif) ---
-            if preset == "PRESET 1":
-                if "999" in table_num:
-                    [windows_hardware_beep(2200, 80) for _ in range(5)]
-                elif "888" in table_num: 
-                    [windows_hardware_beep(1500, 150) for _ in range(4)]
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(1200, 200); windows_hardware_beep(1600, 200); windows_hardware_beep(2000, 200)
-                elif "PA" in table_num: 
-                    windows_hardware_beep(2200, 100); windows_hardware_beep(2200, 100); windows_hardware_beep(2200, 100)
-                else: 
-                    windows_hardware_beep(1400, 200); windows_hardware_beep(1400, 200)
-
-            # --- PACK 2 : TECHNO (Rafale Rapide) ---
-            elif preset == "PRESET 2":
-                if "999" in table_num:
-                    windows_hardware_beep(2500, 60); windows_hardware_beep(3000, 60); windows_hardware_beep(2500, 60); windows_hardware_beep(3000, 60)
-                elif "888" in table_num: 
-                    windows_hardware_beep(800, 80); windows_hardware_beep(1200, 80); windows_hardware_beep(1600, 80); windows_hardware_beep(2000, 150)
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(2500, 80); windows_hardware_beep(2000, 80); windows_hardware_beep(2500, 80)
-                elif "PA" in table_num: 
-                    [windows_hardware_beep(3200, 60) for _ in range(5)]
-                else: 
-                    windows_hardware_beep(1800, 80); windows_hardware_beep(1800, 80); windows_hardware_beep(1800, 80)
-
-            # --- PACK 3 : PERCUTANT (Fréquences Lourdes) ---
-            elif preset == "PRESET 3":
-                if "999" in table_num:
-                    windows_hardware_beep(2000, 150); windows_hardware_beep(2000, 150); windows_hardware_beep(2000, 150)
-                elif "888" in table_num: 
-                    windows_hardware_beep(1000, 400); windows_hardware_beep(1000, 400)
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(1500, 150); windows_hardware_beep(1200, 150); windows_hardware_beep(900, 300)
-                elif "PA" in table_num: 
-                    windows_hardware_beep(1800, 100); windows_hardware_beep(1200, 100); windows_hardware_beep(1800, 100)
-                else: 
-                    windows_hardware_beep(1300, 350)
-
-            # --- PACK 4 : ALERTES FLASH ---
-            elif preset == "PRESET 4":
-                if "999" in table_num:
-                    [windows_hardware_beep(2800, 50) for _ in range(6)]
-                elif "888" in table_num: 
-                    [windows_hardware_beep(2400, 70) for _ in range(6)]
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(1600, 300); windows_hardware_beep(2200, 300)
-                elif "PA" in table_num: 
-                    windows_hardware_beep(2600, 60); windows_hardware_beep(2600, 60); windows_hardware_beep(2600, 60)
-                else: 
-                    windows_hardware_beep(1500, 100); windows_hardware_beep(1500, 100)
-
-            # --- PACK 5 : MÉLODIQUE ---
-            elif preset == "PRESET 5":
-                if "999" in table_num:
-                    windows_hardware_beep(2200, 100); windows_hardware_beep(1500, 100); windows_hardware_beep(2200, 100)
-                elif "888" in table_num: 
-                    windows_hardware_beep(1200, 150); windows_hardware_beep(1700, 150); windows_hardware_beep(1200, 150)
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(1800, 150); windows_hardware_beep(1300, 150); windows_hardware_beep(1800, 150)
-                elif "PA" in table_num: 
-                    windows_hardware_beep(2100, 150); windows_hardware_beep(1900, 150); windows_hardware_beep(2100, 150)
-                else: 
-                    windows_hardware_beep(1100, 150); windows_hardware_beep(1500, 150)
-
-            # --- PACK 6 : RÉTRO BIPS ---
-            elif preset == "PRESET 6":
-                if "999" in table_num:
-                    windows_hardware_beep(4000, 60); windows_hardware_beep(3500, 60); windows_hardware_beep(3000, 60)
-                elif "888" in table_num: 
-                    windows_hardware_beep(1400, 200); windows_hardware_beep(1400, 200); windows_hardware_beep(1400, 200)
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(1800, 80); windows_hardware_beep(1600, 80); windows_hardware_beep(1400, 80)
-                elif "PA" in table_num: 
-                    windows_hardware_beep(3500, 120); windows_hardware_beep(3500, 120)
-                else: 
-                    windows_hardware_beep(1200, 150); windows_hardware_beep(1000, 150)
-
-            # --- PACK 7 : URGENCE ---
-            elif preset == "PRESET 7":
-                if "999" in table_num:
-                    [windows_hardware_beep(4200, 40) for _ in range(10)]
-                elif "888" in table_num: 
-                    windows_hardware_beep(3200, 250); windows_hardware_beep(3200, 250); windows_hardware_beep(3200, 250)
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(2800, 400); windows_hardware_beep(3500, 200)
-                elif "PA" in table_num: 
-                    [windows_hardware_beep(3800, 40) for _ in range(8)]
-                else: 
-                    windows_hardware_beep(3000, 150); windows_hardware_beep(3000, 150)
-
-            # --- PACK 8 : RYTHMIQUE ---
-            elif preset == "PRESET 8":
-                if "999" in table_num:
-                    windows_hardware_beep(1800, 80); time.sleep(0.02); windows_hardware_beep(1800, 150)
-                elif "888" in table_num: 
-                    windows_hardware_beep(1100, 100); windows_hardware_beep(1100, 100); time.sleep(0.05); windows_hardware_beep(1600, 300)
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(1400, 100); windows_hardware_beep(1400, 100); windows_hardware_beep(1100, 200)
-                elif "PA" in table_num: 
-                    windows_hardware_beep(2000, 80); windows_hardware_beep(2000, 80); time.sleep(0.04); windows_hardware_beep(2000, 120)
-                else: 
-                    windows_hardware_beep(1500, 150); windows_hardware_beep(1500, 80); windows_hardware_beep(1500, 80)
-
-            # --- PACK 9 : SPATIAL ---
-            elif preset == "PRESET 9":
-                if "999" in table_num:
-                    windows_hardware_beep(2000, 200); windows_hardware_beep(2500, 200)
-                elif "888" in table_num: 
-                    windows_hardware_beep(900, 300); windows_hardware_beep(1800, 400)
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(1700, 200); windows_hardware_beep(2100, 200); windows_hardware_beep(1700, 200)
-                elif "PA" in table_num: 
-                    windows_hardware_beep(2400, 100); windows_hardware_beep(2800, 100); windows_hardware_beep(2400, 100)
-                else: 
-                    windows_hardware_beep(1600, 350)
-
-            # --- PACK 10 : BUREAU ---
-            elif preset == "PRESET 10":
-                if "999" in table_num:
-                    [windows_hardware_beep(2000, 60) for _ in range(4)]
-                elif "888" in table_num: 
-                    windows_hardware_beep(1300, 150); windows_hardware_beep(1100, 150); windows_hardware_beep(1500, 200)
-                elif "LIV" in table_num: 
-                    windows_hardware_beep(1400, 150); windows_hardware_beep(1700, 150); windows_hardware_beep(1400, 150)
-                elif "PA" in table_num: 
-                    windows_hardware_beep(1900, 80); windows_hardware_beep(1900, 80); windows_hardware_beep(1900, 80); windows_hardware_beep(1900, 80)
-                else: 
-                    windows_hardware_beep(1300, 150); windows_hardware_beep(1300, 150)
-
-        except Exception as e:
-            logging.error(f"Erreur sonore: {e}")
+        
 
     def add_new_timer(self, name: str, duration_seconds: int, sound_id: int):
         """
@@ -1702,40 +1614,37 @@ class KDSGUI:
 
     # --- NOUVELLES MÉTHODES D'AUTHENTIFICATION ---
     def _authenticate_and_exit(self, event=None):
-        """Authentifie avant de fermer l'application."""
+        """Authentifie avant d'ouvrir le menu des options de sortie/redémarrage."""
         
-        # 1. Vérification d'accès par TOTP
-        if check_access_password("Quitter l'Application"):
-            
-            # 2. Afficher la boîte de dialogue personnalisée
+        if check_access_password("Options du Système"): # ou votre fonction de vérification actuelle
             dialog = ExitOptionsDialog(self.root)
             action = dialog.result
             
-            if action == "reboot":
+            if action == "restart_app":
+                self.update_status("Redémarrage du programme en cours...", '#2980b9')
+                if self.restart_callback:
+                    self.restart_callback() # Appelle la fonction globale transmise depuis main_app_2.py
+                    
+            elif action == "reboot":
                 self.update_status("Initialisation du Redémarrage du PC...", '#e67e22')
                 self.root.destroy()
-                
-                # Exécution de la commande de Redémarrage
-                if os.name == 'nt':  # Windows
+                if os.name == 'nt':
                     subprocess.Popen(['shutdown', '/r', '/t', '1'])
-                else:  # Linux/macOS (nécessite des permissions sudo si ce n'est pas le bureau)
+                else:
                     subprocess.Popen(['sudo', 'shutdown', '-r', 'now'])
                 
             elif action == "shutdown":
                 self.update_status("Initialisation de l'Arrêt du PC...", '#e74c3c')
                 self.root.destroy()
-                
-                # Exécution de la commande d'Extinction
-                if os.name == 'nt':  # Windows
+                if os.name == 'nt':
                     subprocess.Popen(['shutdown', '/s', '/t', '1'])
-                else:  # Linux/macOS (nécessite des permissions sudo si ce n'est pas le bureau)
+                else:
                     subprocess.Popen(['sudo', 'shutdown', '-h', 'now'])
                 
-            else: # action == "cancel" ou fermeture par la croix
-                self.update_status("Sortie annulée ou non requise. L'application reste ouverte.", '#f1c40f')
-        
+            else:
+                self.update_status("Action annulée.", '#f1c40f')
         else:
-            self.update_status("Tentative de sortie de l'application refusée (Authentification échouée).", 'red')
+            self.update_status("Accès refusé (Mot de passe incorrect).", 'red')
 
     def _authenticate_and_open_maindish_config(self):
         """Authentifie avant d'ouvrir la fenêtre de configuration des plats."""
