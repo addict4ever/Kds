@@ -216,6 +216,18 @@ class ServeurWindow(tk.Toplevel):
 
         self.active_tables_frames = {}
 
+        # --- NOUVEAU : Saisie clavier et affichage visuel ---
+        self.key_buffer = ""
+        self.last_key_time = 0
+        self.first_key_time = 0.0  # Suivi du début de la saisie
+
+        # Label visuel en bas de l'écran pour voir la saisie en cours
+        self.typing_label = tk.Label(self, text="", font=("Arial", 16, "bold"), bg=BG_MAIN, fg="#FFD700")
+        self.typing_label.pack(side=tk.BOTTOM, pady=10)
+
+        # Lier l'événement clavier sur toute la fenêtre
+        self.bind("<Key>", self._handle_keyboard_input)
+
         self.main_frame = tk.Frame(self, bg=BG_MAIN)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -231,6 +243,84 @@ class ServeurWindow(tk.Toplevel):
         # Lancement des boucles de maintenance
         self._update_elapsed_time()
         self._maintain_window_position()
+
+
+    def _handle_keyboard_input(self, event):
+        """Permet de saisir un numéro de table au clavier avec un délai maximal global de 5 secondes."""
+        import time
+        current_time = time.time()
+        
+        # Si le tampon est vide, on initialise le moment du premier appui
+        if not self.key_buffer:
+            self.first_key_time = current_time
+        
+        # Réinitialisation automatique globale après 5 secondes écoulées depuis le début de la saisie
+        if current_time - self.first_key_time > 5.0:
+            self.key_buffer = ""
+            self.typing_label.config(text="")
+            self.first_key_time = current_time
+
+        # Valider avec Entrée
+        if event.keysym in ("Return", "KP_Enter"):
+            table_to_close = self.key_buffer.strip()
+            self.key_buffer = ""
+            self.first_key_time = 0.0
+            self.typing_label.config(text="")
+            
+            if table_to_close:
+                self._close_table_by_number(table_to_close)
+                
+        # Ajouter les chiffres tapés (seulement si on est dans la fenêtre de 5 secondes)
+        elif event.char.isdigit():
+            if current_time - self.first_key_time <= 5.0:
+                self.key_buffer += event.char
+                self.typing_label.config(text=f"Recherche Table : {self.key_buffer}")
+            
+        # Permettre d'effacer avec Retour arrière (Backspace) si besoin
+        elif event.keysym == "BackSpace":
+            if self.key_buffer:
+                self.key_buffer = self.key_buffer[:-1]
+                display_text = f"Recherche Table : {self.key_buffer}" if self.key_buffer else ""
+                self.typing_label.config(text=display_text)
+                if not self.key_buffer:
+                    self.first_key_time = 0.0
+
+    def _close_table_by_number(self, table_number_str):
+        """Recherche uniquement parmi les tables affichées et la ferme si présente."""
+        target_bill_id = None
+        
+        # VÉRIFICATION : On cherche uniquement dans les tables actives affichées à l'écran
+        for bill_id, info in self.active_tables_frames.items():
+            if str(info.get("table_num")) == str(table_number_str):
+                target_bill_id = bill_id
+                break
+                
+        # Si la table n'est PAS affichée, on ne fait absolument rien (considérée comme absente/non fermable)
+        if not target_bill_id:
+            print(f"DEBUG: La table '{table_number_str}' n'est pas affichée sur l'écran 2. Fermeture ignorée.")
+            self.typing_label.config(text=f"Table {table_number_str} non affichée", fg="#E74C3C")
+            self.after(1500, lambda: self.typing_label.config(text="", fg="#FFD700"))
+            return
+
+        # Si elle est bien présente à l'écran, on procède à sa fermeture
+        print(f"DEBUG: Fermeture de la table affichée {table_number_str} (Bill ID: {target_bill_id}) via le clavier.")
+        
+        # 1. Mettre à jour le statut dans la base de données principale via db_manager
+        if self.kds_gui_instance and hasattr(self.kds_gui_instance, 'db_manager'):
+            if hasattr(self.kds_gui_instance.db_manager, 'update_order_status'):
+                self.kds_gui_instance.db_manager.update_order_status(target_bill_id, 'Traitée')
+            elif hasattr(self.kds_gui_instance.db_manager, 'set_order_status_by_bill_id'):
+                self.kds_gui_instance.db_manager.set_order_status_by_bill_id(target_bill_id, 'Traitée')
+            
+        # 2. Utiliser remove_table pour faire disparaître la carte de l'écran 2
+        self.remove_table(target_bill_id)
+        
+        # 3. Rafraîchir l'interface principale du KDS
+        if self.kds_gui_instance and hasattr(self.kds_gui_instance, 'refresh_orders'):
+            self.kds_gui_instance.refresh_orders(force_sound_off=True)
+            
+        if self.kds_gui_instance and hasattr(self.kds_gui_instance, 'update_button_counts'):
+            self.kds_gui_instance.update_button_counts()
 
     def _maintain_window_position(self):
         """Force la fenêtre à rester sur l'écran 2."""

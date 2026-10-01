@@ -1052,7 +1052,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 item_fg = "#e74c3c"  # Rouge (Priorité haute)
             
             elif "TABLE À SORTIR" in main_text:
-                item_fg = "#1e8449"  # Vert forêt (ou #27ae60 pour un vert forêt un peu plus lumineux)
+                item_fg = "#c0392b"  # Vert forêt (ou #27ae60 pour un vert forêt un peu plus lumineux)
 
             # Détection de "PA" suivi d'un numéro (ex: PA #499 ou PA 499)
             elif re.search(r'PA\s*#?\s*\d+', main_text):
