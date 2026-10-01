@@ -543,15 +543,17 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 print_win.destroy()
                 show_custom_error("Erreur", f"Échec de l'impression sur Imprimante {p_index}")
         def handle_resend_to_pizza():
-            table_number = self.order_data.get('table_number')
-            if not table_number:
-                show_custom_error("Erreur", "Numéro de table introuvable.")
+            # On récupère l'identifiant unique de la commande (ex: 'id' ou 'bill_id')
+            order_id = self.order_data.get('id') or self.order_data.get('bill_id')
+            
+            if not order_id:
+                show_custom_error("Erreur", "Identifiant de commande introuvable.")
                 return
 
             print_win.destroy()
             
-            # Appel de la fonction de réactivation via le db_manager
-            success = self.db_manager.reactivate_order_by_table_livreur(table_number)
+            # Appel de la fonction de réactivation avec l'ID unique de la carte
+            success = self.db_manager.reactivate_order_by_table_livreur(order_id)
             
             if success:
                 # Rafraîchir l'interface si la méthode existe
@@ -560,8 +562,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 elif hasattr(self, 'master_selector') and hasattr(self.master_selector, 'load_orders'):
                     self.master_selector.load_orders()
             else:
-                show_custom_error("Attention", f"Aucune commande modifiée pour la table {table_number}.")
-
+                show_custom_error("Attention", f"Aucune commande modifiée pour l'identifiant {order_id}.")
         # --- Boutons ---
         tk.Button(print_win, text="Imprimante 1 (Cuisine)", font=('Arial', 10, 'bold'),
                   height=2, width=22, bg="#2ecc71", fg="white", command=lambda: send_to(1)).pack(pady=5)
@@ -1690,8 +1691,8 @@ class PostitSelector(tk.Frame):
         scroll_container.grid_rowconfigure(0, weight=1)
         scroll_container.grid_columnconfigure(0, weight=1)
 
-        # 1. Scrollbar Verticale
-        scrollbar = ttk.Scrollbar(scroll_container, orient=tk.VERTICAL)
+        # 1. Grande Scrollbar Verticale (Version classique tk pour accepter 'width=35')
+        scrollbar = tk.Scrollbar(scroll_container, orient=tk.VERTICAL, width=35, bg="#34495e", troughcolor="#2c3e50", activebackground="#1abc9c")
         scrollbar.grid(row=0, column=1, sticky="ns")
 
         # 2. Canvas pour le contenu (C'est ici que les post-its "vivent")

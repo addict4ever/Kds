@@ -1720,7 +1720,7 @@ class KDSGUI:
         self.master_settings_btn.bind("<Button-1>", self._show_config_popup)
 
         tk.Button(self.status_frame,
-                  text="🔄 RESET",
+                  text="🔄 REDEMARRER",
                   command=self._reset_serial_adapters,
                   font=('Segoe UI', 12, 'bold'),
                   bg='#e74c3c',  # Rouge pour indiquer une action technique

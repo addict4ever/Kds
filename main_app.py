@@ -24,9 +24,18 @@ def main():
     serial_thread = threading.Thread(target=reader.start, daemon=True)
     serial_thread.start()
 
-    tcp_reader = TCPReader(reader, net_config)
-    tcp_reader.daemon = True
-    tcp_reader.start()
+    # ⭐ Démarrage des 3 serveurs TCP (Ports 9100, 9200 et 9300)
+    tcp_reader_1 = TCPReader(reader, net_config, server_id=1)
+    tcp_reader_1.daemon = True
+    tcp_reader_1.start()
+
+    tcp_reader_2 = TCPReader(reader, net_config, server_id=2)
+    tcp_reader_2.daemon = True
+    tcp_reader_2.start()
+
+    tcp_reader_3 = TCPReader(reader, net_config, server_id=3)
+    tcp_reader_3.daemon = True
+    tcp_reader_3.start()
 
     # --- 3. DÉMARRAGE AUTOMATIQUE DU SERVEUR WEB (Flask) ---
     flask_manager = ServerManager()
@@ -50,12 +59,22 @@ def main():
             pass
             
         try:
-            tcp_reader.stop_server()
+            tcp_reader_1.stop_server()
         except Exception:
             pass
 
-        # Forcer la fermeture des ports locaux s'ils restent en suspens
-        for port in [5000, 9100]:
+        try:
+            tcp_reader_2.stop_server()
+        except Exception:
+            pass
+
+        try:
+            tcp_reader_3.stop_server()
+        except Exception:
+            pass
+
+        # Forcer la fermeture des ports locaux s'ils restent en suspens (Ajout des ports 9200 et 9300)
+        for port in [5000, 9100, 9200, 9300]:
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -100,7 +119,7 @@ def main():
 
     # 3. Initialisation de l'Interface Graphique (Main Thread)
     root = tk.Tk()
-    root.title("KDS - Kitchen Display System (Port Série + TCP 9100)")
+    root.title("KDS - Kitchen Display System (Multi-TCP & Série)")
 
     app = KDSGUI(root, db_manager, reader, restart_callback=restart_application)
 
@@ -114,8 +133,14 @@ def main():
         if 'reader' in locals():
             reader.stop_reader()
         
-        if 'tcp_reader' in locals():
-            tcp_reader.stop_server()
+        if 'tcp_reader_1' in locals():
+            tcp_reader_1.stop_server()
+
+        if 'tcp_reader_2' in locals():
+            tcp_reader_2.stop_server()
+
+        if 'tcp_reader_3' in locals():
+            tcp_reader_3.stop_server()
             
         root.destroy()
 

@@ -417,6 +417,10 @@
     <div id="trash-livreur-btn" style="cursor: pointer; font-size: 2.5rem; background: rgba(255, 0, 0, 0.2); padding: 5px; border-radius: 50%; border: 2px solid red; display: flex; align-items: center; justify-content: center; width: 50px; height: 50px;">
         🗑️
     </div>
+
+    <div id="live-clock" style="background-color: #c0392b; color: white; font-weight: bold; font-size: 1rem; padding: 4px 10px; border-radius: 6px; border: 1.5px solid #e74c3c; box-shadow: 0 2px 4px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; letter-spacing: 0.5px;">
+        00:00:00
+    </div>
     
     <button onclick="toggleSettings()" style="background: none; border: none; font-size: 2.5rem; cursor: pointer; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.5));">
         😊
@@ -505,12 +509,12 @@
                 </label>
 
                 <label style="color: #f1c40f;">
-                    <input type="checkbox" id="toggle-salle" onchange="appliquerFiltresAffichage()">
+                    <input type="checkbox" id="toggle-salle" checked onchange="appliquerFiltresAffichage()">
                     <span>SALLE</span>
                 </label>
 
                 <label style="color: #e67e22; border-left: 2px solid #555; padding-left: 10px;">
-                    <input type="checkbox" id="toggle-pizza-only" onchange="appliquerFiltresAffichage()">
+                    <input type="checkbox" id="toggle-pizza-only" checked onchange="appliquerFiltresAffichage()">
                     <span>🍕 PIZZA SEULEMENT</span>
                 </label>
 
@@ -674,6 +678,17 @@
         }
     }
 
+    function updateLiveClock() {
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        
+        const clockElement = document.getElementById('live-clock');
+        if (clockElement) {
+            clockElement.innerText = `${hours}:${minutes}:${seconds}`;
+        }
+    }
 
     function toggleSettings() {
         const panel = document.getElementById('kds-settings-panel');
@@ -873,6 +888,9 @@
         const savedSize = localStorage.getItem('kds_font_preference') || 'small';
         changeFontSize(savedSize);
     });
+
+    setInterval(updateLiveClock, 1000);
+    document.addEventListener("DOMContentLoaded", updateLiveClock);
 
     function triggerVisualAlert() {
         body.classList.add('alert-flash-red');

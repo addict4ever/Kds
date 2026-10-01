@@ -204,36 +204,36 @@ class DBManager:
         finally:
             conn_const.close()
 
-    def reactivate_order_by_table_livreur(self, table_number):
+    def reactivate_order_by_table_livreur(self, order_id):
         """
-        Réactive TOUTES les commandes correspondantes dans la base de données 
-        des livreurs (kds_livreur_orders.db) pour un même numéro de table 
-        en remettant leur statut à 'En attente', quel que soit leur statut actuel.
+        Réactive UNE SEULE commande spécifique dans la base de données 
+        des livreurs (kds_livreur_orders.db) en utilisant son identifiant unique (id ou bill_id),
+        en remettant son statut à 'En attente'.
         """
         try:
             conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
             cursor_livreur = conn_livreur.cursor()
             
-            # On met à jour le statut sans filtre sur l'ancien statut
+            # On cible précisément la commande par son id numérique ou son bill_id
             cursor_livreur.execute("""
                 UPDATE orders 
                 SET status = 'En attente'
-                WHERE table_number = ?
-            """, (str(table_number),))
+                WHERE id = ? OR bill_id = ?
+            """, (str(order_id), str(order_id)))
             
             success_count = cursor_livreur.rowcount
             conn_livreur.commit()
             conn_livreur.close()
             
             if success_count > 0:
-                print(f"✅ BDD Livreurs : {success_count} commande(s) de la table {table_number} réactivée(s) (statut -> 'En attente').")
+                print(f"✅ BDD Livreurs : Commande (ID/Bill: {order_id}) réactivée avec succès (statut -> 'En attente').")
                 return True
             else:
-                print(f"⚠️ BDD Livreurs : Aucune commande trouvée pour la table {table_number}.")
+                print(f"⚠️ BDD Livreurs : Aucune commande trouvée avec l'identifiant {order_id}.")
                 return False
                 
         except Exception as livreur_err:
-            print(f"❌ Erreur lors de la réactivation dans la BDD livreur : {livreur_err}")
+            print(f"❌ Erreur lors de la réactivation de la commande livreur : {livreur_err}")
             return False
 
     def reactivate_order_by_table(self, table_number):

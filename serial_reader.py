@@ -44,11 +44,22 @@ CORRECTIONS_OCR = {
 SERIAL_PORT_TCP_1 = '0.0.0.0'  # Écoute sur toutes les interfaces réseau
 SERIAL_PORT_TCP_1_PORT = 9100      # Port standard pour les imprimantes réseau
 
+SERIAL_PORT_TCP_2 = '0.0.0.0'  # Écoute sur toutes les interfaces réseau
+SERIAL_PORT_TCP_2_PORT = 9200      # pa livraison
+
+SERIAL_PORT_TCP_3 = '0.0.0.0'  # Écoute sur toutes les interfaces réseau
+SERIAL_PORT_TCP_3_PORT = 9300      # interieur
+
 SERIAL_TCP_PRINTER_1 = '192.168.5.210'  # IP de l'imprimante cible
 SERIAL_TCP_PRINTER_1_PORT = 9100        # Port de l'imprimante cible
 
 SERIAL_TCP_COMPUTER_1 = '192.168.5.205'  # IP de l'imprimante cible
 SERIAL_TCP_COMPUTER_PORT_1 = 9100        # Port de l'imprimante cible
+
+SERIAL_TCP_COMPUTER_2 = '192.168.10.205'  # IP de l'imprimante cible
+SERIAL_TCP_COMPUTER_PORT_2 = 9100        # Port de l'imprimante cible
+
+
 
 MAX_TICKET_SIZE = 1048576
 
@@ -181,10 +192,16 @@ def load_network_config_from_json(json_file='printer_ip.json') -> Dict[str, Any]
     default_config = {
         'SERIAL_PORT_TCP_1': '0.0.0.0',
         'SERIAL_PORT_TCP_1_PORT': 9100,
+        'SERIAL_PORT_TCP_2': '0.0.0.0',          # <--- AJOUT
+        'SERIAL_PORT_TCP_2_PORT': 9200,          # <--- AJOUT
+        'SERIAL_PORT_TCP_3': '0.0.0.0',          # <--- AJOUT
+        'SERIAL_PORT_TCP_3_PORT': 9300,          # <--- AJOUT
         'SERIAL_TCP_PRINTER_1': '192.168.5.210',
         'SERIAL_TCP_PRINTER_1_PORT': 9100,
         "SERIAL_TCP_COMPUTER_1": "127.0.0.1",
-        "SERIAL_TCP_COMPUTER_PORT_1": 9200 
+        "SERIAL_TCP_COMPUTER_PORT_1": 9200,
+        "SERIAL_TCP_COMPUTER_2": "192.168.10.205",
+        "SERIAL_TCP_COMPUTER_PORT_2": 9100 
     }
 
     try:
@@ -200,11 +217,17 @@ def load_network_config_from_json(json_file='printer_ip.json') -> Dict[str, Any]
         config = {
             'SERIAL_PORT_TCP_1': tcp_section.get('SERIAL_PORT_TCP_1', default_config['SERIAL_PORT_TCP_1']),
             'SERIAL_PORT_TCP_1_PORT': int(tcp_section.get('SERIAL_PORT_TCP_1_PORT', default_config['SERIAL_PORT_TCP_1_PORT'])),
+            'SERIAL_PORT_TCP_2': tcp_section.get('SERIAL_PORT_TCP_2', default_config['SERIAL_PORT_TCP_2']),             # <--- AJOUT
+            'SERIAL_PORT_TCP_2_PORT': int(tcp_section.get('SERIAL_PORT_TCP_2_PORT', default_config['SERIAL_PORT_TCP_2_PORT'])), # <--- AJOUT
+            'SERIAL_PORT_TCP_3': tcp_section.get('SERIAL_PORT_TCP_3', default_config['SERIAL_PORT_TCP_3']),             # <--- AJOUT
+            'SERIAL_PORT_TCP_3_PORT': int(tcp_section.get('SERIAL_PORT_TCP_3_PORT', default_config['SERIAL_PORT_TCP_3_PORT'])), # <--- AJOUT
             'SERIAL_TCP_PRINTER_1': tcp_section.get('SERIAL_TCP_PRINTER_1', default_config['SERIAL_TCP_PRINTER_1']),
             'SERIAL_TCP_PRINTER_1_PORT': int(tcp_section.get('SERIAL_TCP_PRINTER_1_PORT', default_config['SERIAL_TCP_PRINTER_1_PORT'])),
             # ⭐ AJOUT DES LIGNES CI-DESSOUS :
             'SERIAL_TCP_COMPUTER_1': tcp_section.get('SERIAL_TCP_COMPUTER_1', default_config['SERIAL_TCP_COMPUTER_1']),
-            'SERIAL_TCP_COMPUTER_PORT_1': int(tcp_section.get('SERIAL_TCP_COMPUTER_PORT_1', default_config['SERIAL_TCP_COMPUTER_PORT_1']))
+            'SERIAL_TCP_COMPUTER_PORT_1': int(tcp_section.get('SERIAL_TCP_COMPUTER_PORT_1', default_config['SERIAL_TCP_COMPUTER_PORT_1'])),
+            'SERIAL_TCP_COMPUTER_2': tcp_section.get('SERIAL_TCP_COMPUTER_2', default_config['SERIAL_TCP_COMPUTER_2']),
+            'SERIAL_TCP_COMPUTER_PORT_2': int(tcp_section.get('SERIAL_TCP_COMPUTER_PORT_2', default_config['SERIAL_TCP_COMPUTER_PORT_2']))
         }
         
         print(f"[OK] Configuration réseau complète chargée.")
@@ -310,10 +333,11 @@ def _decode_escpos(data: str) -> str:
 
 
 class TCPReader(threading.Thread):
-    def __init__(self, serial_reader_instance, net_config):
+    def __init__(self, serial_reader_instance, net_config, server_id=1):
         super().__init__()
         self.reader = serial_reader_instance
         self.net_config = net_config
+        self.server_id = server_id  # 1, 2 ou 3 selon le serveur à lancer
         self._stop_event = threading.Event()
         # Initialisation du socket
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -321,24 +345,94 @@ class TCPReader(threading.Thread):
         self.server_socket.settimeout(1.0)
 
     def _forward_to_tcp_printer(self, raw_bytes):
-        """Redirige les octets vers l'imprimante IP réelle sauf si le filtre est activé."""
+        """Redirige les octets selon le serveur TCP source et applique les filtres."""
         
         # --- 1. DÉCODAGE ET PRÉPARATION ---
         ticket_content = raw_bytes.decode('latin-1', errors='ignore').upper()
         
-        # --- 2. LOGIQUE DE FILTRE PRIORITAIRE (Livraison & Papier Jaune) ---
-        
-
-        if "PRINCIPALE" in ticket_content and "LIVRAISON" in ticket_content:
-            _log_activity("TCP FILTRE : Livraison bloquée (PRINCIPALE + LIVRAISON).", "TCP_SKIP_LIV")
-            return
+        serial_tcp_computer_2 = self.net_config.get('SERIAL_TCP_COMPUTER_2')
+        serial_tcp_computer_port_2 = int(self.net_config.get('SERIAL_TCP_COMPUTER_PORT_2', 9100))
 
         # Blocage Papier Jaune
         if "ENLEVER LE PAPIER JAUNE" in ticket_content:
-            _log_activity("TCP FILTRE : 'ENLEVER LE PAPIER JAUNE' détecté. Impression bloquée.", "TCP_FILTER")
+            _log_activity(f"TCP FILTRE (Serveur {self.server_id}) : 'ENLEVER LE PAPIER JAUNE' détecté. Impression bloquée.", "TCP_FILTER")
             return 
         
-        # --- 4. ENVOI PHYSIQUE (Si passé tous les filtres) ---
+        
+        # --- 3. ROUTAGE SPÉCIFIQUE SELON LE SERVEUR ---
+
+        # ⭐ CAS DU SERVEUR 2 (Port 9200 - Livraison -> Imprimante 2)
+        # ⭐ CAS DU SERVEUR 2 (Port 9200 - Livraison -> Envoi TCP distant + Copie Série Locale)
+        if self.server_id == 2:
+            _log_activity("TCP LIVRAISON (Port 9200) : Traitement de la livraison", "TCP_LIV_RECV")
+            
+            # A. Envoi vers l'imprimante locale de livraison (SERIAL_PORT_PRINTER_2)
+            if "ADDITION" not in ticket_content:
+                try:
+                    self.reader._write_to_output_port(
+                        ticket_content,
+                        SERIAL_PORT_PRINTER_2,
+                        "Imprimante 2 (Livraison TCP)"
+                    )
+                except Exception as e:
+                    _log_activity(f"Erreur redirection imprimante 2 (Port 9200): {e}", "TCP_LIV_ERR")
+            else:
+                _log_activity("Impression locale imprimante 2 ignorée : Ticket 'ADDITION' détecté.", "TCP_SKIP_PRINTER_ADDITION")
+            
+            # B. Envoi vers l'ordinateur cible distant (SERIAL_TCP_COMPUTER_1 sur le port 9100)
+            if "POUR EMPORTER" not in ticket_content:
+                
+                # ⭐ Nouvelle exception : bloqué si "PRINCIPALE" et "LIVRAISON" sont tous les deux présents
+                if "PRINCIPALE" in ticket_content and "LIVRAISON" in ticket_content:
+                    _log_activity("TCP FILTRE : Livraison bloquée (PRINCIPALE + LIVRAISON).", "TCP_SKIP_LIV")
+                else:
+                    comp_ip = self.net_config.get('SERIAL_TCP_COMPUTER_1')
+                    comp_port = int(self.net_config.get('SERIAL_TCP_COMPUTER_PORT_1', 9100))
+                    
+                    if comp_ip and comp_port:
+                        try:
+                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as comp_sock:
+                                comp_sock.settimeout(2.0)
+                                comp_sock.connect((comp_ip, comp_port))
+                                comp_sock.sendall(raw_bytes)
+                        except Exception as e:
+                            _log_activity(f"Ordinateur distant {comp_ip}:{comp_port} inaccessible: {e}", "TCP_COMP_OFFLINE")
+            else:
+                _log_activity("Copie ordinateur distant ignorée : Ticket 'POUR EMPORTER' détecté.", "TCP_SKIP_COMP_EMPORTER")
+
+            # C. Envoi vers l'ordinateur distant supplémentaire (192.168.10.205:9100)
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as extra_sock:
+                    extra_sock.settimeout(2.0)
+                    extra_sock.connect((serial_tcp_computer_2, serial_tcp_computer_port_2))
+                    extra_sock.sendall(raw_bytes)
+            except Exception as e:
+                _log_activity(f"Ordinateur distant {comp_ip}:{comp_port} inaccessible: {e}", "TCP_COMP_OFFLINE")
+
+            return
+
+        # ⭐ CAS DU SERVEUR 3 (Port 9300 - Intérieur -> Imprimante 1)
+        if self.server_id == 3:
+            _log_activity("TCP INTERIEUR (Port 9300) : Redirection vers SERIAL_PORT_PRINTER_1", "TCP_INT_RECV")
+            try:
+                self.reader._write_to_output_port(
+                    ticket_content,
+                    SERIAL_PORT_PRINTER,
+                    "Imprimante 1 (Intérieur TCP)"
+                )
+            except Exception as e:
+                _log_activity(f"Erreur redirection imprimante 1 (Port 9300): {e}", "TCP_INT_ERR")
+
+            # Envoi vers l'ordinateur distant supplémentaire (192.168.10.205:9100)
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as extra_sock:
+                    extra_sock.settimeout(2.0)
+                    extra_sock.connect((serial_tcp_computer_2, serial_tcp_computer_port_2))
+                    extra_sock.sendall(raw_bytes)
+            except Exception as e:
+                _log_activity(f"Ordinateur distant {comp_ip}:{comp_port} inaccessible: {e}", "TCP_COMP_OFFLINE")
+
+            return
         
         # A. Envoi vers l'imprimante principale (SEULEMENT si "POUR EMPORTER" est présent)
         if "POUR EMPORTER" in ticket_content:
@@ -349,21 +443,29 @@ class TCPReader(threading.Thread):
                 try:
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as printer_sock:
                         printer_sock.settimeout(2.0)
-                        # Assurez-vous que le port est un entier
                         printer_sock.connect((printer_ip, int(printer_port)))
                         printer_sock.sendall(raw_bytes)
-                        _log_activity(f"Redirection POUR EMPORTER vers imprimante {printer_ip}", "TCP_OUT_EMPORTER")
                 except Exception as e:
                     _log_activity(f"Imprimante IP {printer_ip} hors ligne: {e}", "TCP_OFFLINE")
         else:
-            # Optionnel : loguer que le ticket n'a pas été envoyé car ce n'est pas "POUR EMPORTER"
             _log_activity("Envoi imprimante IP ignoré : Ticket standard détecté.", "TCP_SKIP_NON_EMPORTER")
 
-
-        # Blocage Papier Jaune
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as extra_sock:
+                extra_sock.settimeout(2.0)
+                extra_sock.connect((serial_tcp_computer_2, serial_tcp_computer_port_2))
+                extra_sock.sendall(raw_bytes)
+        except Exception as e:
+            _log_activity(f"Ordinateur distant {comp_ip}:{comp_port} inaccessible: {e}", "TCP_COMP_OFFLINE")
+        
+        
         if "POUR EMPORTER" in ticket_content:
             _log_activity("Envoi TCP ignoré : Ticket 'POUR EMPORTER' détecté.", "TCP_SKIP_EMPORTER")
-            return 
+            return
+
+        if "PRINCIPALE" in ticket_content and "LIVRAISON" in ticket_content:
+            _log_activity("TCP FILTRE : Livraison bloquée (PRINCIPALE + LIVRAISON).", "TCP_SKIP_LIV")
+            return
 
         # B. Envoi vers l'ordinateur supplémentaire (SERIAL_TCP_COMPUTER_1)
         comp_ip = self.net_config.get('SERIAL_TCP_COMPUTER_1')
@@ -373,22 +475,34 @@ class TCPReader(threading.Thread):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as comp_sock:
                     comp_sock.settimeout(2.0)
-                    comp_sock.connect((comp_ip, int(comp_port))) # Assurez-vous que le port est un entier
+                    comp_sock.connect((comp_ip, int(comp_port)))
                     comp_sock.sendall(raw_bytes)
                     _log_activity(f"Copie envoyée vers ordinateur {comp_ip}", "TCP_OUT_COMP")
             except Exception as e:
                 _log_activity(f"Ordinateur {comp_ip} inaccessible: {e}", "TCP_COMP_OFFLINE")
-
+        
+        
     def run(self):
-        host = self.net_config.get('SERIAL_PORT_TCP_1', '0.0.0.0')
-        port = self.net_config.get('SERIAL_PORT_TCP_1_PORT', 9100)
+        # Configuration dynamique des hôtes et ports selon le server_id
+        if self.server_id == 2:
+            host = self.net_config.get('SERIAL_PORT_TCP_2', '0.0.0.0')
+            port = int(self.net_config.get('SERIAL_PORT_TCP_2_PORT', 9200))
+            tag = "TCP_LIVRAISON_START"
+        elif self.server_id == 3:
+            host = self.net_config.get('SERIAL_PORT_TCP_3', '0.0.0.0')
+            port = int(self.net_config.get('SERIAL_PORT_TCP_3_PORT', 9300))
+            tag = "TCP_INTERIEUR_START"
+        else:
+            host = self.net_config.get('SERIAL_PORT_TCP_1', '0.0.0.0')
+            port = int(self.net_config.get('SERIAL_PORT_TCP_1_PORT', 9100))
+            tag = "TCP_START"
 
         try:
             self.server_socket.bind((host, port))
             self.server_socket.listen(5)
-            _log_activity(f"Serveur TCP prêt sur {host}:{port}", "TCP_START")
+            _log_activity(f"Serveur TCP {self.server_id} prêt sur {host}:{port}", tag)
         except Exception as e:
-            _log_activity(f"Erreur bind TCP: {e}", "TCP_ERROR")
+            _log_activity(f"Erreur bind TCP {self.server_id} sur {host}:{port}: {e}", "TCP_ERROR")
             return
 
         while not self._stop_event.is_set():
@@ -417,26 +531,21 @@ class TCPReader(threading.Thread):
                     pass 
                 
                 if full_data:
-                    # 1. Redirection Imprimante IP (Physique)
+                    # 1. Redirection Imprimante IP / Matériel
                     self._forward_to_tcp_printer(full_data)
 
-                    # 2. Décodage
+                    # 2. TRAITEMENT KDS (Base de données) POUR TOUS LES SERVEURS
                     ticket_text = full_data.decode('latin-1', errors='ignore')
-                    
-                    # 3. TRAITEMENT KDS (Base de données)
-                    # On retire le log ici pour ne pas saturer l'écran
                     self.reader._process_ticket_line(ticket_text)
                     
-                    # 4. Redirection vers l'ordinateur avec FILTRE
-                    # Si on voit ADDITION ou SOUS-TOTAL, on n'envoie PAS à l'ordinateur
-                    mots_bloques = ["ADDITION"]
-                    if not any(mot in ticket_text.upper() for mot in mots_bloques):
-                        try:
-                            # Utilisation du port série de sortie
-                            self.reader._write_to_output_port(ticket_text, SERIAL_PORT_COMPUTER, "Ordinateur")
-                        except Exception:
-                            # Silencieux en cas d'erreur de port pour ne pas bloquer
-                            pass
+                    # 3. Redirection vers l'ordinateur avec FILTRE (Uniquement pour le serveur 1 ou selon vos besoins)
+                    if self.server_id == 1:
+                        mots_bloques = ["ADDITION"]
+                        if not any(mot in ticket_text.upper() for mot in mots_bloques):
+                            try:
+                                self.reader._write_to_output_port(ticket_text, SERIAL_PORT_COMPUTER, "Ordinateur")
+                            except Exception:
+                                pass
 
             except Exception:
                 pass
@@ -714,10 +823,21 @@ class SerialReader(threading.Thread):
                         output_port = port
 
                     encoded_data = data_to_print.encode('latin-1', errors='replace')
+                    
+                    # 1. On initialise d'abord final_data avec la commande de réinitialisation et le texte du ticket
                     final_data = b'\x1b@' + encoded_data
                     
                     output_port.write(final_data)
                     output_port.flush()
+
+                    # 2. Vérification élargie pour l'imprimante 1 et l'imprimante 2
+                    is_printer_1 = port_1 and (port_1 in current_port_str or current_port_str in port_1)
+                    is_printer_2 = port_2 and (port_2 in current_port_str or current_port_str in port_2)
+
+                    # 4. Si c'est l'imprimante 1, on fait un write direct pour imprimer 2 lignes vides en plus
+                    if is_printer_1 or is_printer_2:
+                        output_port.write(b'\x1b\x06')
+                        output_port.flush()
                     
                     if is_new_connection:
                         time.sleep(0.3) 
@@ -919,6 +1039,76 @@ class SerialReader(threading.Thread):
                 self._send_to_network_printer(raw_ticket_data)
     
     
+    def _process_and_clean_escpos_status(self, data: bytes) -> tuple[bytes, bytes]:
+        """
+        Analyse le buffer, intercepte les requêtes de statut et de contrôle ESC/POS,
+        génère les réponses immédiates attendues par le POS, et nettoie le flux texte.
+        """
+        responses = bytearray()
+        clean_bytes = bytearray()
+        i = 0
+        length = len(data)
+
+        while i < length:
+            byte = data[i]
+
+            # 1. DLE EOT n (0x10 0x04 n) : Requête d'état temps réel (n=1 à 4)
+            if i + 2 < length and byte == 0x10 and data[i+1] == 0x04:
+                responses.extend(b"\x12") # Statut prêt standard
+                i += 3
+                continue
+
+            # 2. DLE ENQ n (0x10 0x05 n) : Demande de transmission en temps réel
+            if i + 2 < length and byte == 0x10 and data[i+1] == 0x05:
+                responses.extend(b"\x00")
+                i += 3
+                continue
+
+            # 3. ENQ isolé (0x05) : Demande d'état globale du POS
+            if byte == 0x05:
+                responses.extend(b"\x00")
+                i += 1
+                continue
+
+            # 4. DLE ou EOT isolés de contrôle
+            if byte == 0x10 or byte == 0x04:
+                responses.extend(b"\x00")
+                i += 1
+                continue
+
+            # 5. GS r n (0x1D 0x72 n) : Demande d'état des capteurs (papier / tiroir)
+            if i + 2 < length and byte == 0x1D and data[i + 1] == 0x72:
+                responses.extend(b"\x00") # 0x00 = Capteurs OK / Pas d'erreur
+                i += 3
+                continue
+
+            # 6. GS a n (0x1D 0x61 n) : Configuration du statut automatique (ASB)
+            if i + 2 < length and byte == 0x1D and data[i + 1] == 0x61:
+                i += 3
+                continue
+
+            # 7. ESC v (0x1B 0x76) : Demande d'état du capteur de papier
+            if i + 1 < length and byte == 0x1B and data[i + 1] == 0x76:
+                responses.extend(b"\x00")
+                i += 2
+                continue
+
+            # 8. ESC = n (0x1B 0x3D n) : Sélection de périphérique
+            if i + 2 < length and byte == 0x1B and data[i + 1] == 0x3D:
+                i += 3
+                continue
+
+            # 9. ESC @ (0x1B 0x40) : Réinitialisation imprimante
+            if i + 1 < length and byte == 0x1B and data[i + 1] == 0x40:
+                i += 2
+                continue
+
+            # Tout le reste est conservé pour former le contenu réel du ticket
+            clean_bytes.append(byte)
+            i += 1
+
+        return bytes(responses), bytes(clean_bytes)
+        
     def _handle_input_buffer_generic(self, port_number: int):
         # 1. MAPPING DYNAMIQUE (Évite les répétitions IF/ELIF)
         mapping = {
@@ -927,23 +1117,32 @@ class SerialReader(threading.Thread):
             3: (self.serial_port_3, "input_buffer_3", SERIAL_PORT_3)
         }
         
-        if port_number not in mapping: return
+        if port_number not in mapping: 
+            return
         
         serial_conn, buffer_attr, source_name = mapping[port_number]
-        if not serial_conn: return
+        if not serial_conn: 
+            return
         
         # On récupère le contenu actuel du buffer
         current_buffer = getattr(self, buffer_attr)
+        if not current_buffer:
+            return
 
-        # 2. TRAITEMENT DU STATUT ESC/POS (Réponse immédiate)
-        if current_buffer.startswith(ESC_POS_STATUS_PREFIX) and len(current_buffer) >= 3:
-            try:
-                serial_conn.write(ESC_POS_STATUS_RESPONSE)
-                # Mise à jour dynamique du buffer (on enlève les 3 octets de statut)
-                setattr(self, buffer_attr, current_buffer[3:])
-                _log_activity(f"Réponse Statut ESC/POS envoyée sur Port {port_number}", "SERIAL_STATUS")
-            except Exception as e:
-                _log_activity(f"Erreur réponse statut Port {port_number}: {e}", "SERIAL_ERR")
+        # 2. TRAITEMENT AVANCÉ DES STATUTS ESC/POS ET NETTOYAGE DU BUFFER
+        try:
+            responses_to_send, cleaned_buffer = self._process_and_clean_escpos_status(current_buffer)
+            
+            if responses_to_send:
+                serial_conn.write(responses_to_send)
+                serial_conn.flush()
+                _log_activity(f"Réponses de statut ESC/POS multiples envoyées sur Port {port_number} ({len(responses_to_send)} octets)", "SERIAL_STATUS")
+
+            # Mise à jour dynamique du buffer avec la partie nettoyée
+            setattr(self, buffer_attr, cleaned_buffer)
+            current_buffer = cleaned_buffer
+        except Exception as e:
+            _log_activity(f"Erreur traitement statut ESC/POS Port {port_number}: {e}", "SERIAL_ERR")
             return 
 
         # 3. TRAITEMENT DES TICKETS
@@ -962,7 +1161,8 @@ class SerialReader(threading.Thread):
             is_print_enabled = self.print_forwarding_enabled_var.get() if hasattr(self, 'print_forwarding_enabled_var') else False
 
             for raw_ticket_bytes in tickets_to_process:
-                if len(raw_ticket_bytes) < 5: continue
+                if len(raw_ticket_bytes) < 5: 
+                    continue
                 
                 # Reconstruction du ticket avec sa séquence de fin
                 full_bytes = raw_ticket_bytes + TICKET_END_BINARY_SEQUENCE
@@ -976,7 +1176,6 @@ class SerialReader(threading.Thread):
                 t.start()
                 
             _log_activity(f"{len(tickets_to_process)} ticket(s) extraits du Port {port_number}", "BUFFER_PARSE")
-
     
     def run(self):
         """Boucle principale de lecture pour les 3 ports KDS (Version Sécurisée)."""
