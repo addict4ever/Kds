@@ -527,6 +527,7 @@
 
 <script>
     const body = document.body;
+    const sentTcpOrders = new Set();
     const beep = document.getElementById('alert-beep');
     const audioBtn = document.getElementById('btn-audio-toggle');
     const ajaxZone = document.getElementById('kds-ajax-zone');
@@ -840,17 +841,7 @@
                     contentHtml = "<i style='color: #888;'>Contenu vide ou introuvable</i>";
                 }
             }
-
-            // Génération conditionnelle du bouton TCP si la table est entre 0 et 200
-            let tcpButtonHtml = '';
-            if (isCommandTable) {
-                tcpButtonHtml = `
-                    <button onclick="envoyerTcpCommande('${tableNumberStr}', '${orderId}')" 
-                            style="background: #27ae60; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 1.1rem; padding: 10px 15px; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;">
-                        📤
-                    </button>
-                `;
-            }
+            
 
             const row = document.createElement('tr');
             row.id = `table-row-${orderId}`;
@@ -873,7 +864,7 @@
                                     cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">
                             ✕
                         </button>
-                        ${tcpButtonHtml}
+
                     </div>
                 </td>
             `;
@@ -881,34 +872,6 @@
         });
     }
 
-    function envoyerTcpCommande(tableNumber, orderId) {
-        fetch('/envoyer_tcp_commande', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-App-Access': 'MonApplicationUnique123!'
-            },
-            body: JSON.stringify({
-                table_number: tableNumber,
-                order_id: orderId
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                console.log(`Commande TCP envoyée pour la table #${tableNumber}`);
-            } else {
-                console.error("Erreur lors de l'envoi TCP:", data.message);
-            }
-        })
-        .catch(error => {
-            console.error("Erreur réseau:", error);
-        });
-    }
-
-
-    // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
-    // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     function refreshOrders() {
         // 1. Mémoriser la position exacte du scroll avant de rafraîchir
         const scrollContainer = document.querySelector('.kds-scroll-container');

@@ -827,15 +827,26 @@ class SerialReader(threading.Thread):
                     # 1. On initialise d'abord final_data avec la commande de réinitialisation et le texte du ticket
                     final_data = b'\x1b@' + encoded_data
                     
-                    output_port.write(final_data)
-                    output_port.flush()
-
                     # 2. Vérification élargie pour l'imprimante 1 et l'imprimante 2
                     is_printer_1 = port_1 and (port_1 in current_port_str or current_port_str in port_1)
                     is_printer_2 = port_2 and (port_2 in current_port_str or current_port_str in port_2)
 
-                    # 4. Si c'est l'imprimante 1, on fait un write direct pour imprimer 2 lignes vides en plus
+                    # 3. Si c'est l'imprimante 1 ou l'imprimante 2, on ajoute la commande ESC/POS pour avancer de 2 lignes
                     if is_printer_1 or is_printer_2:
+                        # Commande ESC/POS pour avancer de 2 lignes proprement (Feed paper n lines)
+                        final_data += b'\x1bd\x02'
+                    
+                    output_port.write(final_data)
+                    output_port.flush()
+
+                    is_printer_1 = port_1 and (port_1 in current_port_str or current_port_str in port_1)
+                    is_printer_2 = port_2 and (port_2 in current_port_str or current_port_str in port_2)
+                    
+                    # 4. Si c'est l'imprimante 1, on fait un write direct pour imprimer 2 lignes vides en plus
+                    if is_printer_1:
+                        output_port.write(b'\x1bd\x06')
+                        output_port.flush()
+                    if is_printer_2:
                         output_port.write(b'\x1bd\x06')
                         output_port.flush()
                     

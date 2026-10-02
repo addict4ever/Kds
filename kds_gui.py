@@ -216,17 +216,9 @@ class ServeurWindow(tk.Toplevel):
 
         self.active_tables_frames = {}
 
-        # --- NOUVEAU : Saisie clavier et affichage visuel ---
-        self.key_buffer = ""
-        self.last_key_time = 0
-        self.first_key_time = 0.0  # Suivi du début de la saisie
-
         # Label visuel en bas de l'écran pour voir la saisie en cours
         self.typing_label = tk.Label(self, text="", font=("Arial", 16, "bold"), bg=BG_MAIN, fg="#FFD700")
         self.typing_label.pack(side=tk.BOTTOM, pady=10)
-
-        # Lier l'événement clavier sur toute la fenêtre
-        self.bind("<Key>", self._handle_keyboard_input)
 
         self.main_frame = tk.Frame(self, bg=BG_MAIN)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -244,46 +236,6 @@ class ServeurWindow(tk.Toplevel):
         self._update_elapsed_time()
         self._maintain_window_position()
 
-
-    def _handle_keyboard_input(self, event):
-        """Permet de saisir un numéro de table au clavier avec un délai maximal global de 5 secondes."""
-        import time
-        current_time = time.time()
-        
-        # Si le tampon est vide, on initialise le moment du premier appui
-        if not self.key_buffer:
-            self.first_key_time = current_time
-        
-        # Réinitialisation automatique globale après 5 secondes écoulées depuis le début de la saisie
-        if current_time - self.first_key_time > 5.0:
-            self.key_buffer = ""
-            self.typing_label.config(text="")
-            self.first_key_time = current_time
-
-        # Valider avec Entrée
-        if event.keysym in ("Return", "KP_Enter"):
-            table_to_close = self.key_buffer.strip()
-            self.key_buffer = ""
-            self.first_key_time = 0.0
-            self.typing_label.config(text="")
-            
-            if table_to_close:
-                self._close_table_by_number(table_to_close)
-                
-        # Ajouter les chiffres tapés (seulement si on est dans la fenêtre de 5 secondes)
-        elif event.char.isdigit():
-            if current_time - self.first_key_time <= 5.0:
-                self.key_buffer += event.char
-                self.typing_label.config(text=f"Recherche Table : {self.key_buffer}")
-            
-        # Permettre d'effacer avec Retour arrière (Backspace) si besoin
-        elif event.keysym == "BackSpace":
-            if self.key_buffer:
-                self.key_buffer = self.key_buffer[:-1]
-                display_text = f"Recherche Table : {self.key_buffer}" if self.key_buffer else ""
-                self.typing_label.config(text=display_text)
-                if not self.key_buffer:
-                    self.first_key_time = 0.0
 
     def _close_table_by_number(self, table_number_str):
         """Recherche uniquement parmi les tables affichées et la ferme si présente."""
@@ -741,7 +693,13 @@ class KDSGUI:
         }
         self.all_selected = True
 
-        
+        self.key_buffer = ""
+        self.first_key_time = 0.0
+        self.is_point_active = False  # Activé dès que la touche '.' est pressée
+
+
+        # Lier l'écouteur clavier sur la fenêtre principale (root)
+        self.root.bind("<Key>", self._handle_keyboard_input)
 
         # 🚀 VÉRIFICATION DE LA CONFIGURATION POUR LE COMPAGNON
         #if DesktopPet:
@@ -788,6 +746,82 @@ class KDSGUI:
         self.root.after(1000, self._open_serveur_window) # On attend 1s pour que le reste soit prêt
         self.check_auto_cleanup()
 
+
+    def _handle_keyboard_input(self, event):
+        """Écoute le clavier dans KDSGUI et affiche la saisie en bas de ServeurWindow."""
+        import time
+        current_time = time.time()
+
+        # Réinitialisation automatique après 5 secondes d'inactivité
+        if self.first_key_time and (current_time - self.first_key_time > 5.0):
+            self._reset_key_buffer()
+
+        # 1. Détection de la touche Point ('.' ou Pavé numérique 'KP_Delete' ou ',')
+        if event.char in (".", ",") or event.keysym in ("period", "KP_Delete"):
+            self.is_point_active = True
+            self.key_buffer = ""
+            self.first_key_time = current_time
+            self._update_serveur_typing_label("Fermeture Table : .")
+            return "break"
+
+        # 2. Si le mode point est actif, capture des chiffres et mise à jour sur l'écran Serveur
+        if self.is_point_active:
+            # Validation avec la touche Entrée
+            if event.keysym in ("Return", "KP_Enter"):
+                table_to_close = self.key_buffer.strip()
+                self._reset_key_buffer()
+                
+                if table_to_close:
+                    self._close_table_by_number(table_to_close)
+                return "break"
+
+            # Saisie des chiffres du numéro de table
+            elif event.char.isdigit():
+                self.key_buffer += event.char
+                self._update_serveur_typing_label(f"Fermeture Table : .{self.key_buffer}")
+                return "break"
+
+            # Effacer un chiffre avec Retour arrière (BackSpace)
+            elif event.keysym == "BackSpace":
+                if self.key_buffer:
+                    self.key_buffer = self.key_buffer[:-1]
+                    self._update_serveur_typing_label(f"Fermeture Table : .{self.key_buffer}")
+                else:
+                    self._reset_key_buffer()
+                return "break"
+
+            # Annulation avec la touche Échap (Escape)
+            elif event.keysym == "Escape":
+                self._reset_key_buffer()
+                return "break"
+
+
+    def _update_serveur_typing_label(self, text, color="#FFD700"):
+        """Met à jour le texte du label en bas de la fenêtre ServeurWindow s'il existe."""
+        if hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
+            if hasattr(self.serveur_window, 'typing_label') and self.serveur_window.typing_label:
+                self.serveur_window.typing_label.config(text=text, fg=color)
+
+
+    def _reset_key_buffer(self):
+        """Réinitialise l'état de la saisie et efface le texte sur ServeurWindow."""
+        self.key_buffer = ""
+        self.first_key_time = 0.0
+        self.is_point_active = False
+        self._update_serveur_typing_label("")
+
+
+    def _close_table_by_number(self, table_number_str):
+        """Transmet la fermeture de table à ServeurWindow."""
+        if hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
+            print(f"DEBUG: [KDSGUI] Ordre de fermeture reçu pour la table {table_number_str}")
+            self.serveur_window._close_table_by_number(table_number_str)
+        else:
+            print(f"DEBUG: [KDSGUI] ServeurWindow n'est pas ouverte. Impossible de fermer la table {table_number_str}.")
+
+    def _on_period_key(self, event):
+        print("salut")
+        return "break"  #
 
     def start_thermometer():
         # On lance l'application flottante
