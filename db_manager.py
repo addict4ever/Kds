@@ -1342,7 +1342,7 @@ class DBManager:
                 SELECT id, bill_id, table_number, serveuse_name, service_type, 
                        items, creation_date, status, raw_content 
                 FROM orders 
-                WHERE status NOT IN ('Traitée', 'Annulée' , 'En Attente') 
+                WHERE status NOT IN ('Traitée', 'Annulée') 
                 ORDER BY creation_date ASC
             """)
             rows = cursor.fetchall()
@@ -1381,22 +1381,33 @@ class DBManager:
                 stype = order_data['service_type']
                 table = order_data['table_number']
                 serveuse = order_data['serveuse_name']
+                status = order_data['status']
                 
-                # --- LOGIQUE DE CLASSEMENT ---
-                if table == "777" or serveuse == "777" or "LIVRAISON" in stype:
+                # --- LOGIQUE DE CLASSEMENT & FILTRAGE ---
+                
+                # 1. Cas spécifique : table 888, type 888 ET statut "En Attente"
+                if table == "888" and stype == "888" and status == "En attente":
+                    pending_orders_by_service['POUR EMPORTER'].append(order_data)
+                    print ("lol")
+                
+                # 2. Livraison (Statut Pizza requis)
+                elif (table == "777" or serveuse == "777" or "LIVRAISON" in stype) and status == "Pizza":
                     pending_orders_by_service['LIVRAISON'].append(order_data)
                 
-                elif table == "999" or serveuse == "999" or "LIVREUR" in stype:
+                # 3. Livreur (Statut Pizza requis)
+                elif (table == "999" or serveuse == "999" or "LIVREUR" in stype) and status == "Pizza":
                     pending_orders_by_service['LIVREUR'].append(order_data)
                 
-                elif table == "888" or "EMPORTER" in stype:
+                # 4. Pour Emporter classique (Statut Pizza requis)
+                elif (table == "888" or "EMPORTER" in stype) and status == "Pizza":
                     pending_orders_by_service['POUR EMPORTER'].append(order_data)
                 
-                else:
+                # 5. Commandes normales / Salle (Statut Pizza requis par défaut)
+                elif status == "Pizza":
                     pending_orders_by_service['COMMANDE'].append(order_data)
                     
             except Exception as e:
-                logger.warning(f"Erreur lors du traitement d'une ligne (Clone {LIVREUR_DB_PATH}, ID {row[0]}): {e}")
+                logger.warning(f"Erreur lors du traitement d'une ligne (Clone {LIVREUR_DB_PATH}, ID {row[0]})= {e}")
                 continue
                 
         return pending_orders_by_service

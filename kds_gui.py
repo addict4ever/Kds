@@ -267,12 +267,7 @@ class ServeurWindow(tk.Toplevel):
         # 2. Utiliser remove_table pour faire disparaître la carte de l'écran 2
         self.remove_table(target_bill_id)
         
-        # 3. Rafraîchir l'interface principale du KDS
-        if self.kds_gui_instance and hasattr(self.kds_gui_instance, 'refresh_orders'):
-            self.kds_gui_instance.refresh_orders(force_sound_off=True)
-            
-        if self.kds_gui_instance and hasattr(self.kds_gui_instance, 'update_button_counts'):
-            self.kds_gui_instance.update_button_counts()
+        
 
     def _maintain_window_position(self):
         """Force la fenêtre à rester sur l'écran 2."""
@@ -748,11 +743,11 @@ class KDSGUI:
 
 
     def _handle_keyboard_input(self, event):
-        """Écoute le clavier dans KDSGUI et affiche la saisie en bas de ServeurWindow."""
+        """Écoute le clavier dans KDSGUI et gère la fermeture rapide des tables sur l'écran serveur."""
         import time
         current_time = time.time()
 
-        # Réinitialisation automatique après 5 secondes d'inactivité
+        # Réinitialisation automatique après 5 secondes d'inactivité globale
         if self.first_key_time and (current_time - self.first_key_time > 5.0):
             self._reset_key_buffer()
 
@@ -764,21 +759,52 @@ class KDSGUI:
             self._update_serveur_typing_label("Fermeture Table : .")
             return "break"
 
-        # 2. Si le mode point est actif, capture des chiffres et mise à jour sur l'écran Serveur
+        # 2. Si le mode point est actif
         if self.is_point_active:
-            # Validation avec la touche Entrée
-            if event.keysym in ("Return", "KP_Enter"):
-                table_to_close = self.key_buffer.strip()
+            if current_time - self.first_key_time > 5.0:
                 self._reset_key_buffer()
-                
-                if table_to_close:
-                    self._close_table_by_number(table_to_close)
                 return "break"
 
-            # Saisie des chiffres du numéro de table
-            elif event.char.isdigit():
+            # Saisie d'un chiffre supplémentaire
+            if event.char.isdigit():
                 self.key_buffer += event.char
-                self._update_serveur_typing_label(f"Fermeture Table : .{self.key_buffer}")
+                current_input = self.key_buffer.strip()
+                self._update_serveur_typing_label(f"Fermeture Table : .{current_input}")
+
+                # 🚀 GESTION DU CODE SPÉCIAL : .666 pour fermer toutes les tables affichées
+                if current_input == "666":
+                    self._reset_key_buffer()
+                    if hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
+                        tables_to_close = [str(info.get("table_num")) for bill_id, info in list(self.serveur_window.active_tables_frames.items())]
+                        for t_num in tables_to_close:
+                            self._close_table_by_number(t_num)
+                    return "break"
+
+                if hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
+                    table_exists = False
+                    prefix_match = False
+
+                    # Analyse chiffre par chiffre des tables actuellement affichées sur l'écran serveur
+                    for bill_id, info in self.serveur_window.active_tables_frames.items():
+                        t_num = str(info.get("table_num"))
+                        if t_num == current_input:
+                            table_exists = True
+                        if t_num.startswith(current_input):
+                            prefix_match = True
+
+                    # CAS 1 : Correspondance exacte -> Fermeture immédiate
+                    if table_exists:
+                        table_to_close = current_input
+                        self._reset_key_buffer()
+                        self._close_table_by_number(table_to_close)
+                        return "break"
+
+                    # CAS 2 (Option A) : Aucun préfixe ne correspond chiffre par chiffre -> Rejet immédiat sans attendre
+                    if not prefix_match:
+                        self._update_serveur_typing_label(f"Table .{current_input} introuvable !", "#E74C3C")
+                        self.root.after(1200, self._reset_key_buffer)
+                        return "break"
+
                 return "break"
 
             # Effacer un chiffre avec Retour arrière (BackSpace)
@@ -815,6 +841,7 @@ class KDSGUI:
         """Transmet la fermeture de table à ServeurWindow."""
         if hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
             print(f"DEBUG: [KDSGUI] Ordre de fermeture reçu pour la table {table_number_str}")
+            self.serveur_window._close_table_by_number(table_number_str)
             self.serveur_window._close_table_by_number(table_number_str)
         else:
             print(f"DEBUG: [KDSGUI] ServeurWindow n'est pas ouverte. Impossible de fermer la table {table_number_str}.")

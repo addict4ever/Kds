@@ -349,12 +349,20 @@ def kds_pa_alert_pizza():
     all_orders = db_manager.get_pending_orders_kds_alert_pizza()
     
     # 2. On transforme le dictionnaire en une liste pour le tri, 
-    # EN NE GARDANT QUE CEUX QUI ONT LE STATUT 'PIZZA'
+    # EN GARDANT :
+    # - Soit les commandes avec le statut 'PIZZA'
+    # - Soit les commandes spécifiques '888' avec le statut 'EN ATTENTE'
     order_list = []
     for category in all_orders:
         for order in all_orders.get(category, []):
-            # Filtrage sur le statut PIZZA (insensible à la casse si besoin avec .upper() ou .lower())
-            if str(order.get('status', '')).strip().upper() == 'PIZZA':
+            status = str(order.get('status', '')).strip().upper()
+            service_type = str(order.get('service_type', '')).strip()
+            table_number = str(order.get('table_number', '')).strip()
+            
+            is_pizza = (status == 'PIZZA')
+            is_888_en_attente = ((service_type == '888' or table_number == '888') and status == 'EN ATTENTE')
+            
+            if is_pizza or is_888_en_attente:
                 order_list.append(order)
 
     # 3. Tri personnalisé : 

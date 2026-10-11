@@ -518,6 +518,11 @@
                     <span>🍕 PIZZA SEULEMENT</span>
                 </label>
 
+                <label style="color: #1abc9c; border-left: 2px solid #555; padding-left: 10px;">
+                    <input type="checkbox" id="toggle-heure-liv-pa" onchange="appliquerFiltresAffichage()">
+                    <span>🕒 LIV/PA Heure</span>
+                </label>
+
             </div>
         </div>
 
@@ -727,8 +732,11 @@
         const voirPA = document.getElementById('toggle-pa').checked;
         const voirSalle = document.getElementById('toggle-salle').checked;
         
-        // État du toggle Pizza
+        // État des toggles spécifiques
         const pizzaOnlyActive = document.getElementById('toggle-pizza-only').checked;
+        
+        // ➕ AJOUT : Récupération du nouveau toggle HEURE pour LIV/PA
+        const heureLivPaActive = document.getElementById('toggle-heure-liv-pa').checked;
 
         // Listes de mots-clés et garnitures
         const keywords = [
@@ -768,6 +776,16 @@
             if (type === 't999' && voir999) doitAfficher = true;
             if (type === 'pa' && voirPA) doitAfficher = true;
             if (type === 'salle' && voirSalle) doitAfficher = true;
+
+            // ➕ NOUVEAU FILTRE : Si activé, restreint les types 'liv' et 'pa' aux factures contenant "HEURE:"
+            if (doitAfficher && heureLivPaActive) {
+                if (type === 'liv' || type === 'pa') {
+                    const contentUpper = card.innerText.toUpperCase();
+                    if (!contentUpper.includes("HEURE:")) {
+                        doitAfficher = false;
+                    }
+                }
+            }
 
             // Si la commande passe le filtre et que le toggle "Pizza" est actif
             if (doitAfficher && pizzaOnlyActive) {

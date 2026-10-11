@@ -577,24 +577,24 @@
         if (target) {
             target.classList.toggle('item-highlighted');
             
-            // On récupère la liste des items surlignés stockée en mémoire
+            // On récupère la carte parente pour identifier la commande unique (order-id)
+            const orderWrapper = target.closest('.order-wrapper');
+            const orderId = orderWrapper ? orderWrapper.getAttribute('data-order-id') : 'unknown';
+            
             let highlightedItems = JSON.parse(localStorage.getItem('kds_highlighted_items') || '[]');
             
-            // On s'assure que l'élément possède un identifiant unique ou un texte de repère
-            // Si vos items n'ont pas d'ID, on utilise leur texte brut comme clé unique
-            let itemId = target.getAttribute('data-item-id') || target.innerText.trim();
+            // Clé unique combinant l'ID de la commande et le texte de l'item
+            let itemText = target.innerText.trim();
+            let uniqueKey = `${orderId}_${itemText}`;
             
             if (target.classList.contains('item-highlighted')) {
-                // Ajout en mémoire s'il n'y est pas déjà
-                if (!highlightedItems.includes(itemId)) {
-                    highlightedItems.push(itemId);
+                if (!highlightedItems.includes(uniqueKey)) {
+                    highlightedItems.push(uniqueKey);
                 }
             } else {
-                // Retrait de la mémoire s'il est désurligné
-                highlightedItems = highlightedItems.filter(id => id !== itemId);
+                highlightedItems = highlightedItems.filter(key => key !== uniqueKey);
             }
             
-            // Sauvegarde dans le navigateur
             localStorage.setItem('kds_highlighted_items', JSON.stringify(highlightedItems));
         }
     });
@@ -603,14 +603,21 @@
     function restoreHighlights() {
         const highlightedItems = JSON.parse(localStorage.getItem('kds_highlighted_items') || '[]');
         
-        const allItems = document.querySelectorAll('.item-main, .item-subs');
-        allItems.forEach(item => {
-            let itemId = item.getAttribute('data-item-id') || item.innerText.trim();
-            if (highlightedItems.includes(itemId)) {
-                item.classList.add('item-highlighted');
-            } else {
-                item.classList.remove('item-highlighted');
-            }
+        const orderWrappers = document.querySelectorAll('.order-wrapper');
+        orderWrappers.forEach(orderWrapper => {
+            const orderId = orderWrapper.getAttribute('data-order-id');
+            const items = orderWrapper.querySelectorAll('.item-main, .item-subs');
+            
+            items.forEach(item => {
+                let itemText = item.innerText.trim();
+                let uniqueKey = `${orderId}_${itemText}`;
+                
+                if (highlightedItems.includes(uniqueKey)) {
+                    item.classList.add('item-highlighted');
+                } else {
+                    item.classList.remove('item-highlighted');
+                }
+            });
         });
     }
 
@@ -873,69 +880,63 @@
     }
 
     function refreshOrders() {
-        // 1. Mémoriser la position exacte du scroll avant de rafraîchir
         const scrollContainer = document.querySelector('.kds-scroll-container');
         const currentScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
 
         fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(response => response.text())
         .then(html => {
-            const oldVisibleIds = Array.from(document.querySelectorAll('.order-wrapper'))
-                .filter(el => el.style.display !== 'none')
-                .map(el => el.getAttribute('data-order-id'));
-            
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
-            
-            // On récupère les commandes dans l'ordre où elles arrivent du serveur
-            const orders = Array.from(tempDiv.querySelectorAll('.order-wrapper'));
-            
-            // Tri strict en ordre croissant avec priorité aux 888 si désiré
-            orders.sort((a, b) => {
-                const headerA = a.querySelector('.card-header-pa')?.innerText || "";
-                const headerB = b.querySelector('.card-header-pa')?.innerText || "";
-                
-                const isAImportant = headerA.includes("T: 888 | INCONNU");
-                const isBImportant = headerB.includes("T: 888 | INCONNU");
-                
-                // Priorité aux 888 en haut si besoin, sinon on garde l'ordre croissant naturel
-                if (isAImportant && !isBImportant) return -1;
-                if (!isAImportant && isBImportant) return 1;
-                
-                // Ordre croissant pur basés sur l'ID (du plus petit/ancien au plus grand/récent)
-                const idA = parseInt(a.getAttribute('data-order-id')) || 0;
-                const idB = parseInt(b.getAttribute('data-order-id')) || 0;
-                return idA - idB;
-            });
-            
-            // Vider la zone et réinjecter les éléments triés en ordre croissant
-            ajaxZone.innerHTML = '';
-            orders.forEach(order => ajaxZone.appendChild(order));
+            const newOrders = Array.from(tempDiv.querySelectorAll('.order-wrapper'));
 
-            appliquerFiltresAffichage();
-            if (typeof restoreHighlights === 'function') {
-                restoreHighlights();
-            }
-            
-            const table = document.getElementById('kds-table-zone');
-            if (table && table.classList.contains('view-active-table')) {
-                syncTableData();
-            }
+            const currentOrderIds = Array.from(ajaxZone.querySelectorAll('.order-wrapper')).map(el => el.getAttribute('data-order-id'));
+            const newOrderIds = newOrders.map(el => el.getAttribute('data-order-id'));
 
-            const newVisibleIds = Array.from(ajaxZone.querySelectorAll('.order-wrapper'))
-                .filter(el => el.style.display !== 'none')
-                .map(el => el.getAttribute('data-order-id'));
-            
-            const hasNewArrivalInFilter = newVisibleIds.some(id => !oldVisibleIds.includes(id));
+            // On vérifie si la liste des IDs a changé
+            const hasChanged = JSON.stringify(currentOrderIds) !== JSON.stringify(newOrderIds);
 
-            if (hasNewArrivalInFilter && newVisibleIds.length > 0) {
-                triggerVisualAlert();
-                if (localStorage.getItem('kds_pa_audio') === 'true') {
-                    playTripleBeep();
+            // 🛑 SI RIEN N'A CHANGÉ (mêmes commandes), on ne fait STRICTEMENT RIEN ! 
+            // Cela empêche le flash, le rechargement et la réapplication inutile du highlight.
+            if (hasChanged) {
+                newOrders.sort((a, b) => {
+                    const headerA = a.querySelector('.card-header-pa')?.innerText || "";
+                    const headerB = b.querySelector('.card-header-pa')?.innerText || "";
+                    const isAImportant = headerA.includes("T: 888 | INCONNU");
+                    const isBImportant = headerB.includes("T: 888 | INCONNU");
+                    
+                    if (isAImportant && !isBImportant) return -1;
+                    if (!isAImportant && isBImportant) return 1;
+                    
+                    const idA = parseInt(a.getAttribute('data-order-id')) || 0;
+                    const idB = parseInt(b.getAttribute('data-order-id')) || 0;
+                    return idA - idB;
+                });
+
+                ajaxZone.innerHTML = '';
+                newOrders.forEach(order => ajaxZone.appendChild(order));
+
+                appliquerFiltresAffichage();
+                
+                // On restaure les highlights uniquement lors de l'arrivée de nouvelles cartes
+                if (typeof restoreHighlights === 'function') {
+                    restoreHighlights();
+                }
+                
+                const table = document.getElementById('kds-table-zone');
+                if (table && table.classList.contains('view-active-table')) {
+                    syncTableData();
+                }
+
+                const hasNewArrival = newOrderIds.some(id => !currentOrderIds.includes(id));
+                if (hasNewArrival && newOrderIds.length > 0) {
+                    triggerVisualAlert();
+                    if (localStorage.getItem('kds_pa_audio') === 'true') {
+                        playTripleBeep();
+                    }
                 }
             }
 
-            // 2. Restaurer instantanément le scroll pour ne pas remonter en haut
             if (scrollContainer) {
                 scrollContainer.scrollTop = currentScrollTop;
             }
