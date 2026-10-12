@@ -402,6 +402,15 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         Bascule l'état de rature pour TOUS les items.
         Ajoute/retire le symbole ✓, applique le style, notifie le serveur et met à jour le compteur global.
         """
+        # 🛡️ PROTECTION : Empêche de rayer ou modifier globalement pour les livraisons, emporter ou la table 999
+        table_num = str(self.order_data.get('table_number', '')).upper()
+        service_type = str(self.order_data.get('service_type', '')).upper()
+        
+        if table_num in ('LIV', 'PA', '999', '888') or 'LIVRAISON' in service_type or 'EMPORTER' in service_type or 'LIVREUR' in service_type:
+            if hasattr(self, 'kds_gui_instance') and self.kds_gui_instance:
+                self.kds_gui_instance.update_status("Action interdite : Impossible de rayer les items pour ce type de commande.", "#E74C3C")
+            return
+
         # 1. Vérifier l'état actuel : est-ce que TOUT est déjà rayé ?
         all_already_struck = True
         for widgets in self.item_widgets_map.values():
@@ -633,6 +642,16 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
 
     def _toggle_single_strike(self, label_widget):
         """Bascule la rature sur le widget cliqué, met à jour le serveur et le compteur global."""
+        
+        # 🛡️ PROTECTION : Empêche de rayer les items pour les livraisons, emporter ou la table 999
+        table_num = str(self.order_data.get('table_number', '')).upper()
+        service_type = str(self.order_data.get('service_type', '')).upper()
+        
+        if table_num in ('LIV', 'PA', '999' , '888') or 'LIVRAISON' in service_type or 'EMPORTER' in service_type or 'LIVREUR' in service_type:
+            if hasattr(self, 'kds_gui_instance') and self.kds_gui_instance:
+                self.kds_gui_instance.update_status("Action interdite : Impossible de rayer les items pour ce type de commande.", "#E74C3C")
+            return
+
         # 1. Gestion de la sélection (si existante)
         if hasattr(self, 'is_selected') and self.is_selected:
             self._toggle_selection()

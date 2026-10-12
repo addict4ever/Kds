@@ -842,7 +842,6 @@ class KDSGUI:
         if hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
             print(f"DEBUG: [KDSGUI] Ordre de fermeture reçu pour la table {table_number_str}")
             self.serveur_window._close_table_by_number(table_number_str)
-            self.serveur_window._close_table_by_number(table_number_str)
         else:
             print(f"DEBUG: [KDSGUI] ServeurWindow n'est pas ouverte. Impossible de fermer la table {table_number_str}.")
 
