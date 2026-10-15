@@ -163,8 +163,29 @@
     
     
     .btn-traiter-giant {
-        font-size: 2.5rem !important; padding: 20px 5px !important; background-color: #e74c3c !important;
-        color: white; font-weight: bold; width: 100%; border: none; cursor: pointer;
+        font-size: 2.7rem !important; 
+        padding: 10px 4px !important; 
+        background-color: #e74c3c !important;
+        color: white; 
+        font-weight: bold; 
+        width: 100%; 
+        border: none; 
+        cursor: pointer;
+    }
+
+    /* Ajustement du bouton X dans l'en-tête de la carte (réduit d'un tiers) */
+    .card-header-pa button,
+    .card-header-pa .btn-close,
+    .card-header-pa [onclick*="marquerTraite"] {
+        font-size: 2.3rem !important;
+        min-width: 48px !important;
+        height: 48px !important;
+        line-height: 1 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 10px !important;
+        border-radius: 6px !important;
     }
 
     ::-webkit-scrollbar { width: 30px; }
@@ -217,12 +238,67 @@
         box-sizing: border-box !important;
     }
 
-    /* Ajustement tablette : 2 par ligne */
-    @media (max-width: 1400px) {
-        .horizontal-grid-layout .order-wrapper {
-            flex: 0 0 calc(50% - 15px) !important;
-            width: calc(50% - 15px) !important;
-        }
+
+    /* --- STYLES POUR LE MODAL DES INGRÉDIENTS (PLUS LARGE) --- */
+    .ingredients-modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 10005;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(4px);
+    }
+    .ingredients-modal-content {
+        background: #1e272e;
+        border: 4px solid var(--kds-border, #f1c40f);
+        border-radius: 14px;
+        padding: 25px;
+        width: 95%;
+        max-width: 850px; /* 🚀 Élargi d'un bon tiers pour occuper plus d'espace en largeur */
+        color: #fff;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        position: relative;
+        text-align: left;
+        animation: modalScaleIn 0.2s ease-in-out;
+    }
+    @keyframes modalScaleIn {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+    .ingredients-modal-title {
+        color: var(--kds-header-bg, #f1c40f);
+        font-size: 2rem;
+        font-weight: bold;
+        margin-top: 0;
+        margin-bottom: 15px;
+        text-transform: uppercase;
+        border-bottom: 2px solid #485460;
+        padding-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .ingredients-modal-body {
+        font-size: 1.4rem;
+        line-height: 1.6;
+        color: #d2d2d2;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 6px solid var(--kds-header-bg, #f1c40f);
+    }
+    .ingredients-close-btn {
+        background: #e74c3c;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 40px; height: 40px;
+        font-size: 1.5rem;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
     }
 
     /* Cache complètement l'élément */
@@ -418,6 +494,10 @@
         🗑️
     </div>
 
+    <button onclick="openRecipeMenuModal()" title="Guide des recettes" style="cursor: pointer; font-size: 1.8rem; background: rgba(241, 196, 15, 0.2); padding: 5px; border-radius: 50%; border: 2px solid #f1c40f; display: flex; align-items: center; justify-content: center; width: 50px; height: 50px;">
+        🍕
+    </button>
+
     <div id="live-clock" style="background-color: #c0392b; color: white; font-weight: bold; font-size: 1rem; padding: 4px 10px; border-radius: 6px; border: 1.5px solid #e74c3c; box-shadow: 0 2px 4px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; letter-spacing: 0.5px;">
         00:00:00
     </div>
@@ -604,6 +684,18 @@
     </div>
 </div>
 
+<div id="ingredientsModal" class="ingredients-modal-overlay" onclick="closeIngredientsModal(event)">
+    <div class="ingredients-modal-content" onclick="event.stopPropagation()">
+        <div class="ingredients-modal-title">
+            <span id="modalItemName">🍕 INGRÉDIENTS</span>
+            <button class="ingredients-close-btn" onclick="closeIngredientsModal()">✕</button>
+        </div>
+        <div class="ingredients-modal-body" id="modalItemIngredients">
+            Chargement des ingrédients...
+        </div>
+    </div>
+</div>
+
 
 <script>
     const body = document.body;
@@ -614,9 +706,35 @@
     const trashBtn = document.getElementById('trash-livreur-btn');
     const modal = document.getElementById('confirmModal');
 
-    trashBtn.addEventListener('click', function() {
-        modal.style.display = 'flex'; // Afficher le modal
-    });
+    
+    const menuRecipes = {
+        "SOUS-MARINS": {
+            "MAISON": "Jambon • Tomates • Bacon • Pepperoni • Fromage • Salade",
+            "ITALIEN": "Cornichons • Oignons • Piments • Pepperoni • Fromage"
+        },
+        "NACHOS": {
+            "CLASSIQUE / SPÉCIAL": "Chips • Fromage nachos • Échalotes • Fromage • piment fort • Piments verts • Tomates • Bacon"
+        },
+        "PIZZAS": {
+            "LA SPÉCIALE": "Sauce Pizza • Sauce Spaghetti • Pepperoni • Fromage • Oignons • Bacon • Piments • Champignons",
+            "LA GARNIE": "Sauce Pizza • Pepperoni • Fromage • Piments • Champignons",
+            "LA VÉGÉTARIENNE": "Sauce Pizza • Zucchinis • Cœurs de Palmier • Tomates • Fromage • Piments • Champignons",
+            "LA FAJITAS": "Sauce Salsa • Poulet • Oignons • Tomates • Fromage • Piments • Champignons",
+            "LA FRUITS DE MER": "Sauce Blanche • Fromage • Champignons",
+            "LA CÔTES LEVÉES": "Sauce Côtes Levées • Fromage",
+            "LA GRECQUE": "Sauce Pizza • Mozzarella • Fromage Feta • Olives Noires • Tomates • Oignons",
+            "LA 4 FROMAGES": "Sauce Pizza • Mozzarella ",
+            "LA MEXICAINE": "Sauce Salsa • Pepperoni • Fromage • Piments Verts • Piments Forts",
+            "LA CHAMPIGNONS": "Sauce Pizza • Fromage • Champignons",
+            "LA PEPPERONI": "Sauce Pizza • Pepperoni • Fromage",
+            "LA FROMAGE": "Sauce Pizza • Fromage",
+            "L'ANANAS": "Sauce Pizza • Jambon • Fromage • Bacon • Ananas"
+        }
+    };
+
+    // trashBtn.addEventListener('click', function() {
+//     modal.style.display = 'flex'; // Afficher le modal
+// });
 
     document.getElementById('modalNo').addEventListener('click', function() {
         modal.style.display = 'none'; // Cacher le modal
@@ -649,6 +767,72 @@
             alert("Une erreur est survenue lors de la communication avec le serveur.");
         });
     });
+
+    
+
+    function openRecipeMenuModal() {
+        let content = "<div style='max-height: 450px; overflow-y: auto; padding-right: 5px;'>";
+        
+        // 1. SOUS-MARINS (Affichés en premier)
+        content += "<h3 style='color: #3498db; margin-top: 0; border-bottom: 2px solid #3498db; padding-bottom: 5px;'>🥖 SOUS-MARINS</h3>";
+        content += "<div style='display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;'>";
+        for (let [name, ingredients] of Object.entries(menuRecipes["SOUS-MARINS"])) {
+            content += `<div style='background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px; border-left: 4px solid #3498db;'>
+                            <strong style='color: #3498db; font-size: 1.2rem; display: block; margin-bottom: 4px;'>SOUS-MARIN ${name}</strong>
+                            <div style='display: flex; flex-wrap: wrap; gap: 8px;'>${formatIngredientsHorizontal(ingredients)}</div>
+                        </div>`;
+        }
+        content += "</div>";
+
+        // 2. NACHOS (Affichés juste après les sous-marins)
+        content += "<h3 style='color: #e67e22; margin-top: 0; border-bottom: 2px solid #e67e22; padding-bottom: 5px;'>🧀 NACHOS</h3>";
+        content += "<div style='display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;'>";
+        for (let [name, ingredients] of Object.entries(menuRecipes["NACHOS"])) {
+            content += `<div style='background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px; border-left: 4px solid #e67e22;'>
+                            <strong style='color: #e67e22; font-size: 1.2rem; display: block; margin-bottom: 4px;'>${name}</strong>
+                            <div style='display: flex; flex-wrap: wrap; gap: 8px;'>${formatIngredientsHorizontal(ingredients)}</div>
+                        </div>`;
+        }
+        content += "</div>";
+
+        // 3. PIZZAS
+        content += "<h3 style='color: #f1c40f; margin-top: 0; border-bottom: 2px solid #f1c40f; padding-bottom: 5px;'>🍕 PIZZAS</h3>";
+        content += "<div style='display: flex; flex-direction: column; gap: 12px;'>";
+        for (let [name, ingredients] of Object.entries(menuRecipes["PIZZAS"])) {
+            content += `<div style='background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px; border-left: 4px solid #f1c40f;'>
+                            <strong style='color: #f1c40f; font-size: 1.2rem; display: block; margin-bottom: 4px;'>${name}</strong>
+                            <div style='display: flex; flex-wrap: wrap; gap: 8px;'>${formatIngredientsHorizontal(ingredients)}</div>
+                        </div>`;
+        }
+        content += "</div></div>";
+
+        showIngredientsModal("📖 GUIDE DES RECETTES", content);
+    }
+
+    // Petite fonction utilitaire pour transformer la chaîne en pastilles horizontales
+    function formatIngredientsHorizontal(ingredientsStr) {
+        let parts = ingredientsStr.split('•').map(p => p.trim());
+        let html = '';
+        parts.forEach(part => {
+            html += `<span style='background: rgba(0,0,0,0.4); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 1rem; border: 1px solid rgba(255,255,255,0.1);'>${part}</span>`;
+        });
+        return html;
+    }
+
+    function showIngredientsModal(title, htmlContent) {
+        const modal = document.getElementById('ingredientsModal');
+        const titleEl = document.getElementById('modalItemName');
+        const bodyEl = document.getElementById('modalItemIngredients');
+
+        if (titleEl) titleEl.innerText = title;
+        if (bodyEl) bodyEl.innerHTML = htmlContent;
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeIngredientsModal(event) {
+        const modal = document.getElementById('ingredientsModal');
+        if (modal) modal.style.display = 'none';
+    }
 
     // --- AJOUT : GESTION DU MODE 5 COLONNES ---
     function toggleColumnsMode() {
@@ -1039,6 +1223,12 @@
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     function refreshOrders() {
+
+        const ingredientsModal = document.getElementById('ingredientsModal');
+        if (ingredientsModal && ingredientsModal.style.display === 'flex') {
+            return; // Ignore ce cycle de rafraîchissement et réessaiera au prochain bip
+        }
+
         // 1. Mémoriser la position exacte du scroll avant de rafraîchir
         const scrollContainer = document.querySelector('.kds-scroll-container');
         const currentScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;

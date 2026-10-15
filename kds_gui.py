@@ -238,23 +238,43 @@ class ServeurWindow(tk.Toplevel):
 
 
     def _close_table_by_number(self, table_number_str):
-        """Recherche uniquement parmi les tables affichées et la ferme si présente."""
+        """Recherche uniquement parmi les tables affichées, déraie tous les items et la ferme."""
         target_bill_id = None
+        target_postit = None
         
-        # VÉRIFICATION : On cherche uniquement dans les tables actives affichées à l'écran
+        # VÉRIFICATION : On cherche dans les tables actives affichées à l'écran 2
         for bill_id, info in self.active_tables_frames.items():
             if str(info.get("table_num")) == str(table_number_str):
                 target_bill_id = bill_id
                 break
                 
-        # Si la table n'est PAS affichée, on ne fait absolument rien (considérée comme absente/non fermable)
+        # Si la table n'est PAS affichée, on ne fait rien
         if not target_bill_id:
             print(f"DEBUG: La table '{table_number_str}' n'est pas affichée sur l'écran 2. Fermeture ignorée.")
             self.typing_label.config(text=f"Table {table_number_str} non affichée", fg="#E74C3C")
             self.after(1500, lambda: self.typing_label.config(text="", fg="#FFD700"))
             return
 
-        # Si elle est bien présente à l'écran, on procède à sa fermeture
+        # 🌟 ÉTAPE CLÉ : Retrouver le Post-it correspondant dans l'interface principale (KDS) 
+        # pour retirer les ratures de tous ses items avant la fermeture.
+        if hasattr(self, 'kds_gui_instance') and self.kds_gui_instance:
+            # On cherche dans toutes les colonnes du sélecteur de post-its
+            selector = getattr(self.kds_gui_instance, 'postit_selector', None)
+            if selector and hasattr(selector, 'postit_containers'):
+                for service_type, postit_list in selector.postit_containers.items():
+                    for postit in postit_list:
+                        if str(postit.bill_id) == str(target_bill_id):
+                            target_postit = postit
+                            break
+                    if target_postit:
+                        break
+
+        # Si on a trouvé le post-it, on retire les ratures de tous les items (_unstrike_all_items)
+        if target_postit and hasattr(target_postit, '_unstrike_all_items'):
+            print(f"DEBUG: Dérayage automatique de tous les items pour la table {table_number_str}")
+            target_postit._unstrike_all_items()
+
+        # Si elle est bien présente à l'écran, on procède à sa fermeture dans la BDD
         print(f"DEBUG: Fermeture de la table affichée {table_number_str} (Bill ID: {target_bill_id}) via le clavier.")
         
         # 1. Mettre à jour le statut dans la base de données principale via db_manager
@@ -264,7 +284,14 @@ class ServeurWindow(tk.Toplevel):
             elif hasattr(self.kds_gui_instance.db_manager, 'set_order_status_by_bill_id'):
                 self.kds_gui_instance.db_manager.set_order_status_by_bill_id(target_bill_id, 'Traitée')
             
-        # 2. Utiliser remove_table pour faire disparaître la carte de l'écran 2
+        # 2. Supprimer aussi le post-it de l'écran principal (KDS) s'il existe
+        if target_postit and hasattr(selector, 'remove_postit'):
+            try:
+                selector.remove_postit(target_postit)
+            except Exception as e:
+                print(f"DEBUG: Erreur lors de la suppression du post-it principal : {e}")
+
+        # 3. Utiliser remove_table pour faire disparaître la carte de l'écran 2
         self.remove_table(target_bill_id)
         
         

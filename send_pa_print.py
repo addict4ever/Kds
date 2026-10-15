@@ -8,7 +8,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 
 # --- CONFIGURATION ---
-PRINTER_IP = "127.0.0.1"
+PRINTER_IP = "192.168.5.201"
 PRINTER_PORT = 9100
 KDS_URL_GLOBAL = "http://127.0.0.1:5000/kds"
 KDS_URL_LIVREUR = "http://127.0.0.1:5000/kds_placeur"

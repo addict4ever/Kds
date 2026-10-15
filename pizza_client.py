@@ -12,7 +12,7 @@ PRINTER_IP = "192.168.5.201"
 PRINTER_PORT = 9100
 KDS_URL_GLOBAL = "http://192.168.5.201:5000/kds"
 KDS_URL_LIVREUR = "http://192.168.5.201:5000/kds_placeur"
-KDS_URL_PA = "http://192.168.5.201:5000/kds_pa_pizza"
+KDS_URL_PA = "http://192.168.5.201:5000/kds_pa_alert"
 
 class PizzeriaApp(QMainWindow):
     def __init__(self):

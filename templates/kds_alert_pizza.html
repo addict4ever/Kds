@@ -85,6 +85,55 @@
         box-sizing: border-box; /* Évite les débordements avec la bordure de 15px */
     }
 
+    /* --- STYLES POUR LA TREE VIEW --- */
+    .tree-category-group {
+        background-color: var(--kds-card-bg);
+        border: 3px solid var(--kds-border);
+        border-radius: 10px;
+        margin-bottom: 15px;
+        overflow: hidden;
+    }
+
+    .tree-category-header {
+        background-color: var(--kds-header-bg);
+        color: var(--kds-header-text);
+        font-size: 1.6rem;
+        font-weight: bold;
+        padding: 10px 15px;
+        text-transform: uppercase;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .tree-items-container {
+        padding: 10px 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .tree-item-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 8px 12px;
+        border-left: 5px solid var(--kds-item-main);
+        border-radius: 4px;
+    }
+
+    .tree-item-details {
+        font-size: 1.3rem;
+        color: #fff;
+    }
+
+    .tree-item-meta {
+        font-size: 1.1rem;
+        color: #f1c40f;
+        font-weight: bold;
+    }
+
     /* LA ZONE AJAX (Conteneur de ta grille de tickets) */
     #ajax-zone, #kds-ajax-zone {
         height: 100%;       /* S'étire sur toute la hauteur du parent scrollable */
@@ -170,38 +219,83 @@
     
     
     .btn-traiter-giant {
-        font-size: 2.5rem !important; padding: 20px 5px !important; background-color: #e74c3c !important;
-        color: white; font-weight: bold; width: 100%; border: none; cursor: pointer;
+        font-size: 2.7rem !important; 
+        padding: 10px 4px !important; 
+        background-color: #e74c3c !important;
+        color: white; 
+        font-weight: bold; 
+        width: 100%; 
+        border: none; 
+        cursor: pointer;
+    }
+
+    /* Ajustement du bouton X dans l'en-tête de la carte (réduit d'un tiers) */
+    .card-header-pa button,
+    .card-header-pa .btn-close,
+    .card-header-pa [onclick*="marquerTraite"] {
+        font-size: 2.3rem !important;
+        min-width: 48px !important;
+        height: 48px !important;
+        line-height: 1 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 10px !important;
+        border-radius: 6px !important;
     }
 
     ::-webkit-scrollbar { width: 30px; }
     ::-webkit-scrollbar-track { background: #111; }
     ::-webkit-scrollbar-thumb { background: #555; border-radius: 15px; border: 5px solid #111; }
 
-    /* Style pour la vue en tableau */
+    /* Style optimisé et compact pour la vue tableau */
     .kds-table-view {
         width: 100%;
         border-collapse: collapse;
-        display: none; /* Caché par défaut */
+        display: none;
         background-color: var(--kds-card-bg);
         color: #fff;
-        font-size: 1.5rem;
-    }
-
-    .kds-table-view th, .kds-table-view td {
-        border: 2px solid var(--kds-border);
-        padding: 15px;
-        text-align: left;
     }
 
     .kds-table-view th {
         background-color: var(--kds-header-bg);
         color: var(--kds-header-text);
         text-transform: uppercase;
+        padding: 6px 10px !important;
+        font-size: 1.1rem !important;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .kds-table-view td {
+        border: 1px solid var(--kds-border);
+        padding: 6px 10px !important; /* Réduit le rembourrage vertical pour gagner de la place */
+        vertical-align: middle;
     }
 
     .kds-table-view tr:nth-child(even) {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: rgba(255, 255, 255, 0.04);
+    }
+
+    /* Rend le contenu du ticket compact pour afficher beaucoup de commandes */
+    .table-ticket-content {
+        max-height: 110px; /* Limite la hauteur d'un ticket individuel */
+        overflow-y: auto;  /* Permet de scroller le ticket s'il est très long */
+        font-size: calc(var(--kds-font-main) * 0.55) !important; /* Ajuste la taille du texte */
+        line-height: 1.2;
+    }
+
+    .table-ticket-content .item-main {
+        font-size: calc(var(--kds-font-main) * 0.6) !important;
+        margin-bottom: 2px !important;
+    }
+
+    .table-ticket-content .item-subs {
+        font-size: calc(var(--kds-font-subs) * 0.6) !important;
+        margin-top: 2px !important;
+        border-left-width: 3px !important;
+        padding-left: 6px !important;
     }
 
     /* Classe pour forcer l'affichage */
@@ -209,29 +303,24 @@
     .view-hidden { display: none !important; }
 
      /* Force l'affichage horizontal en grille de 4 */
+    /* --- GRILLE DYNAMIQUE (2 À 6 COLONNES) --- */
     .horizontal-grid-layout {
         display: flex !important;
         flex-wrap: wrap !important;
         gap: 15px !important;
-        column-count: auto !important; /* Désactive le mode masonry */
+        column-count: auto !important;
         width: 100%;
     }
 
-    /* Chaque commande prend exactement 25% de la largeur (moins le gap) */
+    /* Valeur par défaut : 4 de large (calc(25% - gap)) */
     .horizontal-grid-layout .order-wrapper {
-        flex: 0 0 calc(25% - 15px) !important;
-        width: calc(25% - 15px) !important;
+        flex: 0 0 calc(var(--grid-cols, 25%) - 15px) !important;
+        width: calc(var(--grid-cols, 25%) - 15px) !important;
         display: inline-block;
         vertical-align: top;
     }
 
-    /* Ajustement tablette : 2 par ligne */
-    @media (max-width: 1400px) {
-        .horizontal-grid-layout .order-wrapper {
-            flex: 0 0 calc(50% - 15px) !important;
-            width: calc(50% - 15px) !important;
-        }
-    }
+    
 
     /* Cache complètement l'élément */
     .view-hidden { 
@@ -445,9 +534,24 @@
         
         <div class="control-row-section">
             <button id="btn-audio-toggle" onclick="toggleAudio()">CHARGEMENT...</button>
-            <button id="btn-view-toggle" onclick="toggleView()">🖼️ VUE: GRILLE</button>
+            <button id="btn-mode-grid" onclick="switchView('grid')" style="background-color: #2980b9; color: white;">🖼️ GRILLE</button>
+            <button id="btn-mode-columns" onclick="switchView('columns')" style="background-color: #8e44ad; color: white;">📊 COLONNES</button>
+            <button id="btn-mode-compact" onclick="switchView('compact')" style="background-color: #d35400; color: white;">⚡ COMPACT</button>
+            <button id="btn-mode-table" onclick="switchView('table')" style="background-color: #27ae60; color: white;">📋 TABLEAU</button>
+            <button id="btn-mode-tree" onclick="switchView('tree')" style="background-color: #16a085; color: white;">🌲 TREE VIEW</button>
         </div>
-        
+        <div class="control-row-section">
+            <span class="control-label">📏 GRILLE :</span>
+            <div class="btn-group-responsive" id="grid-cols-buttons">
+                <button onclick="setGridColumns(2)" id="btn-grid-2">2</button>
+                <button onclick="setGridColumns(3)" id="btn-grid-3">3</button>
+                <button onclick="setGridColumns(4)" id="btn-grid-4">4</button>
+                <button onclick="setGridColumns(5)" id="btn-grid-5">5</button>
+                <button onclick="setGridColumns(6)" id="btn-grid-6">6</button>
+                <button onclick="setGridColumns(7)" id="btn-grid-7">7</button>
+                <button onclick="setGridColumns(8)" id="btn-grid-8">8</button>
+            </div>
+        </div>
         <div class="control-row-section font-controls-box">
             <span class="control-label">🔎 TEXTE :</span>
             <div class="btn-group-responsive">
@@ -496,21 +600,55 @@
 <audio id="alert-beep" src="{{ url_for('static', filename='sound/beep_short.ogg') }}" preload="auto"></audio>
 
 <div class="kds-scroll-container">
-    <div id="kds-ajax-zone" class="horizontal-grid-layout">
+    <!-- 1. VUE GRILLE NORMALE -->
+    <div id="kds-grid-view" class="horizontal-grid-layout">
         {% include 'partials/kds_order_list.html' %}
     </div>
 
+    <!-- 2. NOUVELLE VUE : 5 COLONNES DE SERVICES -->
+    <div id="kds-columns-view" style="display: none; gap: 15px; width: 100%; align-items: flex-start; box-sizing: border-box; padding: 5px;">
+        <div class="service-column" data-column-type="t888" style="flex: 1; background: rgba(255,255,255,0.02); border: 2px dashed #e74c3c; border-radius: 8px; padding: 10px;">
+            <h3 style="text-align: center; color: #e74c3c; margin-top: 0; font-size: 1.2rem;">888</h3>
+            <div id="zone-t888" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+        <div class="service-column" data-column-type="liv" style="flex: 1; background: rgba(255,255,255,0.02); border: 2px dashed #2ecc71; border-radius: 8px; padding: 10px;">
+            <h3 style="text-align: center; color: #2ecc71; margin-top: 0; font-size: 1.2rem;">LIVREURS</h3>
+            <div id="zone-liv" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+        <div class="service-column" data-column-type="t999" style="flex: 1; background: rgba(255,255,255,0.02); border: 2px dashed #9b59b6; border-radius: 8px; padding: 10px;">
+            <h3 style="text-align: center; color: #9b59b6; margin-top: 0; font-size: 1.2rem;">999</h3>
+            <div id="zone-t999" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+        <div class="service-column" data-column-type="pa" style="flex: 1; background: rgba(255,255,255,0.02); border: 2px dashed #3498db; border-radius: 8px; padding: 10px;">
+            <h3 style="text-align: center; color: #3498db; margin-top: 0; font-size: 1.2rem;">PA</h3>
+            <div id="zone-pa" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+        <div class="service-column" data-column-type="salle" style="flex: 1; background: rgba(255,255,255,0.02); border: 2px dashed #f1c40f; border-radius: 8px; padding: 10px;">
+            <h3 style="text-align: center; color: #f1c40f; margin-top: 0; font-size: 1.2rem;">SALLE</h3>
+            <div id="zone-salle" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+    </div>
+
+    <!-- 3. NOUVELLE VUE : MODE COMPACT (Cartes réduites au minimum) -->
+    <div id="kds-compact-view" style="display: none; display: flex; flex-direction: column; gap: 8px; width: 100%;">
+        <!-- Rempli dynamiquement par JS -->
+    </div>
+
+    <!-- 4. VUE TABLEAU -->
     <table id="kds-table-zone" class="kds-table-view">
         <thead>
             <tr>
-                <th style="width: 20%; font-size: calc(var(--kds-font-main) * 0.7) !important;">Table / Commande</th>
-                <th style="width: 70%; font-size: calc(var(--kds-font-main) * 0.7) !important;">Contenu du Ticket</th>
-                <th style="width: 10%; text-align: center; font-size: calc(var(--kds-font-main) * 0.7) !important;">Action</th>
+                <th style="width: 20%;">Table / Commande</th>
+                <th style="width: 70%;">Contenu du Ticket</th>
+                <th style="width: 10%; text-align: center;">Action</th>
             </tr>
         </thead>
-        <tbody id="table-body">
-        </tbody>
+        <tbody id="table-body"></tbody>
     </table>
+
+    <div id="kds-tree-view" style="display: none; flex-direction: column; gap: 12px; width: 100%; padding: 10px; box-sizing: border-box;">
+        <!-- Rempli dynamiquement par JS -->
+    </div>
 </div>
 
 <div id="confirmModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; justify-content:center; align-items:center;">
@@ -598,6 +736,226 @@
             localStorage.setItem('kds_highlighted_items', JSON.stringify(highlightedItems));
         }
     });
+
+    function switchView(mode) {
+        const gridView = document.getElementById('kds-grid-view');
+        const columnsView = document.getElementById('kds-columns-view');
+        const compactView = document.getElementById('kds-compact-view');
+        const treeView = document.getElementById('kds-tree-view'); // 🌲 Ajouté
+        const tableZone = document.getElementById('kds-table-zone');
+
+        // Tout masquer proprement
+        if (gridView) gridView.style.setProperty('display', 'none', 'important');
+        if (columnsView) columnsView.style.setProperty('display', 'none', 'important');
+        if (compactView) compactView.style.setProperty('display', 'none', 'important');
+        if (treeView) treeView.style.setProperty('display', 'none', 'important'); // 🌲 Ajouté
+        if (tableZone) tableZone.classList.remove('view-active-table');
+
+        // Activer la vue choisie
+        if (mode === 'grid') {
+            if (gridView) gridView.style.setProperty('display', 'flex', 'important');
+            localStorage.setItem('kds_view_mode', 'grid');
+        } else if (mode === 'columns') {
+            if (columnsView) columnsView.style.setProperty('display', 'flex', 'important');
+            distributeOrdersToColumns();
+            localStorage.setItem('kds_view_mode', 'columns');
+        } else if (mode === 'compact') {
+            if (compactView) compactView.style.setProperty('display', 'flex', 'important');
+            syncCompactData();
+            localStorage.setItem('kds_view_mode', 'compact');
+        } else if (mode === 'tree') { // 🌲 Ajouté
+            if (treeView) treeView.style.setProperty('display', 'flex', 'important');
+            syncTreeView();
+            localStorage.setItem('kds_view_mode', 'tree');
+        } else if (mode === 'table') {
+            if (tableZone) tableZone.classList.add('view-active-table');
+            syncTableData();
+            localStorage.setItem('kds_view_mode', 'table');
+        }
+    }
+
+    // Fonction pour générer la Tree View (Arborescence détaillée par type de plat)
+    function syncTreeView() {
+        const treeContainer = document.getElementById('kds-tree-view');
+        const orders = document.querySelectorAll('#kds-grid-view .order-wrapper');
+        if (!treeContainer) return;
+
+        treeContainer.innerHTML = '';
+
+        // Dictionnaire enrichi avec les catégories spécifiques de la pizzeria
+        let categories = {
+            "🍕 PIZZAS": [],
+            "🍝 PÂTES & GRATINS": [],
+            "🥖 ENTRÉES & PAINS À L'AIL": [],
+            "🍗 POULET": [],
+            "🦐 CREVETTES & FRUITS DE MER": [],
+            "🥪 SOUS-MARINS & PITAS": [],
+            "🥗 SALADES": [],
+            "🍔 CLUBS & HAMBURGERS": [],
+            "🥤 AUTRES / BOISSONS": []
+        };
+
+        orders.forEach(order => {
+            if (order.style.display === 'none') return;
+            const orderId = order.getAttribute('data-order-id');
+            const headerText = order.querySelector('.card-header-pa')?.innerText.replace('✕', '').trim() || "Commande";
+            
+            const mainItems = order.querySelectorAll('.item-main');
+            
+            mainItems.forEach(item => {
+                let text = item.innerText.toUpperCase();
+                let targetCategory = "🥤 AUTRES / BOISSONS";
+
+                // Logique de détection par mots-clés pour le tri dans l'arborescence
+                if (text.includes("PIZZA") || text.includes("LARGE") || text.includes("MEDIUM") || text.includes("XLARGE") || text.includes("SMALL") || text.includes("DUO") || text.includes("MINI") || text.includes("BAMBINO"))  {
+                    targetCategory = "🍕 PIZZAS";
+                } else if (text.includes("LASAGNE") || text.includes("GHETTI") || text.includes("SPAGHETTI") || text.includes("GRATINE") || text.includes("PATES")) {
+                    targetCategory = "🍝 PÂTES & GRATINS";
+                } else if (text.includes("CREVETTE") || text.includes("LANGOUSTINE") || text.includes("FRUIT DE MER")) {
+                    targetCategory = "🦐 CREVETTES & FRUITS DE MER";
+                } else if (text.includes("POULET") || text.includes("AILE") || text.includes("NUGGETS") || text.includes("PILON")) {
+                    targetCategory = "🍗 POULET";
+                } else if (text.includes("SOUS-MARIN") || text.includes("PITA") || text.includes("GYRO")) {
+                    targetCategory = "🥪 SOUS-MARINS & PITAS";
+                } else if (text.includes("SALADE")) {
+                    targetCategory = "🥗 SALADES";
+                } else if (text.includes("CLUB") || text.includes("BURGER") || text.includes("HAMBURGER") || text.includes("HOT-DOG")) {
+                    targetCategory = "🍔 CLUBS & HAMBURGERS";
+                } else if (text.includes("PAIN") || text.includes("NACHOS") || text.includes("FRIES") || text.includes("FRITE")) {
+                    targetCategory = "🥖 ENTRÉES & PAINS À L'AIL";
+                }
+
+                categories[targetCategory].push({
+                    text: item.outerHTML,
+                    orderId: orderId,
+                    table: headerText
+                });
+            });
+        });
+
+        // Construction du HTML de l'arborescence
+        Object.keys(categories).forEach(catName => {
+            let items = categories[catName];
+            if (items.length === 0) return; // Ignore la catégorie si elle est vide
+
+            const groupDiv = document.createElement('div');
+            groupDiv.className = "tree-category-group";
+
+            let itemsHtml = "";
+            items.forEach(i => {
+                itemsHtml += `
+                    <div class="tree-item-row">
+                        <div class="tree-item-details">${i.text}</div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span class="tree-item-meta">📌 ${i.table}</span>
+                            <button onclick="marquerTraite('${i.orderId}')" style="background: #e74c3c; color: white; border: none; padding: 5px 12px; font-size: 1rem; font-weight: bold; border-radius: 4px; cursor: pointer;">FAIT ✕</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            groupDiv.innerHTML = `
+                <div class="tree-category-header">
+                    <span>📂 ${catName}</span>
+                    <span style="font-size: 1.2rem; background: rgba(0,0,0,0.3); padding: 2px 10px; border-radius: 12px;">${items.length} items</span>
+                </div>
+                <div class="tree-items-container">
+                    ${itemsHtml}
+                </div>
+            `;
+            treeContainer.appendChild(groupDiv);
+        });
+
+        if (treeContainer.innerHTML === "") {
+            treeContainer.innerHTML = `<div style="text-align: center; color: #888; font-size: 1.5rem; padding: 40px;">Aucune commande active à afficher en mode Tree View.</div>`;
+        }
+    }
+
+    // Fonction pour répartir les cartes dans les colonnes de service
+    function distributeOrdersToColumns() {
+        const orders = document.querySelectorAll('#kds-grid-view .order-wrapper');
+        const zone888 = document.getElementById('zone-t888');
+        const zoneLiv = document.getElementById('zone-liv');
+        const zone999 = document.getElementById('zone-t999');
+        const zonePa = document.getElementById('zone-pa');
+        const zoneSalle = document.getElementById('zone-salle');
+
+        if (zone888) zone888.innerHTML = '';
+        if (zoneLiv) zoneLiv.innerHTML = '';
+        if (zone999) zone999.innerHTML = '';
+        if (zonePa) zonePa.innerHTML = '';
+        if (zoneSalle) zoneSalle.innerHTML = '';
+
+        orders.forEach(order => {
+            const type = order.getAttribute('data-order-type');
+            const clone = order.cloneNode(true);
+            if (type === 't888' && zone888) zone888.appendChild(clone);
+            else if (type === 'liv' && zoneLiv) zoneLiv.appendChild(clone);
+            else if (type === 't999' && zone999) zone999.appendChild(clone);
+            else if (type === 'pa' && zonePa) zonePa.appendChild(clone);
+            else if (type === 'salle' && zoneSalle) zoneSalle.appendChild(clone);
+        });
+    }
+
+    // Fonction pour générer le mode Compact
+    // Fonction pour générer le mode Compact (uniquement avec les main items)
+    // Fonction pour générer le mode Compact (main items et sub items affichés horizontalement sur plusieurs lignes au besoin)
+    function syncCompactData() {
+        const compactContainer = document.getElementById('kds-compact-view');
+        const orders = document.querySelectorAll('#kds-grid-view .order-wrapper');
+        if (!compactContainer) return;
+
+        compactContainer.innerHTML = '';
+
+        orders.forEach(order => {
+            if (order.style.display === 'none') return;
+            const orderId = order.getAttribute('data-order-id');
+            const headerText = order.querySelector('.card-header-pa')?.innerText.replace('✕', '').trim() || "Commande";
+            
+            const items = order.querySelectorAll('.item-main, .item-subs');
+            let contentHtml = "";
+
+            if (items.length > 0) {
+                items.forEach(item => {
+                    let clonedHtml = item.outerHTML.replace('display: block;', 'display: inline-block;');
+                    contentHtml += `<span style="display: inline-block; margin-right: 15px; margin-bottom: 5px;">${clonedHtml}</span>`;
+                });
+            } else {
+                contentHtml = "<i style='color: #888;'>Aucun article</i>";
+            }
+
+            const compactRow = document.createElement('div');
+            compactRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; background: var(--kds-card-bg); border: 2px solid var(--kds-border); padding: 10px 15px; border-radius: 8px;";
+            compactRow.innerHTML = `
+                <div style="font-weight: bold; font-size: 1.5rem; color: var(--kds-header-bg); min-width: 150px; flex-shrink: 0;">${headerText}</div>
+                <div style="flex-grow: 1; display: flex; flex-wrap: wrap; align-items: center; padding: 0 15px;">${contentHtml}</div>
+                <button onclick="marquerTraite('${orderId}')" style="background: #e74c3c; color: white; border: none; padding: 10px 20px; font-size: 1.2rem; font-weight: bold; border-radius: 5px; cursor: pointer; flex-shrink: 0;">FAIT ✕</button>
+            `;
+            compactContainer.appendChild(compactRow);
+        });
+    }
+    
+    // --- GESTION DE LA LARGEUR DE LA GRILLE (2 à 8) ---
+    function setGridColumns(count) {
+        const root = document.documentElement;
+        
+        // Désactiver tous les boutons de grille (de 2 à 8)
+        for (let i = 2; i <= 8; i++) {
+            const btn = document.getElementById(`btn-grid-${i}`);
+            if (btn) btn.classList.remove('font-btn-active');
+        }
+        
+        // Activer le bouton cliqué
+        const activeBtn = document.getElementById(`btn-grid-${count}`);
+        if (activeBtn) activeBtn.classList.add('font-btn-active');
+        
+        // Calcul du pourcentage de largeur dynamique (ex: 8 de large = 100/8 = 12.5%)
+        const percentage = (100 / count).toFixed(4) + '%';
+        root.style.setProperty('--grid-cols', percentage);
+        
+        // Sauvegarde en localStorage
+        localStorage.setItem('kds_grid_columns', count);
+    }
 
     // --- FONCTION DE RESTAURATION DU SURLIGNAGE ---
     function restoreHighlights() {
@@ -799,80 +1157,54 @@
 
     function syncTableData() {
         const tableBody = document.getElementById('table-body');
-        // On récupère toutes les cartes de commandes
         const orders = document.querySelectorAll('.order-wrapper');
         if (!tableBody) return;
         
         tableBody.innerHTML = ''; 
 
         orders.forEach(order => {
-            // IMPORTANT : Si la commande est marquée 'display: none' (déjà traitée), on ne l'affiche pas dans le tableau
             if (order.style.display === 'none') return;
 
             const orderId = order.getAttribute('data-order-id');
-            
-            // Récupération du titre (ex: T: 15 | ...)
             const headerElement = order.querySelector('.card-header-pa');
             let tableName = headerElement ? headerElement.innerText : "Inconnu";
-            
-            // NETTOYAGE : On enlève le "✕" du bouton du post-it pour ne pas qu'il s'affiche dans le texte du tableau
             tableName = tableName.replace('✕', '').trim();
-            
-            // Extraction du numéro de table (soit via l'attribut data-table-number, soit en extrayant les chiffres du titre)
-            let tableNumberStr = order.getAttribute('data-table-number') || '';
-            if (!tableNumberStr) {
-                const matches = tableName.match(/\d+/);
-                if (matches) {
-                    tableNumberStr = matches[0];
-                }
-            }
-            
-            // Vérification si le numéro de table est compris entre 0 et 200
-            const tableNumInt = parseInt(tableNumberStr, 10);
-            const isCommandTable = !isNaN(tableNumInt) && tableNumInt >= 0 && tableNumInt <= 200;
 
-            // Sélection du contenu du ticket
             const cardBody = order.querySelector('.card-body-pa');
             let contentHtml = "";
 
             if (cardBody && cardBody.innerHTML.trim() !== "") {
                 contentHtml = cardBody.innerHTML;
             } else {
-                // Secours : on cherche les items individuellement
                 const items = order.querySelectorAll('.item-main, .item-subs');
                 if (items.length > 0) {
                     items.forEach(item => {
                         contentHtml += item.outerHTML; 
                     });
                 } else {
-                    contentHtml = "<i style='color: #888;'>Contenu vide ou introuvable</i>";
+                    contentHtml = "<i style='color: #888;'>Contenu vide</i>";
                 }
             }
-            
 
             const row = document.createElement('tr');
             row.id = `table-row-${orderId}`;
             
-            // Génération des 3 colonnes avec les boutons alignés proprement
             row.innerHTML = `
-                <td style="font-weight:bold; font-size: 1.6rem; vertical-align: top; color: var(--kds-header-bg); padding: 15px; border-bottom: 1px solid #333; width: 20%;">
+                <td style="font-weight:bold; font-size: 1.2rem; color: var(--kds-header-bg); width: 18%;">
                     ${tableName}
                 </td>
-                <td style="background-color: rgba(255,255,255,0.05); padding: 15px; border-bottom: 1px solid #333; width: 70%;">
-                    <div class="table-ticket-content" style="text-align: left;">
+                <td style="background-color: rgba(255,255,255,0.02); width: 72%;">
+                    <div class="table-ticket-content">
                         ${contentHtml}
                     </div>
                 </td>
-                <td style="text-align: center; vertical-align: middle; border-bottom: 1px solid #333; padding: 15px; width: 10%;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-                        <button onclick="marquerTraite('${orderId}')" 
-                                style="background: #e74c3c; color: white; border: none; border-radius: 5px; 
-                                    width: 45px; height: 45px; font-size: 1.4rem; font-weight: bold; 
-                                    cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                            ✕
-                        </button>
-
-                    </div>
+                <td style="text-align: center; width: 10%;">
+                    <button onclick="marquerTraite('${orderId}')" 
+                            style="background: #e74c3c; color: white; border: none; border-radius: 4px; 
+                                   width: 38px; height: 38px; font-size: 1.2rem; font-weight: bold; 
+                                   cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
+                        ✕
+                    </button>
                 </td>
             `;
             tableBody.appendChild(row);
@@ -890,14 +1222,13 @@
             tempDiv.innerHTML = html;
             const newOrders = Array.from(tempDiv.querySelectorAll('.order-wrapper'));
 
+            if (!ajaxZone) return; // Sécurité anti-null
+
             const currentOrderIds = Array.from(ajaxZone.querySelectorAll('.order-wrapper')).map(el => el.getAttribute('data-order-id'));
             const newOrderIds = newOrders.map(el => el.getAttribute('data-order-id'));
 
-            // On vérifie si la liste des IDs a changé
             const hasChanged = JSON.stringify(currentOrderIds) !== JSON.stringify(newOrderIds);
 
-            // 🛑 SI RIEN N'A CHANGÉ (mêmes commandes), on ne fait STRICTEMENT RIEN ! 
-            // Cela empêche le flash, le rechargement et la réapplication inutile du highlight.
             if (hasChanged) {
                 newOrders.sort((a, b) => {
                     const headerA = a.querySelector('.card-header-pa')?.innerText || "";
@@ -918,7 +1249,6 @@
 
                 appliquerFiltresAffichage();
                 
-                // On restaure les highlights uniquement lors de l'arrivée de nouvelles cartes
                 if (typeof restoreHighlights === 'function') {
                     restoreHighlights();
                 }
@@ -928,12 +1258,31 @@
                     syncTableData();
                 }
 
+                const treeView = document.getElementById('kds-tree-view');
+                if (treeView && treeView.style.display !== 'none' && treeView.style.display !== '') {
+                    syncTreeView();
+                }
+
+                const compactView = document.getElementById('kds-compact-view');
+                if (compactView && compactView.style.display !== 'none' && compactView.style.display !== '') {
+                    syncCompactData();
+                }
+
                 const hasNewArrival = newOrderIds.some(id => !currentOrderIds.includes(id));
                 if (hasNewArrival && newOrderIds.length > 0) {
                     triggerVisualAlert();
                     if (localStorage.getItem('kds_pa_audio') === 'true') {
                         playTripleBeep();
                     }
+                }
+            } else {
+                const treeView = document.getElementById('kds-tree-view');
+                if (treeView && treeView.style.display !== 'none' && treeView.style.display !== '') {
+                    syncTreeView();
+                }
+                const compactView = document.getElementById('kds-compact-view');
+                if (compactView && compactView.style.display !== 'none' && compactView.style.display !== '') {
+                    syncCompactData();
                 }
             }
 
@@ -958,6 +1307,37 @@
         audioBtn.className = enabled ? "audio-on" : "audio-off";
     }
 
+    // --- CHRONOMÈTRE EN TEMPS RÉEL DES TICKETS ---
+    // --- CHRONOMÈTRE EN TEMPS RÉEL DES TICKETS ---
+    function updateOrderTimers() {
+        const orders = document.querySelectorAll('.order-wrapper');
+        const now = new Date().getTime();
+
+        orders.forEach(order => {
+            const createdAtStr = order.getAttribute('data-created-at');
+            if (!createdAtStr) return;
+
+            const createdAt = new Date(createdAtStr).getTime();
+            if (isNaN(createdAt)) return;
+
+            const diffSeconds = Math.floor((now - createdAt) / 1000);
+            if (diffSeconds < 0) return;
+
+            const minutes = Math.floor(diffSeconds / 60);
+            const seconds = diffSeconds % 60;
+            const timeFormatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            // Met à jour l'affichage du timer dans le ticket
+            const timerSpan = order.querySelector('.order-timer');
+            if (timerSpan) {
+                timerSpan.innerText = timeFormatted;
+            }
+        });
+    }
+
+    // Lancer la mise à jour des compteurs toutes les secondes
+    setInterval(updateOrderTimers, 1000);
+    // --- INITIALISATION ---
     // --- INITIALISATION ---
     window.addEventListener('load', () => {
         // 1. Restaurer le Thème
@@ -967,31 +1347,26 @@
         // 2. Restaurer l'Audio
         updateAudioUI(localStorage.getItem('kds_pa_audio') === 'true');
 
-        // 3. RESTAURER LA VUE (Grille ou Tableau)
+        // 3. RESTAURER LA VUE (Grille, Colonnes, Compact ou Tableau)
         const savedView = localStorage.getItem('kds_view_mode') || 'grid';
-        const grid = document.getElementById('kds-ajax-zone');
-        const table = document.getElementById('kds-table-zone');
-        const btn = document.getElementById('btn-view-toggle');
-
-        if (savedView === 'table') {
-            // On cache la grille et on affiche le tableau
-            grid.classList.add('view-hidden');
-            table.classList.add('view-active-table');
-            if (btn) btn.innerText = "📋 VUE: TABLEAU";
-            
-            // On remplit le tableau immédiatement avec les données chargées au boot
-            syncTableData();
+        
+        // On appelle directement la fonction switchView qui gère l'affichage de chaque vue proprement
+        if (typeof switchView === 'function') {
+            switchView(savedView);
         } else {
-            // Mode par défaut : Grille
-            grid.classList.remove('view-hidden');
-            table.classList.remove('view-active-table');
-            if (btn) btn.innerText = "🖼️ VUE: GRILLE";
+            // Fallback de sécurité si switchView n'est pas encore définie
+            const grid = document.getElementById('kds-grid-view');
+            if (grid) grid.style.setProperty('display', 'flex', 'important');
         }
 
         const savedFontPreset = localStorage.getItem('kds_font_preset') || 'normal';
         changeFontSize(savedFontPreset);
 
-        // 4. Lancer l'intervalle de rafraîchissement Flask
+        // 4. Restaurer le nombre de factures de large en vue Grille (4 par défaut)
+        const savedCols = localStorage.getItem('kds_grid_columns') || '4';
+        setGridColumns(parseInt(savedCols));
+
+        // 5. Lancer l'intervalle de rafraîchissement Flask
         const refreshRate = {{ (refresh_rate if refresh_rate else 5) * 1000 }};
         setInterval(refreshOrders, refreshRate);
     });
