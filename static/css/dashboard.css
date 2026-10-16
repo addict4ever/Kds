@@ -22,6 +22,11 @@
         user-select: none; /* Empêche la sélection de texte accidentelle au toucher */
     }
 
+    @keyframes modalScaleIn {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
     /* Style pour le Modal de Gestion */
 /* --- STYLE DU MODAL GESTION LIVREURS --- */
 
@@ -170,6 +175,8 @@
         width: 25%; 
     }
 }
+
+
 
 /* Force l'affichage sur 7 colonnes égales */
 #kds-ajax-zone.row-cols-7 > * {

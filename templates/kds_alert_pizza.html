@@ -1212,6 +1212,11 @@
     }
 
     function refreshOrders() {
+        const ingredientsModal = document.getElementById('ingredientsModal');
+        if (ingredientsModal && ingredientsModal.style.display === 'flex') {
+            return; // Pause le rafraîchissement si le modal des recettes est ouvert
+        }
+
         const scrollContainer = document.querySelector('.kds-scroll-container');
         const currentScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
 
@@ -1222,67 +1227,74 @@
             tempDiv.innerHTML = html;
             const newOrders = Array.from(tempDiv.querySelectorAll('.order-wrapper'));
 
-            if (!ajaxZone) return; // Sécurité anti-null
+            // On trie les nouvelles commandes proprement
+            newOrders.sort((a, b) => {
+                const headerA = a.querySelector('.card-header-pa')?.innerText || "";
+                const headerB = b.querySelector('.card-header-pa')?.innerText || "";
+                const isAImportant = headerA.includes("T: 888 | INCONNU");
+                const isBImportant = headerB.includes("T: 888 | INCONNU");
+                
+                if (isAImportant && !isBImportant) return -1;
+                if (!isAImportant && isBImportant) return 1;
+                
+                const idA = parseInt(a.getAttribute('data-order-id')) || 0;
+                const idB = parseInt(b.getAttribute('data-order-id')) || 0;
+                return idA - idB;
+            });
 
-            const currentOrderIds = Array.from(ajaxZone.querySelectorAll('.order-wrapper')).map(el => el.getAttribute('data-order-id'));
+            // Récupération des IDs actuels pour détecter les nouveautés (audio / alerte visuelle)
+            const currentOrderIds = Array.from(document.querySelectorAll('#kds-grid-view .order-wrapper')).map(el => el.getAttribute('data-order-id'));
             const newOrderIds = newOrders.map(el => el.getAttribute('data-order-id'));
 
-            const hasChanged = JSON.stringify(currentOrderIds) !== JSON.stringify(newOrderIds);
-
-            if (hasChanged) {
-                newOrders.sort((a, b) => {
-                    const headerA = a.querySelector('.card-header-pa')?.innerText || "";
-                    const headerB = b.querySelector('.card-header-pa')?.innerText || "";
-                    const isAImportant = headerA.includes("T: 888 | INCONNU");
-                    const isBImportant = headerB.includes("T: 888 | INCONNU");
-                    
-                    if (isAImportant && !isBImportant) return -1;
-                    if (!isAImportant && isBImportant) return 1;
-                    
-                    const idA = parseInt(a.getAttribute('data-order-id')) || 0;
-                    const idB = parseInt(b.getAttribute('data-order-id')) || 0;
-                    return idA - idB;
-                });
-
+            // Mise à jour de la grille principale de secours (#ajax-zone si présent)
+            if (ajaxZone) {
                 ajaxZone.innerHTML = '';
-                newOrders.forEach(order => ajaxZone.appendChild(order));
+                newOrders.forEach(order => ajaxZone.appendChild(order.cloneNode(true)));
+            }
 
-                appliquerFiltresAffichage();
-                
-                if (typeof restoreHighlights === 'function') {
-                    restoreHighlights();
-                }
-                
-                const table = document.getElementById('kds-table-zone');
-                if (table && table.classList.contains('view-active-table')) {
-                    syncTableData();
-                }
+            // Mise à jour de la vue grille principale (#kds-grid-view)
+            const gridView = document.getElementById('kds-grid-view');
+            if (gridView) {
+                gridView.innerHTML = '';
+                newOrders.forEach(order => gridView.appendChild(order.cloneNode(true)));
+            }
 
-                const treeView = document.getElementById('kds-tree-view');
-                if (treeView && treeView.style.display !== 'none' && treeView.style.display !== '') {
-                    syncTreeView();
-                }
+            // Application des filtres et des états
+            appliquerFiltresAffichage();
+            
+            if (typeof restoreHighlights === 'function') {
+                restoreHighlights();
+            }
 
-                const compactView = document.getElementById('kds-compact-view');
-                if (compactView && compactView.style.display !== 'none' && compactView.style.display !== '') {
-                    syncCompactData();
-                }
+            updateOrderTimers();
+            
+            // Mise à jour des vues spécifiques si elles sont actives
+            const table = document.getElementById('kds-table-zone');
+            if (table && table.classList.contains('view-active-table')) {
+                syncTableData();
+            }
 
-                const hasNewArrival = newOrderIds.some(id => !currentOrderIds.includes(id));
-                if (hasNewArrival && newOrderIds.length > 0) {
-                    triggerVisualAlert();
-                    if (localStorage.getItem('kds_pa_audio') === 'true') {
-                        playTripleBeep();
-                    }
-                }
-            } else {
-                const treeView = document.getElementById('kds-tree-view');
-                if (treeView && treeView.style.display !== 'none' && treeView.style.display !== '') {
-                    syncTreeView();
-                }
-                const compactView = document.getElementById('kds-compact-view');
-                if (compactView && compactView.style.display !== 'none' && compactView.style.display !== '') {
-                    syncCompactData();
+            const treeView = document.getElementById('kds-tree-view');
+            if (treeView && treeView.style.display !== 'none' && treeView.style.display !== '') {
+                syncTreeView();
+            }
+
+            const compactView = document.getElementById('kds-compact-view');
+            if (compactView && compactView.style.display !== 'none' && compactView.style.display !== '') {
+                syncCompactData();
+            }
+
+            const columnsView = document.getElementById('kds-columns-view');
+            if (columnsView && columnsView.style.display !== 'none' && columnsView.style.display !== '') {
+                distributeOrdersToColumns();
+            }
+
+            // Vérification de l'arrivée de nouvelles commandes pour les alertes sonores/visuelles
+            const hasNewArrival = newOrderIds.some(id => !currentOrderIds.includes(id));
+            if (hasNewArrival && newOrderIds.length > 0) {
+                triggerVisualAlert();
+                if (localStorage.getItem('kds_pa_audio') === 'true') {
+                    playTripleBeep();
                 }
             }
 
@@ -1372,9 +1384,9 @@
     });
 
     function marquerTraite(orderId) {
-        // EN CUISINE : On envoie "Traitee" sans accent pour éviter que l'URL casse (404)
+        // EN CUISINE : On envoie "Traitee" ou le statut attendu
         const newStatus = 'Traitee';
-        console.log(`Envoi au db_manager via /update_status/${orderId}/${newStatus}`);
+        console.log(`Envoi au db_manager via /update_status_livraisons/${orderId}/${newStatus}`);
 
         fetch(`/update_status_livraisons/${orderId}/${newStatus}`, {
             method: 'POST',
@@ -1383,7 +1395,6 @@
             }
         })
         .then(response => {
-            // Correction du "body stream already read" : On ne lit la réponse qu'une seule fois !
             return response.json().then(data => {
                 if (!response.ok) {
                     throw new Error(data.message || `Erreur serveur (${response.status})`);
@@ -1398,15 +1409,20 @@
         })
         .then(data => {
             if (data.success) {
-                // Cache de la vue Tableau
+                // 1. Masquage instantané de la ligne dans la vue Tableau (si active)
                 const row = document.getElementById(`table-row-${orderId}`);
                 if (row) row.style.display = 'none';
 
-                // Cache de la vue Grille (les Post-its)
-                const card = document.querySelector(`.order-wrapper[data-order-id="${orderId}"]`);
-                if (card) card.style.display = 'none';
+                // 2. Masquage instantané de la carte dans la vue Grille
+                const cards = document.querySelectorAll(`.order-wrapper[data-order-id="${orderId}"]`);
+                cards.forEach(card => card.style.display = 'none');
                 
                 console.log(`Commande ${orderId} archivée avec succès !`);
+
+                // 🚀 3. DÉCLENCHEMENT IMMÉDIAT DU RAFRAÎCHISSEMENT DE L'ÉCRAN
+                if (typeof refreshOrders === 'function') {
+                    refreshOrders();
+                }
             } else {
                 console.error("Erreur KDS :", data.message);
                 alert("Erreur KDS : " + data.message);

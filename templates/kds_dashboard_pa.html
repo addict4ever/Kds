@@ -2,69 +2,113 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 {% endblock %}
 
-<div class="col-12 mb-4 no-print">
-    <label class="text-white mb-2 d-block fw-bold" style="letter-spacing: 1px; font-size: 0.9rem; opacity: 0.8;">STYLE D'AFFICHAGE KDS</label>
-    <div id="random-msg" style="
-        background: linear-gradient(135deg, #27ae60, #2ecc71); 
-        color: white; 
-        text-align: center; 
-        padding: 3px 10px; 
-        height: 35px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        font-size: 0.8rem; 
-        font-weight: bold; 
-        position: sticky; 
-        top: 0; 
-        z-index: 10000; 
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        border-bottom: 2px solid #27ae60;
-        cursor: pointer;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    ">
-    </div>
-    <div class="theme-nav-wrapper">
-        <button class="nav-arrow left" onclick="scrollThemes(-200)">
-            <i class="fas fa-chevron-left text-white"></i> ❮
-        </button>
+<style>
+    :root {
+        --grid-cols: 33.333%; /* Défaut à 3 colonnes (100% / 3) */
+    }
 
-        <div class="theme-slider-container" id="themeContainer">
-            <div class="theme-slider">
-                <div class="theme-dot" onclick="changeTheme('theme-classic')" title="Classique" style="background: #f1c40f;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-modern')" title="Moderne" style="background: #3498db;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-dark-red')" title="Rouge" style="background: #e74c3c;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-forest')" title="Forêt" style="background: #2ecc71;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-neon')" title="Néon" style="background: #00d2ff;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-purple')" title="Violet" style="background: #9b59b6;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-high-contrast')" title="Contraste" style="background: #ffffff; border: 2px solid #000;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-midnight')" title="Midnight" style="background: #2c3e50; border-color: #3498db;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-emerald-dark')" title="Émeraude" style="background: #093028; border-color: #10ac84;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-ocean-deep')" title="Océan" style="background: linear-gradient(#141e30, #243b55);"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-coffee')" title="Coffee" style="background: #2c1e12; border-color: #d35400;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-graphite')" title="Graphite" style="background: #34495e; border-color: #bdc3c7;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-lava')" title="Lava" style="background: #ff4b2b;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-frozen')" title="Frozen" style="background: #81ecec;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-retro-terminal')" title="Terminal" style="background: #32ff7e; border: 2px solid #000;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-deep-purple')" title="Deep Purple" style="background: #6c5ce7;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-sunset')" title="Sunset" style="background: #ff4b5c;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-military')" title="Military" style="background: #596139;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-carbon')" title="Carbon" style="background: #333333; border-color: #00d2ff;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-royal')" title="Royal" style="background: #0a0e29; border-color: #f39c12;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-pink-neon')" title="Pink Neon" style="background: #fd79a8;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-industrial')" title="Industrial" style="background: #dfe6e9;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-blood-moon')" title="Blood Moon" style="background: #630000; border-color: #d63031;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-mint')" title="Mint" style="background: #55efc4;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-titanium')" title="Titanium" style="background: #bdc3c7;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-electric-blue')" title="Electric" style="background: #0984e3;"></div>
-                <div class="theme-dot" onclick="changeTheme('theme-mars')" title="Mars" style="background: #e67e22;"></div>
+    #kds-ajax-zone {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 12px !important;
+        width: 100% !important;
+    }
+
+    #kds-ajax-zone .order-wrapper {
+        flex: 0 0 calc(var(--grid-cols) - 12px) !important;
+        max-width: calc(var(--grid-cols) - 12px) !important;
+        box-sizing: border-box !important;
+    }
+
+    .col-btn.active-col {
+        background-color: #2ecc71 !important;
+        border-color: #27ae60 !important;
+        color: white !important;
+    }
+</style>
+
+<div class="col-12 mb-4 no-print">
+    <!-- Barre d'outils supérieure compacte -->
+    <div style="display: flex; justify-content: space-between; align-items: center; background: #1a1a1a; padding: 8px 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333;">
+        
+        <!-- Message aléatoire de fin de service -->
+        <div id="random-msg" style="color: #2ecc71; font-size: 0.85rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;"></div>
+
+        
+
+        <!-- Groupe d'options cachées derrière le sourire et autres raccourcis -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <!-- Option 1 : Bouton Recettes 🍕 -->
+            <button onclick="openRecipeMenuModal()" title="Guide des recettes" style="background: rgba(241, 196, 15, 0.2); border: 2px solid #f1c40f; border-radius: 50%; width: 40px; height: 40px; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                🍕
+            </button>
+
+            <!-- Option principale : Le Bonhomme Sourire 😊 qui cache/affiche la barre des thèmes -->
+            <button onclick="toggleThemePanel()" title="Changer le style" style="background: rgba(255, 255, 255, 0.1); border: 2px solid #fff; border-radius: 50%; width: 45px; height: 45px; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s;">
+                😊
+            </button>
+        </div>
+    </div>
+
+    <!-- Panneau de sélection des thèmes (Masqué par défaut, s'ouvre avec le sourire) -->
+    <div id="theme-panel-container" style="display: none; background: #111; padding: 10px; border-radius: 8px; border: 2px solid #f1c40f; animation: fadeIn 0.3s ease;">
+        
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="color: #fff; font-size: 0.85rem; font-weight: bold; margin-right: 5px;">COLONNES :</span>
+            <div id="grid-cols-buttons" style="display: flex; gap: 4px;">
+                <button onclick="setGridColumns(2)" id="btn-grid-2" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">2</button>
+                <button onclick="setGridColumns(3)" id="btn-grid-3" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">3</button>
+                <button onclick="setGridColumns(4)" id="btn-grid-4" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">4</button>
+                <button onclick="setGridColumns(5)" id="btn-grid-5" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">5</button>
+                <button onclick="setGridColumns(6)" id="btn-grid-6" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">6</button>
+                <button onclick="setGridColumns(7)" id="btn-grid-7" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">7</button>
+                <button onclick="setGridColumns(8)" id="btn-grid-8" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">8</button>
             </div>
         </div>
+        
+        <label class="text-white mb-2 d-block fw-bold" style="letter-spacing: 1px; font-size: 0.9rem; opacity: 0.8;">CHOISIR UN STYLE D'AFFICHAGE KDS</label>
+        
+        <div class="theme-nav-wrapper">
+            <button class="nav-arrow left" onclick="scrollThemes(-200)">
+                <i class="fas fa-chevron-left text-white"></i> ❮
+            </button>
 
-        <button class="nav-arrow right" onclick="scrollThemes(200)">
-            <i class="fas fa-chevron-right text-white"></i> ❯
-        </button>
+            <div class="theme-slider-container" id="themeContainer">
+                <div class="theme-slider">
+                    <div class="theme-dot" onclick="changeTheme('theme-classic')" title="Classique" style="background: #f1c40f;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-modern')" title="Moderne" style="background: #3498db;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-dark-red')" title="Rouge" style="background: #e74c3c;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-forest')" title="Forêt" style="background: #2ecc71;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-neon')" title="Néon" style="background: #00d2ff;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-purple')" title="Violet" style="background: #9b59b6;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-high-contrast')" title="Contraste" style="background: #ffffff; border: 2px solid #000;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-midnight')" title="Midnight" style="background: #2c3e50; border-color: #3498db;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-emerald-dark')" title="Émeraude" style="background: #093028; border-color: #10ac84;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-ocean-deep')" title="Océan" style="background: linear-gradient(#141e30, #243b55);"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-coffee')" title="Coffee" style="background: #2c1e12; border-color: #d35400;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-graphite')" title="Graphite" style="background: #34495e; border-color: #bdc3c7;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-lava')" title="Lava" style="background: #ff4b2b;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-frozen')" title="Frozen" style="background: #81ecec;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-retro-terminal')" title="Terminal" style="background: #32ff7e; border: 2px solid #000;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-deep-purple')" title="Deep Purple" style="background: #6c5ce7;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-sunset')" title="Sunset" style="background: #ff4b5c;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-military')" title="Military" style="background: #596139;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-carbon')" title="Carbon" style="background: #333333; border-color: #00d2ff;"></div>
+                    <div class="theme-dot" onclick="theme-royal" title="Royal" style="background: #0a0e29; border-color: #f39c12;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-pink-neon')" title="Pink Neon" style="background: #fd79a8;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-industrial')" title="Industrial" style="background: #dfe6e9;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-blood-moon')" title="Blood Moon" style="background: #630000; border-color: #d63031;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-mint')" title="Mint" style="background: #55efc4;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-titanium')" title="Titanium" style="background: #bdc3c7;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-electric-blue')" title="Electric" style="background: #0984e3;"></div>
+                    <div class="theme-dot" onclick="changeTheme('theme-mars')" title="Mars" style="background: #e67e22;"></div>
+                </div>
+            </div>
+
+            <button class="nav-arrow right" onclick="scrollThemes(200)">
+                <i class="fas fa-chevron-right text-white"></i> ❯
+            </button>
+        </div>
     </div>
 </div>
 
@@ -102,7 +146,16 @@
                         
                         </div>
 
-                    
+                    <button id="btn-donner-{{ item.data.id }}" 
+                            class="btn {% if item.data.status == 'Traitée' %}btn-danger btn-donner-active{% else %}btn-outline-warning{% endif %} w-100 fw-bold mt-2 py-3 fs-2"
+                            onclick="openPAModal('{{ item.data.id }}')">
+                        
+                        {% if item.data.status == 'Traitée' %}
+                            ✅ DONNER
+                        {% else %}
+                            🔔 DONNER
+                        {% endif %}
+                    </button>
 
                     <button id="ok-{{ item.data.id }}" class="btn btn-success w-100 mt-2 fw-bold" 
                             style="display:none; height: 50px; font-size: 1.2rem;" 
@@ -201,6 +254,18 @@
     </div>
 </div>
 
+<div id="ingredientsModal" class="ingredients-modal-overlay" onclick="closeIngredientsModal(event)" style="display: none; position: fixed; z-index: 10005; background: rgba(0,0,0,0.85); top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+    <div class="ingredients-modal-content" onclick="event.stopPropagation()" style="background: #1a1a1a; border: 3px solid var(--kds-border, #f1c40f); padding: 30px; border-radius: 25px; text-align: left; width: 90%; max-width: 850px; box-shadow: 0 0 40px rgba(241, 196, 15, 0.3); position: relative; animation: modalScaleIn 0.2s ease-in-out;">
+        <div class="ingredients-modal-title" style="color: var(--kds-header-bg, #f1c40f); font-size: 2rem; font-weight: bold; margin-top: 0; margin-bottom: 20px; text-transform: uppercase; border-bottom: 2px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <span id="modalItemName">🍕 INGRÉDIENTS</span>
+            <button class="ingredients-close-btn" onclick="closeIngredientsModal()" style="background: #e74c3c; color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 1.5rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+        </div>
+        <div class="ingredients-modal-body" id="modalItemIngredients" style="font-size: 1.4rem; line-height: 1.6; color: #d2d2d2; background: rgba(0, 0, 0, 0.3); padding: 20px; border-radius: 15px; border-left: 6px solid var(--kds-header-bg, #f1c40f);">
+            Chargement des ingrédients...
+        </div>
+    </div>
+</div>
+
 <div id="modal-note" style="display:none; position:fixed; z-index:10001; background: rgba(0,0,0,0.85); top:0; left:0; width:100%; height:100%; ">
     <div style="position:absolute; top:45%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:3px solid #00d2ff; padding:30px; border-radius:25px; text-align:center; min-width:550px; box-shadow: 0 0 40px rgba(0, 210, 255, 0.3);">
         
@@ -244,6 +309,57 @@
     let isNumpadOpen = false; // Variable de contrôle
     let currentTimeInput = ""; // Stocke les chiffres saisis
     
+    const menuRecipes = {
+        "SOUS-MARINS": {
+            "MAISON": "Jambon • Tomates • Bacon • Pepperoni • Fromage • Salade Verte • Salade Choux • Frite",
+            "ITALIEN": "Cornichons • Oignons • Piments • Pepperoni • Fromage • Salade Choux • Frite"
+        },
+        "NACHOS": {
+            "CLASSIQUE / SPÉCIAL": "Chips • Fromage nachos • Échalotes • Fromage • Piment fort • Piments verts • Tomates • Bacon • Salsa • Crème sure"
+        },
+        "PIZZAS": {
+            "LA SPÉCIALE": "Sauce Pizza • Sauce Spaghetti • Pepperoni • Fromage • Oignons • Bacon • Piments • Champignons",
+            "LA GARNIE": "Sauce Pizza • Pepperoni • Fromage • Piments • Champignons",
+            "LA VÉGÉTARIENNE": "Sauce Pizza • Zucchinis • Cœurs de Palmier • Tomates • Fromage • Piments • Champignons",
+            "LA FAJITAS": "Sauce Salsa • Poulet • Oignons • Tomates • Fromage • Piments • Champignons",
+            "LA FRUITS DE MER": "Sauce Blanche • Fromage • Champignons",
+            "LA CÔTES LEVÉES": "Sauce Côtes Levées • Fromage",
+            "LA GRECQUE": "Sauce Pizza • Mozzarella • Fromage Feta • Olives Noires • Tomates • Oignons",
+            "LA 4 FROMAGES": "Sauce Pizza • Mozzarella",
+            "LA MEXICAINE": "Sauce Salsa • Pepperoni • Fromage • Piments Verts • Piments Forts",
+            "LA CHAMPIGNONS": "Sauce Pizza • Fromage • Champignons",
+            "LA PEPPERONI": "Sauce Pizza • Pepperoni • Fromage",
+            "LA FROMAGE": "Sauce Pizza • Fromage",
+            "L'ANANAS": "Sauce Pizza • Jambon • Fromage • Bacon • Ananas"
+        },
+        "🍚 RIZ": {
+            "RIZ AU POULET": "Poulet • Champignon • Piment • Riz • 1 ou 2 Pain",
+            "RIZ AUX LÉGUMES": "Champignon • Piment • Choux Fleur • Brocoli • Tomate • Riz • 1 ou 2 Pain"
+        },
+        "🍔 BURGERS": {
+            "LE CLASSIQUE": "Mayonnaise • Fromage Suisse • Tomates • Salade • Oignons • Cornichons • Bacon • Salade de choux • Frite",
+            "LE MEXICAIN": "Mayonnaise Jalapeño • Fromage Suisse • Piments Verts • Oignons Rouges • Salade • Tomates • Salade de choux • Frite",
+            "4 FROMAGES": "Mayonnaise Citronnée Poivrée • Fromages • Salade • Tomates • Oignons • Salade de choux • Frite",
+            "A LA GRECQUE": "Mayonnaise Pesto • Fromage Feta • Oignons Rouges • Olives Noires • Salade • Tomates • Salade de choux • Frite"
+        },
+        "🥗 SALADES": {
+            "SALADE CÉSAR": "Laitue Romaine • Croûtons • Bacon • Fromage Parmesan • Câpres • Sauce César",
+            "SALADE DU CHEF": "Laitue • Tomates • Concombres • Oignons • Chou Rouge • Betteraves • Luzerne • 1 pot de Mayonnaise • Vinaigrette Chef",
+            "SALADE VARIÉE AU JAMBON": "Jambon • Salade Patate • Salade Macaroni • Salade de Choux • Salade du Chef",
+            "SALADE VARIÉE AU POULET": "Poulet • Salade Patate • Salade Macaroni • Salade de Choux • Salade du Chef",
+            "SALADE THAÏ AU POULET": "Poulet • Salade Ramen • Noix de Cajoux • Nouille Thaï • Clémentine • Ananas • 5 Piment Rouge",
+            "SALADE THAÏ AUX CREVETTES": "Crevettes Panées • Salade Ramen • Noix de Cajoux • Nouille Thaï • Clémentine • Ananas • 5 Piment Rouge"
+        },
+        "🐟 POISSONS": {
+            "FILET DE SOLE": "Filet de Sole • Citron • Frites • Légumes • Sauce Tartare • Salade du Chef",
+            "FISH AND CHIPS": "Poisson Pané • Sauce Tartare • Citron • Frites • Salade du Chef • Légumes"
+        },
+        "🦐 FRUITS DE MER": {
+            "ASSIETTE CREVETTES": "Crevettes à l'Ail (12) • Beurre à l'Ail • Citron • Riz • Patates Anciennes • Salade César",
+            "ASSIETTE LANGOUSTINES": "Langoustines (8) • Beurre à l'Ail • Citron • Riz • Patates Anciennes • Salade César"
+        }
+    };
+
     const ALL_THEMES = [
         'theme-classic', 'theme-modern', 'theme-dark-red', 'theme-forest', 
         'theme-neon', 'theme-purple', 'theme-high-contrast', 'theme-midnight',
@@ -260,6 +376,121 @@
         localStorage.removeItem('delivered_orders');
         sessionStorage.setItem('session_active', 'true');
         console.log("Nouvelle session détectée : Cache des commandes grisées vidé.");
+    }
+
+    
+    function toggleThemePanel() {
+        const panel = document.getElementById('theme-panel-container');
+        if (panel) {
+            if (panel.style.display === 'none' || panel.style.display === '') {
+                panel.style.display = 'block';
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+    }
+
+    function setGridColumns(count) {
+        const root = document.documentElement;
+        
+        // Retirer la classe active de tous les boutons de colonnes
+        for (let i = 2; i <= 8; i++) {
+            const btn = document.getElementById(`btn-grid-${i}`);
+            if (btn) btn.classList.remove('active-col');
+        }
+        
+        // Activer visuellement le bouton choisi
+        const activeBtn = document.getElementById(`btn-grid-${count}`);
+        if (activeBtn) activeBtn.classList.add('active-col');
+        
+        // Calcul du pourcentage de largeur (ex: 3 colonnes = 33.333%, 4 colonnes = 25%)
+        const percentage = (100 / count).toFixed(4) + '%';
+        root.style.setProperty('--grid-cols', percentage);
+        
+        // Sauvegarde de la préférence dans le localStorage
+        localStorage.setItem('kds_grid_columns', count);
+    }
+
+    // Charger la préférence de colonnes au démarrage de la page (Défaut : 3)
+    document.addEventListener("DOMContentLoaded", function() {
+        const savedCols = localStorage.getItem('kds_grid_columns') || '3';
+        setGridColumns(parseInt(savedCols));
+    });
+
+
+    function openRecipeMenuModal() {
+        const containerId = 'recipe-scroll-container';
+        
+        // Conteneur principal en mode flex (hauteur augmentée et espacement tactile)
+        let content = `<div style="display: flex; height: 560px; gap: 20px; text-align: left; padding: 5px;">`;
+        
+        // --- COLONNE LATÉRALE TACTILE (GROS BOUTONS VERTICAUX) ---
+        content += `<div style="width: 230px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding-right: 8px; border-right: 2px solid #444;">`;
+        for (let category of Object.keys(menuRecipes)) {
+            content += `<button onclick="document.getElementById('${containerId}').scrollTo({top: document.getElementById('cat-${category.replace(/[^a-zA-Z0-9]/g, '')}').offsetTop - document.getElementById('${containerId}').offsetTop, behavior: 'smooth'})" 
+                        style="background: rgba(255,255,255,0.08); color: #fff; border: 2px solid #55fw; padding: 16px 14px; border-radius: 12px; font-weight: bold; font-size: 1.1rem; cursor: pointer; text-align: left; min-height: 60px; display: flex; align-items: center; transition: all 0.15s; box-shadow: 0 4px 6px rgba(0,0,0,0.2);"
+                        onmouseover="this.style.background='rgba(241,196,15,0.3)'; this.style.borderColor='#f1c40f';" 
+                        onmouseout="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='#555';"
+                        ontouchstart="this.style.background='rgba(241,196,15,0.4)'; this.style.borderColor='#f1c40f';"
+                        ontouchend="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='#555';">
+                        ${category}
+                        </button>`;
+        }
+        content += `</div>`;
+
+        // --- ZONE DE CONTENU PRINCIPALE (DÉFILEMENT FLUIDE) ---
+        content += `<div id="${containerId}" style="flex: 1; overflow-y: auto; padding-right: 12px; display: flex; flex-direction: column; gap: 30px; -webkit-overflow-scrolling: touch;">`;
+        
+        const colors = ['#3498db', '#e67e22', '#f1c40f', '#2ecc71', '#9b59b6', '#00d2ff', '#e74c3c', '#ff4b5c'];
+        let colorIndex = 0;
+
+        for (let [category, items] of Object.entries(menuRecipes)) {
+            let catId = `cat-${category.replace(/[^a-zA-Z0-9]/g, '')}`;
+            let catColor = colors[colorIndex % colors.length];
+            colorIndex++;
+
+            content += `<div id="${catId}" style="padding-top: 5px;">`;
+            content += `<h3 style='color: ${catColor}; margin-top: 0; border-bottom: 3px solid ${catColor}; padding-bottom: 8px; font-size: 1.5rem; letter-spacing: 0.5px;'>${category}</h3>`;
+            content += `<div style='display: flex; flex-direction: column; gap: 12px; margin-top: 12px;'>`;
+            
+            for (let [name, ingredients] of Object.entries(items)) {
+                let displayName = category === "SOUS-MARINS" ? `SOUS-MARIN ${name}` : name;
+                content += `<div style='background: rgba(255,255,255,0.04); padding: 14px 16px; border-radius: 8px; border-left: 6px solid ${catColor}; box-shadow: 0 2px 5px rgba(0,0,0,0.3);'>
+                                <strong style='color: ${catColor}; font-size: 1.2rem; display: block; margin-bottom: 6px;'>${displayName}</strong>
+                                <div style='display: flex; flex-wrap: wrap; gap: 8px;'>${formatIngredientsHorizontal(ingredients)}</div>
+                            </div>`;
+            }
+            content += `</div></div>`;
+        }
+
+        content += `</div></div>`;
+
+        showIngredientsModal("📖 GUIDE DES RECETTES", content);
+    }
+
+    // Petite fonction utilitaire pour transformer la chaîne en pastilles horizontales
+    function formatIngredientsHorizontal(ingredientsStr) {
+        let parts = ingredientsStr.split('•').map(p => p.trim());
+        let html = '';
+        parts.forEach(part => {
+            html += `<span style='background: rgba(0,0,0,0.4); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 1rem; border: 1px solid rgba(255,255,255,0.1);'>${part}</span>`;
+        });
+        return html;
+    }
+
+    function showIngredientsModal(title, htmlContent) {
+        const modal = document.getElementById('ingredientsModal');
+        const titleEl = document.getElementById('modalItemName');
+        const bodyEl = document.getElementById('modalItemIngredients');
+
+        if (titleEl) titleEl.innerText = title;
+        if (bodyEl) bodyEl.innerHTML = htmlContent;
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeIngredientsModal(event) {
+        const modal = document.getElementById('ingredientsModal');
+        if (modal) modal.style.display = 'none';
     }
 
     function refreshKDS() {

@@ -962,7 +962,8 @@ class DBManager:
             if final_note: current_items_objs.append({"main_item": "NOTE:", "sub_items": note_lines})
             if donner_au_pc:
                 display_pa = pa_number if pa_number else "???"
-                current_items_objs.append({"main_item": f"*** DONNER AU PC (PA #{display_pa}) ***", "sub_items": []})
+                current_items_objs.append({"main_item": f"*** DONNER AU PC ***", "sub_items": []})
+                current_items_objs.append({"main_item": f"*** PA #{display_pa}) ***", "sub_items": []})
                 current_items_objs.append({"main_item": "*** ENLEVER LE PAPIER JAUNE ***", "sub_items": []})
 
             final_json = json.dumps([json.dumps(obj) for obj in current_items_objs])
@@ -1388,7 +1389,7 @@ class DBManager:
                 # 1. Cas spécifique : table 888, type 888 ET statut "En Attente"
                 if table == "888" and stype == "888" and status == "En attente":
                     pending_orders_by_service['POUR EMPORTER'].append(order_data)
-                    print ("lol")
+                    
                 
                 # 2. Livraison (Statut Pizza requis)
                 elif (table == "777" or serveuse == "777" or "LIVRAISON" in stype) and status == "Pizza":

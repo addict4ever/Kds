@@ -56,6 +56,11 @@
     .theme-space { --kds-bg: #000000; --kds-card-bg: #130f40; --kds-header-bg: #30336b; --kds-header-text: #dff9fb; --kds-border: #7ed6df; --kds-item-main: #ffbe76; }
     .theme-titanium { --kds-bg: #3d3d3d; --kds-card-bg: #4b4b4b; --kds-header-bg: #130f40; --kds-header-text: #fff; --kds-border: #535c68; --kds-item-main: #f9ca24; }
     
+    @keyframes modalScaleIn {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
     body { 
         background-color: var(--kds-bg); 
         margin: 0; 
@@ -684,13 +689,13 @@
     </div>
 </div>
 
-<div id="ingredientsModal" class="ingredients-modal-overlay" onclick="closeIngredientsModal(event)">
-    <div class="ingredients-modal-content" onclick="event.stopPropagation()">
-        <div class="ingredients-modal-title">
+<div id="ingredientsModal" class="ingredients-modal-overlay" onclick="closeIngredientsModal(event)" style="display: none; position: fixed; z-index: 10005; background: rgba(0,0,0,0.85); top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+    <div class="ingredients-modal-content" onclick="event.stopPropagation()" style="background: #1a1a1a; border: 3px solid var(--kds-border, #f1c40f); padding: 30px; border-radius: 25px; text-align: left; width: 90%; max-width: 850px; box-shadow: 0 0 40px rgba(241, 196, 15, 0.3); position: relative; animation: modalScaleIn 0.2s ease-in-out;">
+        <div class="ingredients-modal-title" style="color: var(--kds-header-bg, #f1c40f); font-size: 2rem; font-weight: bold; margin-top: 0; margin-bottom: 20px; text-transform: uppercase; border-bottom: 2px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
             <span id="modalItemName">🍕 INGRÉDIENTS</span>
-            <button class="ingredients-close-btn" onclick="closeIngredientsModal()">✕</button>
+            <button class="ingredients-close-btn" onclick="closeIngredientsModal()" style="background: #e74c3c; color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 1.5rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
         </div>
-        <div class="ingredients-modal-body" id="modalItemIngredients">
+        <div class="ingredients-modal-body" id="modalItemIngredients" style="font-size: 1.4rem; line-height: 1.6; color: #d2d2d2; background: rgba(0, 0, 0, 0.3); padding: 20px; border-radius: 15px; border-left: 6px solid var(--kds-header-bg, #f1c40f);">
             Chargement des ingrédients...
         </div>
     </div>
@@ -771,40 +776,51 @@
     
 
     function openRecipeMenuModal() {
-        let content = "<div style='max-height: 450px; overflow-y: auto; padding-right: 5px;'>";
+        const containerId = 'recipe-scroll-container';
         
-        // 1. SOUS-MARINS (Affichés en premier)
-        content += "<h3 style='color: #3498db; margin-top: 0; border-bottom: 2px solid #3498db; padding-bottom: 5px;'>🥖 SOUS-MARINS</h3>";
-        content += "<div style='display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;'>";
-        for (let [name, ingredients] of Object.entries(menuRecipes["SOUS-MARINS"])) {
-            content += `<div style='background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px; border-left: 4px solid #3498db;'>
-                            <strong style='color: #3498db; font-size: 1.2rem; display: block; margin-bottom: 4px;'>SOUS-MARIN ${name}</strong>
-                            <div style='display: flex; flex-wrap: wrap; gap: 8px;'>${formatIngredientsHorizontal(ingredients)}</div>
-                        </div>`;
+        // Conteneur principal en mode flex (hauteur augmentée et espacement tactile)
+        let content = `<div style="display: flex; height: 560px; gap: 20px; text-align: left; padding: 5px;">`;
+        
+        // --- COLONNE LATÉRALE TACTILE (GROS BOUTONS VERTICAUX) ---
+        content += `<div style="width: 230px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding-right: 8px; border-right: 2px solid #444;">`;
+        for (let category of Object.keys(menuRecipes)) {
+            content += `<button onclick="document.getElementById('${containerId}').scrollTo({top: document.getElementById('cat-${category.replace(/[^a-zA-Z0-9]/g, '')}').offsetTop - document.getElementById('${containerId}').offsetTop, behavior: 'smooth'})" 
+                        style="background: rgba(255,255,255,0.08); color: #fff; border: 2px solid #55fw; padding: 16px 14px; border-radius: 12px; font-weight: bold; font-size: 1.1rem; cursor: pointer; text-align: left; min-height: 60px; display: flex; align-items: center; transition: all 0.15s; box-shadow: 0 4px 6px rgba(0,0,0,0.2);"
+                        onmouseover="this.style.background='rgba(241,196,15,0.3)'; this.style.borderColor='#f1c40f';" 
+                        onmouseout="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='#555';"
+                        ontouchstart="this.style.background='rgba(241,196,15,0.4)'; this.style.borderColor='#f1c40f';"
+                        ontouchend="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='#555';">
+                        ${category}
+                        </button>`;
         }
-        content += "</div>";
+        content += `</div>`;
 
-        // 2. NACHOS (Affichés juste après les sous-marins)
-        content += "<h3 style='color: #e67e22; margin-top: 0; border-bottom: 2px solid #e67e22; padding-bottom: 5px;'>🧀 NACHOS</h3>";
-        content += "<div style='display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;'>";
-        for (let [name, ingredients] of Object.entries(menuRecipes["NACHOS"])) {
-            content += `<div style='background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px; border-left: 4px solid #e67e22;'>
-                            <strong style='color: #e67e22; font-size: 1.2rem; display: block; margin-bottom: 4px;'>${name}</strong>
-                            <div style='display: flex; flex-wrap: wrap; gap: 8px;'>${formatIngredientsHorizontal(ingredients)}</div>
-                        </div>`;
-        }
-        content += "</div>";
+        // --- ZONE DE CONTENU PRINCIPALE (DÉFILEMENT FLUIDE) ---
+        content += `<div id="${containerId}" style="flex: 1; overflow-y: auto; padding-right: 12px; display: flex; flex-direction: column; gap: 30px; -webkit-overflow-scrolling: touch;">`;
+        
+        const colors = ['#3498db', '#e67e22', '#f1c40f', '#2ecc71', '#9b59b6', '#00d2ff', '#e74c3c', '#ff4b5c'];
+        let colorIndex = 0;
 
-        // 3. PIZZAS
-        content += "<h3 style='color: #f1c40f; margin-top: 0; border-bottom: 2px solid #f1c40f; padding-bottom: 5px;'>🍕 PIZZAS</h3>";
-        content += "<div style='display: flex; flex-direction: column; gap: 12px;'>";
-        for (let [name, ingredients] of Object.entries(menuRecipes["PIZZAS"])) {
-            content += `<div style='background: rgba(255,255,255,0.03); padding: 10px; border-radius: 6px; border-left: 4px solid #f1c40f;'>
-                            <strong style='color: #f1c40f; font-size: 1.2rem; display: block; margin-bottom: 4px;'>${name}</strong>
-                            <div style='display: flex; flex-wrap: wrap; gap: 8px;'>${formatIngredientsHorizontal(ingredients)}</div>
-                        </div>`;
+        for (let [category, items] of Object.entries(menuRecipes)) {
+            let catId = `cat-${category.replace(/[^a-zA-Z0-9]/g, '')}`;
+            let catColor = colors[colorIndex % colors.length];
+            colorIndex++;
+
+            content += `<div id="${catId}" style="padding-top: 5px;">`;
+            content += `<h3 style='color: ${catColor}; margin-top: 0; border-bottom: 3px solid ${catColor}; padding-bottom: 8px; font-size: 1.5rem; letter-spacing: 0.5px;'>${category}</h3>`;
+            content += `<div style='display: flex; flex-direction: column; gap: 12px; margin-top: 12px;'>`;
+            
+            for (let [name, ingredients] of Object.entries(items)) {
+                let displayName = category === "SOUS-MARINS" ? `SOUS-MARIN ${name}` : name;
+                content += `<div style='background: rgba(255,255,255,0.04); padding: 14px 16px; border-radius: 8px; border-left: 6px solid ${catColor}; box-shadow: 0 2px 5px rgba(0,0,0,0.3);'>
+                                <strong style='color: ${catColor}; font-size: 1.2rem; display: block; margin-bottom: 6px;'>${displayName}</strong>
+                                <div style='display: flex; flex-wrap: wrap; gap: 8px;'>${formatIngredientsHorizontal(ingredients)}</div>
+                            </div>`;
+            }
+            content += `</div></div>`;
         }
-        content += "</div></div>";
+
+        content += `</div></div>`;
 
         showIngredientsModal("📖 GUIDE DES RECETTES", content);
     }
