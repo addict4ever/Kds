@@ -1831,6 +1831,99 @@ class KDSGUI:
             self.update_status("Accès à la configuration des plats refusé (Authentification échouée).", 'red')
     # ---------------------------------------------
 
+    def _refresh_pizza_tables_display(self):
+        """
+        Affiche les cases des tables et met en avant la première commande 
+        avec un compteur progressif en minutes (affiché en jaune) mis à jour dynamiquement.
+        """
+        try:
+            # 1. Nettoyer les anciennes cases
+            for widget in self.pizza_boxes_container.winfo_children():
+                widget.destroy()
+
+            # 2. Récupérer la liste complète des dictionnaires {'table': ..., 'creation_date': ...}
+            pizza_data = self.db_manager.get_pizza_commande_tables()
+
+            for index, item in enumerate(pizza_data):
+                table_num = item["table"]
+                full_date = item["creation_date"]
+                
+                # 3. Si c'est la PREMIÈRE commande (la plus ancienne), calcul du temps écoulé progressif
+                if index == 0:
+                    diff_minutes = 0
+                    if full_date:
+                        try:
+                            # Convertit la date de création de la DB en objet datetime
+                            creation_dt = datetime.strptime(full_date, "%Y-%m-%d %H:%M:%S")
+                            # Calcule la différence avec l'heure actuelle
+                            now = datetime.now()
+                            diff_seconds = (now - creation_dt).total_seconds()
+                            diff_minutes = max(0, int(diff_seconds // 60)) # Convertit en minutes pleines
+                        except Exception as e:
+                            logger.error(f"Erreur calcul temps écoulé: {e}")
+
+                    # Case plus large pour afficher le numéro de table et les minutes écoulées
+                    box = tk.Frame(
+                        self.pizza_boxes_container, 
+                        width=95,  
+                        height=30, 
+                        bg="#c0392b",  
+                        highlightbackground="#ffffff", 
+                        highlightthickness=1
+                    )
+                    box.pack_propagate(False)  
+                    box.pack(side=tk.LEFT, padx=4, pady=5)
+
+                    inner_frame = tk.Frame(box, bg="#c0392b")
+                    inner_frame.pack(expand=True, fill="both")
+
+                    lbl_table = tk.Label(
+                        inner_frame, 
+                        text=f"T:{table_num}", 
+                        font=("Arial", 9, "bold"), 
+                        fg="white", 
+                        bg="#c0392b"
+                    )
+                    lbl_table.pack(side=tk.LEFT, padx=(4, 2))
+
+                    # Affichage du temps progressif en minutes (en JAUNE)
+                    lbl_time = tk.Label(
+                        inner_frame, 
+                        text=f"{diff_minutes}m", 
+                        font=("Arial", 9, "bold"), 
+                        fg="#f1c40f",  # 🟡 TEMPS EN JAUNE
+                        bg="#c0392b"
+                    )
+                    lbl_time.pack(side=tk.LEFT, padx=(0, 4))
+                
+                else:
+                    # 4. Pour les autres tables suivantes : case classique 30x30
+                    box = tk.Frame(
+                        self.pizza_boxes_container, 
+                        width=30, 
+                        height=30, 
+                        bg="#e74c3c",  
+                        highlightbackground="#ffffff", 
+                        highlightthickness=1
+                    )
+                    box.pack_propagate(False)  
+                    box.pack(side=tk.LEFT, padx=4, pady=5)
+
+                    lbl = tk.Label(
+                        box, 
+                        text=table_num, 
+                        font=("Arial", 10, "bold"), 
+                        fg="white", 
+                        bg="#e74c3c"
+                    )
+                    lbl.pack(expand=True, fill="both")
+
+        except Exception as e:
+            logger.error(f"Erreur lors du rafraîchissement des cases Pizza: {e}")
+
+        # 5. Actualisation automatique toutes les 1 seconde (1000 ms) pour que le timer soit progressif et en temps réel
+        self.root.after(1000, self._refresh_pizza_tables_display)
+        
     def _create_main_frames(self):
         """Crée les cadres principaux : Header/Status et PostitSelector."""
         
@@ -1838,6 +1931,27 @@ class KDSGUI:
         self.status_frame = tk.Frame(self.root, bg=CARD_BG, height=30)
         self.status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
         
+        # ⭐ NOUVEAU : Une barre dédiée rien que pour les tables Pizza (COMMANDE) au-dessus du statut
+        self.pizza_bar_frame = tk.Frame(self.root, bg="#1a252f", height=45)
+        self.pizza_bar_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=(0, 2))
+        self.pizza_bar_frame.pack_propagate(False) # Force une hauteur fixe pour la barre
+
+        # Petit libellé explicatif à gauche de la barre
+        tk.Label(
+            self.pizza_bar_frame, 
+            text="🍕 : ", 
+            font=('Arial', 11, 'bold'), 
+            bg="#1a252f", 
+            fg="#f1c40f"
+        ).pack(side=tk.LEFT, padx=10)
+
+        # Conteneur interne où vont s'aligner dynamiquement les petites cases 30x30
+        self.pizza_boxes_container = tk.Frame(self.pizza_bar_frame, bg="#1a252f")
+        self.pizza_boxes_container.pack(side=tk.LEFT, fill=tk.Y, padx=5)
+
+        # Lancement de la boucle de rafraîchissement dynamique (5 secondes)
+        self._refresh_pizza_tables_display()
+
         # Label de statut (à gauche)
         self.status_label = tk.Label(self.status_frame, text="Système KDS démarré.", fg=COLOR_TEXT, bg=CARD_BG, anchor='w')
         self.status_label.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)

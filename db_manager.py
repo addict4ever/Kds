@@ -270,31 +270,64 @@ class DBManager:
         finally:
             if conn: conn.close()
 
+    def get_pizza_commande_tables(self) -> list:
+        """
+        Récupère TOUTES les occurrences des numéros de table et de leur date de création 
+        pour les commandes dont le service_type est 'COMMANDE' et le statut est 'Pizza',
+        triées de la plus ancienne à la plus récente, EXCLUSIVEMENT depuis la base 'LIVREUR'.
+        """
+        conn = None
+        results = []
+        try:
+            conn = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor = conn.cursor()
+            # On récupère le numéro de table ET la date de création
+            cursor.execute("""
+                SELECT table_number, creation_date 
+                FROM orders 
+                WHERE service_type = 'COMMANDE' AND status = 'Pizza'
+                ORDER BY creation_date ASC
+            """)
+            rows = cursor.fetchall()
+            # On retourne une liste de dictionnaires ou de tuples (table, date)
+            results = [{"table": str(row[0]), "creation_date": row[1]} for row in rows]
+        except sqlite3.Error as e:
+            logger.error(f"Erreur SQL (Livreur) lors de la récupération des tables Pizza: {e}")
+        finally:
+            if conn:
+                conn.close()
+                
+        return results
+
     def set_order_status_by_bill_id_livraison(self, bill_id: str, new_status: str) -> int:
         """
-        Met à jour le statut d'une commande EXCLUSIVEMENT dans la base 'LIVREUR'.
+        Met à jour le statut et la date/heure de création d'une commande 
+        EXCLUSIVEMENT dans la base 'LIVREUR' à l'heure actuelle.
         """
         row_count = 0
         conn = None
         
         try:
+            # Récupération de l'heure et la date actuelles de la modification
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
             # Connexion directe à la base du clone
             conn = sqlite3.connect(LIVREUR_DB_PATH)
             cursor = conn.cursor()
             clean_bid = str(bill_id).strip()
             
-            # Mise à jour dans la base livreur
+            # Mise à jour du statut ET de la date (creation_date) dans la base livreur
             cursor.execute("""
                 UPDATE orders 
-                SET status = ? 
+                SET status = ?, creation_date = ? 
                 WHERE id = ? OR bill_id = ? OR bill_id LIKE ?
-            """, (new_status, clean_bid, clean_bid, f"{clean_bid}-%"))
+            """, (new_status, current_time, clean_bid, clean_bid, f"{clean_bid}-%"))
             
             conn.commit()
             row_count = cursor.rowcount
             
             if row_count > 0:
-                logger.info(f"✅ Succès (Livreur) : {row_count} ligne(s) mise(s) à jour pour '{clean_bid}'")
+                logger.info(f"✅ Succès (Livreur) : {row_count} ligne(s) mise(s) à jour avec la date {current_time} pour '{clean_bid}'")
             else:
                 logger.warning(f"⚠️ Échec (Livreur) : Aucune facture trouvée pour '{clean_bid}'.")
                 
