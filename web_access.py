@@ -84,7 +84,9 @@ WHITELIST_ROUTES = [
     '/static/js/chartjs-plugin-zoom.min.js',
     '/static/js/html2pdf.bundle.min.js',
     '/kds_pa_pizza',
-    '/envoyer_tcp_commande'
+    '/envoyer_tcp_commande',
+    '/kds_four_commande',
+    '/kds_friteuse'
     
     
     
@@ -298,6 +300,8 @@ def filtrer_acces_global():
         return
     if path == '/envoyer_tcp_commande':
         return
+    if path == '/kds_friteuse':
+        return
 
     # 4. VÉRIFICATION DE L'IP (Couche 1)
     #if not is_ip_allowed():
@@ -315,6 +319,69 @@ def filtrer_acces_global():
     #    logger.warning(f"🔑 Header invalide de: {request.remote_addr}")
     #    return "Accès interdit: Application non identifiée.", 403
 
+
+from flask import render_template, jsonify, request
+
+@app.route('/kds_friteuse')
+def kds_friteuse():
+    # Liste des items à suivre
+    items_to_track = [
+        "cuisse", "poit", "ailes", "croq", 
+        "croq enf", "doigts enf", "doigts poulet", "jalapano", 
+        "popper", "fondu", "batt", "of", "pat"
+    ]
+    
+    # 1. Récupération des décomptes d'items actifs
+    active_items_counts = db_manager.get_all_pending_items_for_kds_total()
+    
+    # Initialisation du dictionnaire de résultat
+    counts = {target: 0 for target in items_to_track}
+    
+    # 2. Tri des cibles par longueur DÉCROISSANTE (les plus longues et précises d'abord)
+    # Ex: "croq enf" sera évalué avant "croq"
+    sorted_targets = sorted(items_to_track, key=lambda x: len(x.strip()), reverse=True)
+    
+    # Copie de travail des items de la DB
+    remaining_db_items = {
+        item_name.strip().lower(): qty 
+        for item_name, qty in active_items_counts.items()
+    }
+    
+    # 3. Association sans double comptage
+    for target in sorted_targets:
+        target_lower = target.strip().lower()
+        matched_keys = []
+        
+        for item_name_lower, qty in remaining_db_items.items():
+            if target_lower in item_name_lower:
+                counts[target] += qty
+                matched_keys.append(item_name_lower)
+        
+        # Supprime les items attribués pour qu'ils ne soient pas comptés par une règle plus courte (ex: "croq")
+        for key in matched_keys:
+            del remaining_db_items[key]
+
+    # ⭐ Retour JSON si requête AJAX / JS
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('json') == '1':
+        return jsonify(counts)
+
+    # Rendu du template HTML
+    return render_template('kds_friteuse.html', counts=counts)
+
+@app.route('/kds_four_commande', methods=['GET'])
+def kds_four_commande():
+    """
+    Route récupérant les numéros de tables et dates de création 
+    pour les commandes de pizzas (statut 'Pizza' et service 'COMMANDE') 
+    depuis le db_manager.
+    """
+    try:
+        # Appel de la méthode existante dans votre DBManager
+        pizza_tables = db_manager.get_pizza_commande_tables()
+        return jsonify(pizza_tables), 200
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des tables de pizzas via /kds_four_commande : {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/kds_pa_alert')
 def kds_pa_alert():

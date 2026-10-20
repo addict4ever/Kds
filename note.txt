@@ -10,3 +10,5 @@ pyinstaller --noconfirm --onefile --windowed --name "pizza_client" --collect-all
 pyinstaller --noconsole --onefile --hidden-import=pyserial --hidden-import=watchdog virtualprinter.py
 
 $data = "$([char]27)@$([char]27) PRINCIPALE`n`nHeure: $(Get-Date -Format HH:mm:ss)`nTABLE # 888`nENLEVER LE PAPIER JAUNE`n`n DONNER PA 355 SVP`n`n###############################`n$([char]27)d$([char]9)$([char]27)i"; $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 9100); $stream = $client.GetStream(); $writer = New-Object System.IO.StreamWriter($stream); $writer.Write($data); $writer.Flush(); $client.Close()
+
+Invoke-RestMethod -Uri "http://16.16.16.100:5000/kds_four_commande" -Method Get

@@ -56,7 +56,7 @@ SERIAL_TCP_PRINTER_1_PORT = 9100        # Port de l'imprimante cible
 SERIAL_TCP_COMPUTER_1 = '192.168.5.205'  # IP de l'imprimante cible
 SERIAL_TCP_COMPUTER_PORT_1 = 9100        # Port de l'imprimante cible
 
-SERIAL_TCP_COMPUTER_2 = '192.168.10.205'  # IP de l'imprimante cible
+SERIAL_TCP_COMPUTER_2 = '192.168.5.205'  # IP de l'imprimante cible
 SERIAL_TCP_COMPUTER_PORT_2 = 9100        # Port de l'imprimante cible
 
 

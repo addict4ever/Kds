@@ -216,9 +216,24 @@ class ServeurWindow(tk.Toplevel):
 
         self.active_tables_frames = {}
 
-        # Label visuel en bas de l'écran pour voir la saisie en cours
         self.typing_label = tk.Label(self, text="", font=("Arial", 16, "bold"), bg=BG_MAIN, fg="#FFD700")
-        self.typing_label.pack(side=tk.BOTTOM, pady=10)
+        self.typing_label.pack(side=tk.BOTTOM, pady=5)
+
+        # ⭐ NOUVEAU : Barre dédiée aux tables Pizza sur l'écran Serveuse
+        self.pizza_bar_frame = tk.Frame(self, bg="#1a252f", height=45)
+        self.pizza_bar_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=(0, 2))
+        self.pizza_bar_frame.pack_propagate(False)
+
+        tk.Label(
+            self.pizza_bar_frame, 
+            text="🍕  :", 
+            font=('Arial', 12, 'bold'), 
+            bg="#1a252f", 
+            fg="#f1c40f"
+        ).pack(side=tk.LEFT, padx=10)
+
+        self.pizza_boxes_container = tk.Frame(self.pizza_bar_frame, bg="#1a252f")
+        self.pizza_boxes_container.pack(side=tk.LEFT, fill=tk.Y, padx=5)
 
         self.main_frame = tk.Frame(self, bg=BG_MAIN)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -232,11 +247,105 @@ class ServeurWindow(tk.Toplevel):
             col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
             self.column_frames.append(col)
 
-        # Lancement des boucles de maintenance
+        # Lancement des boucles de maintenance et du rafraîchissement des tables Pizza
         self._update_elapsed_time()
+        self._refresh_pizza_tables_display()  # ⭐ Lancement du rafraîchissement
         self._maintain_window_position()
 
 
+    def _refresh_pizza_tables_display(self):
+        """
+        Met à jour la barre des tables Pizza sur l'écran Serveuse 
+        et affiche le temps écoulé (en jaune) toutes les 3 commandes (index 0, 3, 6, etc.).
+        """
+        try:
+            if not self.winfo_exists():
+                return
+
+            # 1. Nettoyer les anciennes cases
+            for widget in self.pizza_boxes_container.winfo_children():
+                widget.destroy()
+
+            # 2. Récupérer les données depuis le db_manager transmis via kds_gui_instance
+            if hasattr(self, 'kds_gui_instance') and hasattr(self.kds_gui_instance, 'db_manager'):
+                pizza_data = self.kds_gui_instance.db_manager.get_pizza_commande_tables()
+
+                for index, item in enumerate(pizza_data):
+                    table_num = item["table"]
+                    full_date = item["creation_date"]
+
+                    # 3. Afficher le temps toutes les 3 commandes (index 0, 3, 6, 9...)
+                    if index % 3 == 0:
+                        diff_minutes = 0
+                        if full_date:
+                            try:
+                                creation_dt = datetime.strptime(full_date, "%Y-%m-%d %H:%M:%S")
+                                diff_seconds = (datetime.now() - creation_dt).total_seconds()
+                                diff_minutes = max(0, int(diff_seconds // 60))
+                            except Exception as e:
+                                print(f"Erreur calcul temps ServeurWindow: {e}")
+
+                        # Case plus large pour afficher le numéro de table et les minutes écoulées
+                        box = tk.Frame(
+                            self.pizza_boxes_container, 
+                            width=95, 
+                            height=30, 
+                            bg="#c0392b", 
+                            highlightbackground="#ffffff", 
+                            highlightthickness=1
+                        )
+                        box.pack_propagate(False)
+                        box.pack(side=tk.LEFT, padx=4, pady=5)
+
+                        inner_frame = tk.Frame(box, bg="#c0392b")
+                        inner_frame.pack(expand=True, fill="both")
+
+                        lbl_table = tk.Label(
+                            inner_frame, 
+                            text=f"T:{table_num}", 
+                            font=("Arial", 9, "bold"), 
+                            fg="white", 
+                            bg="#c0392b"
+                        )
+                        lbl_table.pack(side=tk.LEFT, padx=(4, 2))
+
+                        lbl_time = tk.Label(
+                            inner_frame, 
+                            text=f"{diff_minutes}m", 
+                            font=("Arial", 9, "bold"), 
+                            fg="#f1c40f",  # 🟡 JAUNE
+                            bg="#c0392b"
+                        )
+                        lbl_time.pack(side=tk.LEFT, padx=(0, 4))
+
+                    else:
+                        # 4. Cases classiques 30x30 pour les autres tables intermédiaires
+                        box = tk.Frame(
+                            self.pizza_boxes_container, 
+                            width=30, 
+                            height=30, 
+                            bg="#e74c3c", 
+                            highlightbackground="#ffffff", 
+                            highlightthickness=1
+                        )
+                        box.pack_propagate(False)
+                        box.pack(side=tk.LEFT, padx=4, pady=5)
+
+                        lbl = tk.Label(
+                            box, 
+                            text=table_num, 
+                            font=("Arial", 10, "bold"), 
+                            fg="white", 
+                            bg="#e74c3c"
+                        )
+                        lbl.pack(expand=True, fill="both")
+
+        except Exception as e:
+            print(f"Erreur rafraîchissement pizza ServeurWindow: {e}")
+
+        # Rafraîchissement chaque seconde (1000 ms) pour un compteur dynamique en temps réel
+        self.after(1000, self._refresh_pizza_tables_display)
+        
     def _close_table_by_number(self, table_number_str):
         """Recherche uniquement parmi les tables affichées, déraie tous les items et la ferme."""
         target_bill_id = None
@@ -682,7 +791,7 @@ class KDSGUI:
             {"prefix": "MIDI", "targets": ["DOIGTS MIDI", "FISH MIDI"], "labels": ["DOIGTS", "FISH"]},
             {"prefix": "CUISINE", "targets": ["BR. POULET", "SOLE MEUNIERE"], "labels": ["POULET", "SOLE"]}
         ]
-        self.default_regles = {"SUPER SAND": 2}
+        self.default_regles = {"SUPER": 2}
         
         # Valeurs par défaut immédiates pour éviter l'AttributeError
         self.modes_comptage = self.default_modes
@@ -1055,15 +1164,10 @@ class KDSGUI:
         target_1, target_2 = current_cfg["targets"]
         count_1, count_2 = 0, 0
 
-        # --- CORRECTION DE LA LOGIQUE DE QUANTITÉ ---
         def extract_quantity(text):
-            # Trouve tous les nombres dans le texte (ex: "1 2" -> ["1", "2"])
             numbers = re.findall(r'(\d+)', text)
             if not numbers:
                 return 1
-            
-            # On multiplie tous les nombres trouvés entre eux
-            # "1 2 MENAGE" -> 1 * 2 = 2
             qty = 1
             for n in numbers:
                 qty *= int(n)
@@ -1072,37 +1176,56 @@ class KDSGUI:
         for bill_id, postit in self.active_postits.items():
             items_status = postit.get_items_status() 
             
+            current_multiplier = 1
+            main_item_is_super = False
+            main_item_is_raye = False
+            
             for item in items_status:
                 raw_text = item['text']
                 is_raye = item['is_raye']
                 
-                # Exclure si rayé ou commence par [
-                if is_raye or raw_text.startswith("["):
+                # Exclure si commence par [
+                if raw_text.startswith("["):
                     continue
 
                 text = raw_text.upper().strip()
                 
-                # Calcul quantité
-                qty = 1
-                found_special = False
-                for item_special, multiplicateur in self.regles_speciales.items():
-                    if item_special in text:
-                        # Si on trouve une règle spéciale, on garde la valeur fixe du multiplicateur
-                        qty = multiplicateur
-                        found_special = True
-                        break
+                # Détecte si c'est un sous-item
+                is_sub_item = text.startswith("↳") or text.startswith("->") or text.startswith("→") or text.startswith("-")
                 
-                if not found_special:
-                    # Si aucune règle spéciale, on utilise la multiplication des nombres trouvés
-                    qty = extract_quantity(text)
-
-                # DEBUG pour vérifier le calcul
-                # print(f"DEBUG: '{text}' -> qty détectée: {qty}")
-
-                if target_1 in text:
-                    count_1 += qty
-                elif target_2 in text:
-                    count_2 += qty
+                if not is_sub_item:
+                    # Item principal : on réinitialise et analyse
+                    current_multiplier = 1
+                    main_item_is_super = False
+                    main_item_is_raye = is_raye
+                    
+                    for item_special, multiplicateur in self.regles_speciales.items():
+                        if item_special in text:
+                            current_multiplier = multiplicateur
+                            main_item_is_super = True
+                            break
+                    
+                    if not is_raye:
+                        base_qty = extract_quantity(text)
+                        qty = base_qty * current_multiplier
+                        if target_1 in text:
+                            count_1 += qty
+                        elif target_2 in text:
+                            count_2 += qty
+                else:
+                    # Sous-item : SI le main item parent est un "SUPER" et qu'il est raturé, on l'annule (on ignore)
+                    if main_item_is_super and main_item_is_raye:
+                        continue
+                    
+                    # Sinon, on calcule normalement (avec le multiplicateur doublé si le SUPER était actif et non raturé)
+                    if not is_raye:
+                        base_qty = extract_quantity(text)
+                        qty = base_qty * current_multiplier
+                        
+                        if target_1 in text:
+                            count_1 += qty
+                        elif target_2 in text:
+                            count_2 += qty
 
         if hasattr(self, 'lbl_mini_spe_count'):
             label_text = f"{current_cfg['prefix']} {current_cfg['labels'][0]}: {count_1}  |  {current_cfg['labels'][1]}: {count_2}"
@@ -1833,23 +1956,44 @@ class KDSGUI:
 
     def _refresh_pizza_tables_display(self):
         """
-        Affiche les cases des tables et met en avant la première commande 
-        avec un compteur progressif en minutes (affiché en jaune) mis à jour dynamiquement.
+        Affiche les cases des tables et affiche le temps écoulé (en jaune) 
+        toutes les 3 commandes (index 0, 3, 6, etc.), mis à jour dynamiquement via requête web.
         """
         try:
+            # S'assurer que la fenêtre principale existe toujours avant de rafraîchir
+            if not hasattr(self, 'root') or not self.root.winfo_exists():
+                return
+
             # 1. Nettoyer les anciennes cases
             for widget in self.pizza_boxes_container.winfo_children():
                 widget.destroy()
 
-            # 2. Récupérer la liste complète des dictionnaires {'table': ..., 'creation_date': ...}
-            pizza_data = self.db_manager.get_pizza_commande_tables()
+            # 2. Récupérer la liste complète des dictionnaires {'table': ..., 'creation_date': ...} via la requête web
+            pizza_data = []
+            try:
+                import requests
+                url = "http://192.168.5.201:5000/kds_four_commande"
+                
+                # En-têtes complets incluant la clé secrète et le User-Agent autorisé
+                headers = {
+                    "X-App-Access": "MonApplicationUnique123!",
+                    "User-Agent": "MaSuperAppKDS/2.0"
+                }
+                
+                response = requests.get(url, headers=headers, timeout=2.0)
+                if response.status_code == 200:
+                    pizza_data = response.json()
+                else:
+                    logger.error(f"Erreur HTTP route web /kds_four_commande: Code {response.status_code}")
+            except Exception as web_err:
+                logger.error(f"Erreur de connexion lors de la requête web pour les pizzas: {web_err}")
 
             for index, item in enumerate(pizza_data):
-                table_num = item["table"]
-                full_date = item["creation_date"]
+                table_num = item.get("table", "")
+                full_date = item.get("creation_date", "")
                 
-                # 3. Si c'est la PREMIÈRE commande (la plus ancienne), calcul du temps écoulé progressif
-                if index == 0:
+                # 3. Afficher le temps toutes les 3 commandes (index 0, 3, 6, 9...)
+                if index % 3 == 0:
                     diff_minutes = 0
                     if full_date:
                         try:
@@ -1897,7 +2041,7 @@ class KDSGUI:
                     lbl_time.pack(side=tk.LEFT, padx=(0, 4))
                 
                 else:
-                    # 4. Pour les autres tables suivantes : case classique 30x30
+                    # 4. Pour les autres tables intermédiaires : case classique 30x30
                     box = tk.Frame(
                         self.pizza_boxes_container, 
                         width=30, 
@@ -1922,7 +2066,7 @@ class KDSGUI:
             logger.error(f"Erreur lors du rafraîchissement des cases Pizza: {e}")
 
         # 5. Actualisation automatique toutes les 1 seconde (1000 ms) pour que le timer soit progressif et en temps réel
-        self.root.after(1000, self._refresh_pizza_tables_display)
+        self.root.after(5000, self._refresh_pizza_tables_display)
         
     def _create_main_frames(self):
         """Crée les cadres principaux : Header/Status et PostitSelector."""

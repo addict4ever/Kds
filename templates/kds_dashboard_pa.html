@@ -25,6 +25,17 @@
         border-color: #27ae60 !important;
         color: white !important;
     }
+
+    /* Style pour le fond de la commande en rouge */
+    .order-wrapper.orange-pale-bg .card {
+        background-color: #e74c3c !important; /* Rouge vif */
+        color: #fff !important; /* Texte en blanc pour contraster */
+    }
+    
+    .order-wrapper.orange-pale-bg .card-header {
+        background-color: #c0392b !important; /* Rouge plus foncé pour l'en-tête */
+        color: #fff !important;
+    }
 </style>
 
 <div class="col-12 mb-4 no-print">
@@ -117,8 +128,35 @@
     
     <div class="row" id="kds-ajax-zone">
     {% for bid, item in pa_list.items() %}
+    
+    {# --- 1. ON PLACE LA DÉTECTION ICI (AVANT L'UTILISATION) --- #}
+    {% set has_donner_pc = namespace(found=false) %}
+    {% set has_papier_jaune = namespace(found=false) %}
+
+    {% for raw_it in item.data['items'] %}
+        {% set it = raw_it | from_json %}
+        {% set item_name = it.main_item if it is mapping else it %}
+        
+        {% if "DONNER AU PC" in item_name|upper %}
+            {% set has_donner_pc.found = true %}
+        {% endif %}
+        {% if "ENLEVER LE PAPIER JAUNE" in item_name|upper %}
+            {% set has_papier_jaune.found = true %}
+        {% endif %}
+
+        {% if it is mapping and it.sub_items %}
+            {% for sub in it.sub_items %}
+                {% if "DONNER AU PC" in sub|upper %}
+                    {% set has_donner_pc.found = true %}
+                {% endif %}
+                {% if "ENLEVER LE PAPIER JAUNE" in sub|upper %}
+                    {% set has_papier_jaune.found = true %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
     {# MODIFICATION ICI : Ajout de l'ID dynamique pour que JS trouve la carte #}
-    <div class="kds-column order-wrapper theme-classic" id="order-{{ item.data.id }}" style="display: block;">
+    <div class="kds-column order-wrapper theme-classic {% if has_donner_pc.found and has_papier_jaune.found %}orange-pale-bg{% endif %}" id="order-{{ item.data.id }}" style="display: block;">
         <div class="card text-white card-pulse-yellow">
             <div class="card-header fw-bold">
                 COMMANDE PA : {{ item.data.table_number }}
@@ -495,7 +533,7 @@
 
     function refreshKDS() {
         // 1. DÉTECTION DES MODALES OUVERTES
-        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm', '#paModalOverlay'];
+        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm', '#paModalOverlay', '#ingredientsModal'];
         const isModalOpen = modals.some(selector => {
             const modal = document.querySelector(selector);
             return modal && modal.style.display === 'block';

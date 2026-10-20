@@ -525,7 +525,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         print_win.overrideredirect(True) 
         print_win.resizable(False, False)
         
-        width, height = 300, 430
+        width, height = 300, 480  # Légèrement agrandi pour intégrer le nouveau bouton
         screen_width = print_win.winfo_screenwidth()
         screen_height = print_win.winfo_screenheight()
         x = (screen_width // 2) - (width // 2)
@@ -538,7 +538,7 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                  font=('Arial', 12, 'bold'), bg="#34495e", fg="white", pady=15).pack()
 
         def send_to(p_index):
-            from serial_reader import SerialReader, SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3, SERIAL_PORT_PRINTER_4
+            from serial_reader import SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3, SERIAL_PORT_PRINTER_4
             
             ports = [SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3, SERIAL_PORT_PRINTER_4]
             selected_port = ports[p_index-1]
@@ -548,9 +548,41 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
             if success:
                 print_win.destroy()
             else:
-                # Ferme la fenêtre de choix avant d'afficher l'erreur si besoin
                 print_win.destroy()
                 show_custom_error("Erreur", f"Échec de l'impression sur Imprimante {p_index}")
+
+        def handle_barbecue_send():
+            """Récupère le raw_content et l'envoie vers l'imprimante cible via SERIAL_TCP_COMPUTER_2 et PORT_2."""
+            try:
+                import socket
+                from serial_reader import SERIAL_TCP_COMPUTER_2, SERIAL_TCP_COMPUTER_PORT_2
+                
+                # Récupération du raw_content depuis order_data (ou fallback sur le texte affiché si absent)
+                raw_data = self.order_data.get('raw_content')
+                
+                if raw_data:
+                    # Si c'est stocké en tant que chaîne ou bytes, on s'assure d'avoir des bytes valides
+                    if isinstance(raw_data, str):
+                        payload = raw_data.encode('latin-1', errors='replace')
+                    else:
+                        payload = raw_data
+                else:
+                    payload = content_to_print.encode('latin-1', errors='replace')
+                
+                target_ip = SERIAL_TCP_COMPUTER_2
+                target_port = SERIAL_TCP_COMPUTER_PORT_2
+                
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(2.0)
+                    s.connect((target_ip, target_port))
+                    s.sendall(payload)
+                
+                print_win.destroy()
+            except Exception as e:
+                print(f"Erreur lors de l'envoi Barbecue vers {SERIAL_TCP_COMPUTER_2}:{SERIAL_TCP_COMPUTER_PORT_2}: {e}")
+                print_win.destroy()
+                show_custom_error("Erreur TCP", "Impossible d'envoyer vers Barbecue.")
+
         def handle_resend_to_pizza():
             # On récupère l'identifiant unique de la commande (ex: 'id' ou 'bill_id')
             order_id = self.order_data.get('id') or self.order_data.get('bill_id')
@@ -572,25 +604,30 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                     self.master_selector.load_orders()
             else:
                 show_custom_error("Attention", f"Aucune commande modifiée pour l'identifiant {order_id}.")
+
         # --- Boutons ---
         tk.Button(print_win, text="Imprimante 1 (Cuisine)", font=('Arial', 10, 'bold'),
-                  height=2, width=22, bg="#2ecc71", fg="white", command=lambda: send_to(1)).pack(pady=5)
+                  height=2, width=22, bg="#2ecc71", fg="white", command=lambda: send_to(1)).pack(pady=4)
                   
         tk.Button(print_win, text="Imprimante 2 (Livraison Caisse)", font=('Arial', 10, 'bold'),
-                  height=2, width=22, bg="#3498db", fg="white", command=lambda: send_to(2)).pack(pady=5)
+                  height=2, width=22, bg="#3498db", fg="white", command=lambda: send_to(2)).pack(pady=4)
                   
         tk.Button(print_win, text="Imprimante 3 (Livraison Pa TCP)", font=('Arial', 10, 'bold'),
-                  height=2, width=22, bg="#9b59b6", fg="white", command=lambda: send_to(3)).pack(pady=5)
+                  height=2, width=22, bg="#9b59b6", fg="white", command=lambda: send_to(3)).pack(pady=4)
 
         tk.Button(print_win, text="Imprimante 4 (Livreur)", font=('Arial', 10, 'bold'),
-                  height=2, width=22, bg="#90EE90", fg="black", command=lambda: send_to(4)).pack(pady=5)
+                  height=2, width=22, bg="#90EE90", fg="black", command=lambda: send_to(4)).pack(pady=4)
+        
+        # Bouton Barbecue configuré pour importer et utiliser SERIAL_TCP_COMPUTER_2 et PORT_2
+        tk.Button(print_win, text="Barbecue", font=('Arial', 10, 'bold'),
+                  height=2, width=22, bg="#d35400", fg="white", command=handle_barbecue_send).pack(pady=4)
         
         tk.Button(print_win, text="Renvoyer à Pizza", font=('Arial', 10, 'bold'),
-                  height=1, width=22, bg="#e67e22", fg="white", command=handle_resend_to_pizza).pack(pady=5)
+                  height=1, width=22, bg="#e67e22", fg="white", command=handle_resend_to_pizza).pack(pady=4)
 
         tk.Button(print_win, text="ANNULER", font=('Arial', 10),
                   height=1, width=15, bg="#95a5a6", fg="white",
-                  command=print_win.destroy).pack(pady=20)
+                  command=print_win.destroy).pack(pady=10)
     
     
     # ⭐ MODIFIÉ: SÉPARATION (SPLIT) - Utilisation de la logique de distribution des items

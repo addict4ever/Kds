@@ -142,7 +142,28 @@
         padding: 10px; 
     }    
     /* MODIFICATION : 3 COLONNES pour laisser de la place au texte géant */
-    .kds-masonry-layout { column-count: 3; column-gap: 15px; width: 100%; }
+    /* Grille dynamique pour le mode grille (de 3 à 8 colonnes) */
+    .kds-masonry-layout {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 12px !important;
+        width: 100% !important;
+        column-count: unset !important; /* Désactive l'ancien style masonry vertical si présent */
+    }
+
+    .kds-masonry-layout .order-wrapper {
+        flex: 0 0 calc(var(--grid-cols, 33.333%) - 12px) !important;
+        max-width: calc(var(--grid-cols, 33.333%) - 12px) !important;
+        box-sizing: border-box !important;
+        display: inline-block !important;
+    }
+
+    /* Style des petits boutons de sélection de colonnes */
+    .col-btn.active-col {
+        background-color: #2ecc71 !important;
+        border-color: #27ae60 !important;
+        color: white !important;
+    }
 
     /* Cartes dynamiques */
     .order-wrapper { display: inline-block; width: 100%; margin-bottom: 15px; break-inside: avoid; }
@@ -569,7 +590,18 @@
                 <button id="btn-font-giant" onclick="changeFontSize('giant')">GÉANT</button>
             </div>
         </div>
-        
+        <!-- Sélecteur du nombre de colonnes (de 3 à 8) -->
+        <div style="background: #111; padding: 12px 15px; border-radius: 8px; border: 1px solid #333; margin: 10px 15px; display: flex; flex-direction: column; gap: 8px;">
+            <span style="color: #f1c40f; font-size: 0.85rem; font-weight: bold; letter-spacing: 0.5px;">NOMBRE DE COLONNES (VUE GRILLE) :</span>
+            <div id="grid-cols-buttons" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button onclick="setGridColumns(3)" id="btn-grid-3" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1; min-width: 50px;">3</button>
+                <button onclick="setGridColumns(4)" id="btn-grid-4" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1; min-width: 50px;">4</button>
+                <button onclick="setGridColumns(5)" id="btn-grid-5" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1; min-width: 50px;">5</button>
+                <button onclick="setGridColumns(6)" id="btn-grid-6" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1; min-width: 50px;">6</button>
+                <button onclick="setGridColumns(7)" id="btn-grid-7" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1; min-width: 50px;">7</button>
+                <button onclick="setGridColumns(8)" id="btn-grid-8" class="col-btn" style="background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1; min-width: 50px;">8</button>
+            </div>
+        </div>
         <div class="kds-filter-responsive-box">
             <span class="control-label">AFFICHER :</span>
             <div class="filters-grid-responsive">
@@ -774,6 +806,32 @@
     });
 
     
+    function setGridColumns(count) {
+        const root = document.documentElement;
+        
+        // Retirer la classe active de tous les boutons de colonnes (de 3 à 8)
+        for (let i = 3; i <= 8; i++) {
+            const btn = document.getElementById(`btn-grid-${i}`);
+            if (btn) btn.classList.remove('active-col');
+        }
+        
+        // Activer visuellement le bouton choisi
+        const activeBtn = document.getElementById(`btn-grid-${count}`);
+        if (activeBtn) activeBtn.classList.add('active-col');
+        
+        // Calcul du pourcentage de largeur exact (ex: 3 cols = 33.333%, 4 cols = 25%, etc.)
+        const percentage = (100 / count).toFixed(4) + '%';
+        root.style.setProperty('--grid-cols', percentage);
+        
+        // Sauvegarde de la préférence dans le localStorage
+        localStorage.setItem('kds_grid_columns', count);
+    }
+
+    // Charger la préférence de colonnes au démarrage de la page
+    document.addEventListener("DOMContentLoaded", function() {
+        const savedCols = localStorage.getItem('kds_grid_columns') || '3';
+        setGridColumns(parseInt(savedCols));
+    });
 
     function openRecipeMenuModal() {
         const containerId = 'recipe-scroll-container';
@@ -1240,9 +1298,17 @@
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     function refreshOrders() {
 
-        const ingredientsModal = document.getElementById('ingredientsModal');
-        if (ingredientsModal && ingredientsModal.style.display === 'flex') {
-            return; // Ignore ce cycle de rafraîchissement et réessaiera au prochain bip
+        const modals = ['#modal-note', '#modal-utensils', '#modal-confirm', '#paModalOverlay', '#ingredientsModal', '#confirmModal'];
+        const isModalOpen = modals.some(selector => {
+            const modal = document.querySelector(selector);
+            if (!modal) return false;
+            const display = window.getComputedStyle(modal).display;
+            return display === 'block' || display === 'flex';
+        });
+
+        if (isModalOpen) {
+            console.log("🔒 Rafraîchissement suspendu : Un modal est actuellement ouvert.");
+            return; // Ignore ce cycle de rafraîchissement
         }
 
         // 1. Mémoriser la position exacte du scroll avant de rafraîchir
@@ -1260,7 +1326,7 @@
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
             
-            const orders = Array.from(tempDiv.querySelectorAll('.order-wrapper')).reverse();
+            const orders = Array.from(tempDiv.querySelectorAll('.order-wrapper'));
             
             orders.sort((a, b) => {
                 const headerA = a.querySelector('.card-header-pa')?.innerText || "";
