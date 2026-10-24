@@ -326,9 +326,9 @@ from flask import render_template, jsonify, request
 def kds_friteuse():
     # Liste des items à suivre
     items_to_track = [
-        "cuisse", "poit", "ailes", "croq", 
-        "croq enf", "doigts enf", "doigts poulet", "jalapano", 
-        "popper", "fondu", "batt", "of", "pat"
+        "cuisse", "poitrine", "ailes", "croquette", 
+        "croquette enf", "doigts enf", "doigts poulet", "jalapeno poppers", 
+        "popper", "fondu", "bat. fromage", "batonnets midi", "oignon francais", "pt. pat anc", "pogo"
     ]
     
     # 1. Récupération des décomptes d'items actifs

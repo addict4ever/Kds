@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>KDS - Friteuse & Accompagnements</title>
     <style>
         * {
@@ -14,84 +14,81 @@
         body {
             background-color: #0f172a;
             color: #f8fafc;
-            padding: 25px;
+            padding: 10px;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Empêche tout défilement global sur la tablette */
         }
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        h1 {
-            font-size: 2.2rem;
-            color: #f59e0b;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            font-weight: 800;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.4);
-        }
-        /* Grille adaptative pour les cases */
+
+        /* Grille compacte adaptée pour 15 éléments sur une dalle 10 pouces */
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
+            grid-template-columns: repeat(5, 1fr); /* 5 colonnes pour un affichage parfait en paysage */
+            grid-template-rows: repeat(3, 1fr);   /* 3 lignes (5 x 3 = 15 cartes) */
+            gap: 10px;
+            flex-grow: 1;
+            width: 100%;
+            height: 100%;
         }
+
+        @media (max-width: 1024px) {
+            .grid-container {
+                grid-template-columns: repeat(4, 1fr); /* S'adapte dynamiquement si résolution moindre */
+                grid-template-rows: repeat(auto-fit, minmax(0, 1fr));
+            }
+        }
+
         .card {
             background-color: #1e293b;
-            border-radius: 16px;
-            padding: 22px;
+            border-radius: 10px;
+            padding: 8px;
             text-align: center;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
-            border-top: 6px solid #3b82f6;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            border-top: 4px solid #3b82f6;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            min-height: 150px;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            overflow: hidden;
         }
-        .card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 14px 20px -3px rgba(0, 0, 0, 0.5);
-        }
+
         /* Variation des couleurs de bordure supérieure par carte */
         .card:nth-child(2n) { border-top-color: #8b5cf6; }
         .card:nth-child(3n) { border-top-color: #ec4899; }
         .card:nth-child(4n) { border-top-color: #10b981; }
+        .card:nth-child(5n) { border-top-color: #f59e0b; }
         
         .item-name {
-            font-size: 1.15rem;
+            font-size: 0.85rem;
             font-weight: 700;
             color: #e2e8f0;
             text-transform: uppercase;
-            margin-bottom: 12px;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
+            line-height: 1.1;
+            max-height: 2.4em;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
         }
+
         .item-count {
-            font-size: 3.5rem;
+            font-size: 2.5rem;
             font-weight: 900;
             line-height: 1;
         }
+
         .has-stock {
             color: #22c55e;
-            text-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
+            text-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
         }
         .no-stock {
             color: #64748b;
         }
-        .refresh-info {
-            text-align: center;
-            margin-top: 30px;
-            font-size: 0.9rem;
-            color: #94a3b8;
-            font-weight: 500;
-        }
     </style>
 </head>
 <body>
-
-    <header>
-        <h1>🍟 Poste Friteuse - Commandes en attente 🍗</h1>
-    </header>
 
     <div class="grid-container">
         {% for item, qty in counts.items() %}
@@ -120,10 +117,6 @@
             </div>
         </div>
         {% endfor %}
-    </div>
-
-    <div class="refresh-info">
-        ⚡ Mise à jour automatique des quantités en arrière-plan (toutes les 5 secondes).
     </div>
 
     <!-- Script JavaScript pour rafraîchir uniquement les valeurs via la même route -->

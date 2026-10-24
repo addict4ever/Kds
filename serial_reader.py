@@ -50,14 +50,17 @@ SERIAL_PORT_TCP_2_PORT = 9200      # pa livraison
 SERIAL_PORT_TCP_3 = '0.0.0.0'  # Écoute sur toutes les interfaces réseau
 SERIAL_PORT_TCP_3_PORT = 9300      # interieur
 
+SERIAL_PORT_TCP_4 = '0.0.0.0'  # Écoute sur toutes les interfaces réseau
+SERIAL_PORT_TCP_4_PORT = 9400      # interieur
+
 SERIAL_TCP_PRINTER_1 = '192.168.5.210'  # IP de l'imprimante cible
 SERIAL_TCP_PRINTER_1_PORT = 9100        # Port de l'imprimante cible
 
 SERIAL_TCP_COMPUTER_1 = '192.168.5.205'  # IP de l'imprimante cible
 SERIAL_TCP_COMPUTER_PORT_1 = 9100        # Port de l'imprimante cible
 
-SERIAL_TCP_COMPUTER_2 = '192.168.5.205'  # IP de l'imprimante cible
-SERIAL_TCP_COMPUTER_PORT_2 = 9100        # Port de l'imprimante cible
+SERIAL_TCP_COMPUTER_2 = '192.168.10.205'  # IP de l'imprimante cible
+SERIAL_TCP_COMPUTER_PORT_2 = 9400        # Port de l'imprimante cible
 
 
 
@@ -196,12 +199,14 @@ def load_network_config_from_json(json_file='printer_ip.json') -> Dict[str, Any]
         'SERIAL_PORT_TCP_2_PORT': 9200,          # <--- AJOUT
         'SERIAL_PORT_TCP_3': '0.0.0.0',          # <--- AJOUT
         'SERIAL_PORT_TCP_3_PORT': 9300,          # <--- AJOUT
+        'SERIAL_PORT_TCP_4': '0.0.0.0',          # ⭐ AJOUT
+        'SERIAL_PORT_TCP_4_PORT': 9400,          # ⭐ AJOUT
         'SERIAL_TCP_PRINTER_1': '192.168.5.210',
         'SERIAL_TCP_PRINTER_1_PORT': 9100,
         "SERIAL_TCP_COMPUTER_1": "127.0.0.1",
         "SERIAL_TCP_COMPUTER_PORT_1": 9200,
         "SERIAL_TCP_COMPUTER_2": "192.168.10.205",
-        "SERIAL_TCP_COMPUTER_PORT_2": 9100 
+        "SERIAL_TCP_COMPUTER_PORT_2": 9400 
     }
 
     try:
@@ -221,6 +226,8 @@ def load_network_config_from_json(json_file='printer_ip.json') -> Dict[str, Any]
             'SERIAL_PORT_TCP_2_PORT': int(tcp_section.get('SERIAL_PORT_TCP_2_PORT', default_config['SERIAL_PORT_TCP_2_PORT'])), # <--- AJOUT
             'SERIAL_PORT_TCP_3': tcp_section.get('SERIAL_PORT_TCP_3', default_config['SERIAL_PORT_TCP_3']),             # <--- AJOUT
             'SERIAL_PORT_TCP_3_PORT': int(tcp_section.get('SERIAL_PORT_TCP_3_PORT', default_config['SERIAL_PORT_TCP_3_PORT'])), # <--- AJOUT
+            'SERIAL_PORT_TCP_4': tcp_section.get('SERIAL_PORT_TCP_4', default_config['SERIAL_PORT_TCP_4']),
+            'SERIAL_PORT_TCP_4_PORT': int(tcp_section.get('SERIAL_PORT_TCP_4_PORT', default_config['SERIAL_PORT_TCP_4_PORT'])),
             'SERIAL_TCP_PRINTER_1': tcp_section.get('SERIAL_TCP_PRINTER_1', default_config['SERIAL_TCP_PRINTER_1']),
             'SERIAL_TCP_PRINTER_1_PORT': int(tcp_section.get('SERIAL_TCP_PRINTER_1_PORT', default_config['SERIAL_TCP_PRINTER_1_PORT'])),
             # ⭐ AJOUT DES LIGNES CI-DESSOUS :
@@ -283,6 +290,9 @@ SERIAL_PORT_PRINTER_4 = ports_config['SERIAL_PORT_PRINTER_4'] # <--- Nouveau
 
 SERIAL_TCP_COMPUTER_1 = net_config['SERIAL_TCP_COMPUTER_1']
 SERIAL_TCP_COMPUTER_PORT_1 = net_config['SERIAL_TCP_COMPUTER_PORT_1']
+
+SERIAL_TCP_COMPUTER_2 = net_config['SERIAL_TCP_COMPUTER_2']
+SERIAL_TCP_COMPUTER_PORT_2 = net_config['SERIAL_TCP_COMPUTER_PORT_2']
 
 SERIAL_PORT_COMPUTER = ports_config['SERIAL_PORT_COMPUTER']
 BAUD_RATE = kds_constants.BAUD_RATE
@@ -400,7 +410,6 @@ class TCPReader(threading.Thread):
             else:
                 _log_activity("Copie ordinateur distant ignorée : Ticket 'POUR EMPORTER' détecté.", "TCP_SKIP_COMP_EMPORTER")
 
-            # C. Envoi vers l'ordinateur distant supplémentaire (192.168.10.205:9100)
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as extra_sock:
                     extra_sock.settimeout(2.0)
@@ -423,7 +432,6 @@ class TCPReader(threading.Thread):
             except Exception as e:
                 _log_activity(f"Erreur redirection imprimante 1 (Port 9300): {e}", "TCP_INT_ERR")
 
-            # Envoi vers l'ordinateur distant supplémentaire (192.168.10.205:9100)
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as extra_sock:
                     extra_sock.settimeout(2.0)
@@ -434,6 +442,14 @@ class TCPReader(threading.Thread):
 
             return
         
+        if self.server_id == 4:
+            # On bloque juste l'instruction "ENLEVER LE PAPIER JAUNE" si besoin, mais on ne fait aucune impression physique
+            if "ENLEVER LE PAPIER JAUNE" in ticket_content:
+                _log_activity(f"TCP FILTRE (Serveur 4) : 'ENLEVER LE PAPIER JAUNE' détecté.", "TCP_FILTER")
+            else:
+                _log_activity("TCP SERVEUR 4 (Port 9400) : Données reçues pour insertion BDD (Pas d'impression).", "TCP_SRV4_RECV")
+            return
+
         # A. Envoi vers l'imprimante principale (SEULEMENT si "POUR EMPORTER" est présent)
         if "POUR EMPORTER" in ticket_content:
             printer_ip = self.net_config.get('SERIAL_TCP_PRINTER_1')
@@ -492,10 +508,15 @@ class TCPReader(threading.Thread):
             host = self.net_config.get('SERIAL_PORT_TCP_3', '0.0.0.0')
             port = int(self.net_config.get('SERIAL_PORT_TCP_3_PORT', 9300))
             tag = "TCP_INTERIEUR_START"
+        elif self.server_id == 4:  # ⭐ AJOUT DU CAS 4
+            host = self.net_config.get('SERIAL_PORT_TCP_4', '0.0.0.0')
+            port = int(self.net_config.get('SERIAL_PORT_TCP_4_PORT', 9400))
+            tag = "TCP_SERVER4_START"
         else:
             host = self.net_config.get('SERIAL_PORT_TCP_1', '0.0.0.0')
             port = int(self.net_config.get('SERIAL_PORT_TCP_1_PORT', 9100))
             tag = "TCP_START"
+        
 
         try:
             self.server_socket.bind((host, port))

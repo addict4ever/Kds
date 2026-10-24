@@ -37,6 +37,10 @@ def main():
     tcp_reader_3.daemon = True
     tcp_reader_3.start()
 
+    tcp_reader_4 = TCPReader(reader, net_config, server_id=4)
+    tcp_reader_4.daemon = True
+    tcp_reader_4.start()
+
     # --- 3. DÉMARRAGE AUTOMATIQUE DU SERVEUR WEB (Flask) ---
     flask_manager = ServerManager()
     flask_manager.start_server(host='0.0.0.0', port=5000)
@@ -73,8 +77,14 @@ def main():
         except Exception:
             pass
 
+        try:
+            tcp_reader_4.stop_server()
+        except Exception:
+            pass
+
+
         # Forcer la fermeture des ports locaux s'ils restent en suspens (Ajout des ports 9200 et 9300)
-        for port in [5000, 9100, 9200, 9300]:
+        for port in [5000, 9100, 9200, 9300, 9400]:
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -141,6 +151,9 @@ def main():
 
         if 'tcp_reader_3' in locals():
             tcp_reader_3.stop_server()
+            
+        if 'tcp_reader_4' in locals():
+            tcp_reader_4.stop_server()
             
         root.destroy()
 

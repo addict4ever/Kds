@@ -4,6 +4,8 @@ pyinstaller --windowed --noconfirm --onefile --name "main_app" --collect-submodu
 
 pyinstaller --noconfirm --onefile --windowed --name "Pizzeria_PA_Print" --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --hidden-import PyQt6.QtWebEngineCore --hidden-import PyQt6.QtWebEngineWidgets --icon=pizzeria_kds.ico "send_pa_print.py"
 
+pyinstaller --noconfirm --onefile --windowed --name "Pizzeria_PA_Print_Boss" --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --hidden-import PyQt6.QtWebEngineCore --hidden-import PyQt6.QtWebEngineWidgets --icon=pizzeria_kds.ico "send_pa_print_boss.py"
+
 pyinstaller --noconfirm --onefile --windowed --name "pizza_client" --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --hidden-import PyQt6.QtWebEngineCore --hidden-import PyQt6.QtWebEngineWidgets --icon=pizzeria_kds.ico "pizza_client.py"
 
 

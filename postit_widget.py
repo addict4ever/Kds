@@ -552,16 +552,41 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 show_custom_error("Erreur", f"Échec de l'impression sur Imprimante {p_index}")
 
         def handle_barbecue_send():
-            """Récupère le raw_content et l'envoie vers l'imprimante cible via SERIAL_TCP_COMPUTER_2 et PORT_2."""
+            """Récupère le raw_content, extrait l'heure, formate 'NOTE:' en main_item et son contenu en sub_item, puis les insère avant les dièses de fin."""
             try:
                 import socket
+                import json
                 from serial_reader import SERIAL_TCP_COMPUTER_2, SERIAL_TCP_COMPUTER_PORT_2
                 
-                # Récupération du raw_content depuis order_data (ou fallback sur le texte affiché si absent)
+                # 1. Extraction de l'heure et des notes (main_item + sub_items)
+                heure_str = None
+                notes_struct = []  # Stockera des tuples (main_note, [sub_lignes])
+                
+                raw_items = self.order_data.get('items')
+                if raw_items:
+                    try:
+                        items_list = json.loads(raw_items) if isinstance(raw_items, str) else raw_items
+                        for item_json in items_list:
+                            item_dict = json.loads(item_json) if isinstance(item_json, str) else item_json
+                            main_item = item_dict.get('main_item', '')
+                            
+                            # Recherche de l'heure
+                            if main_item.upper().startswith("HEURE:"):
+                                heure_str = main_item.strip()
+                            
+                            # Recherche de la note (main_item) et de ses sub_items
+                            elif main_item.upper() == "NOTE:" or main_item.upper().startswith("NOTE"):
+                                subs = item_dict.get('sub_items', [])
+                                cleaned_subs = [str(s).strip() for s in subs if str(s).strip()]
+                                notes_struct.append(("NOTE:", cleaned_subs))
+                                    
+                    except Exception as err:
+                        print(f"Erreur lors de l'analyse des items pour l'heure/note : {err}")
+
+                # 2. Récupération du raw_content initial
                 raw_data = self.order_data.get('raw_content')
                 
                 if raw_data:
-                    # Si c'est stocké en tant que chaîne ou bytes, on s'assure d'avoir des bytes valides
                     if isinstance(raw_data, str):
                         payload = raw_data.encode('latin-1', errors='replace')
                     else:
@@ -569,6 +594,29 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 else:
                     payload = content_to_print.encode('latin-1', errors='replace')
                 
+                # 3. Séquence exacte demandée pour le main_item avec le chiffre 1 : b"\x1b\x21\x32\x20\x20\x31\x1b\x21\x12"
+                prefix_seq = b"\x1b\x21\x32\x20\x20\x31\x1b\x21\x12"
+                injection_bytes = b""
+                
+                if heure_str:
+                    injection_bytes += prefix_seq + f" {heure_str}".encode('latin-1', errors='replace') + b"\n"
+                    
+                if notes_struct:
+                    for main_note, sub_list in notes_struct:
+                        # Imprime "NOTE:" en tant qu'item principal (gros caractères)
+                        injection_bytes += prefix_seq + f" {main_note}".encode('latin-1', errors='replace') + b"\n"
+                        # Imprime chaque sub_item en dessous (en police standard, avec un décalage ou style sub)
+                        for sub_line in sub_list:
+                            injection_bytes += f"   -> {sub_line}\n".encode('latin-1', errors='replace')
+
+                # 4. Injection juste avant les dièses (détection de "###" ou "#####")
+                if injection_bytes:
+                    if b"###" in payload:
+                        parts = payload.split(b"###", 1)
+                        payload = parts[0] + injection_bytes + b"###" + parts[1]
+                    else:
+                        payload = payload + injection_bytes
+
                 target_ip = SERIAL_TCP_COMPUTER_2
                 target_port = SERIAL_TCP_COMPUTER_PORT_2
                 
