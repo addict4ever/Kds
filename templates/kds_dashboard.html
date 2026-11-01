@@ -971,35 +971,11 @@
     function confirmTime() {
         if (timeTargetBid) {
             const formattedTime = formatTimeInput(timeInputBuffer);
-            const currentCard = document.getElementById(`order-${timeTargetBid}`);
-            let rawNo = currentCard ? currentCard.getAttribute('data-livraison-no') : "N/A";
-            let currentNo = rawNo.match(/\d+/) ? rawNo.match(/\d+/)[0] : "N/A";
-
-            const allCards = document.querySelectorAll('.kds-card');
-            let matchingBids = [];
-            allCards.forEach(card => {
-                let cardRawNo = card.getAttribute('data-livraison-no') || "";
-                let cardNo = cardRawNo.match(/\d+/) ? cardRawNo.match(/\d+/)[0] : "";
-                if (cardNo === currentNo && currentNo !== "N/A") {
-                    matchingBids.push(card.id.replace('order-', ''));
-                }
-            });
-
-            if (matchingBids.length > 1) {
-                // ⭐ On stocke bien timeTargetBid ici sous le nom targetBid
-                pendingTimeData = {
-                    time: formattedTime,
-                    bids: matchingBids,
-                    livraisonNo: currentNo,
-                    targetBid: timeTargetBid 
-                };
-                document.getElementById('display-group-no').innerText = currentNo;
-                document.getElementById('confirmGroupModal').style.display = 'flex';
-            } else {
-                applyTimeEffect(timeTargetBid, formattedTime);
-                sendAllExtras(timeTargetBid, true);
-                closeTimeModal();
-            }
+            
+            // Applique l'heure directement et uniquement à cette facture
+            applyTimeEffect(timeTargetBid, formattedTime);
+            sendAllExtras(timeTargetBid, true);
+            closeTimeModal();
         }
     }
 

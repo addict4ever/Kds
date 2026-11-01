@@ -15,6 +15,9 @@ import uuid
 import subprocess
 import platform
 
+
+import ctypes
+
 # Import du clavier virtuel
 try:
     from keyboard import VirtualKeyboard
@@ -31,11 +34,11 @@ KDS_CONFIG: Dict[str, Any] = {
         "En attente": "#3498db", "En cours": "#f1c40f", "Traitée": "#2ecc71", 
         "Annulée": "#e74c3c", "Archivée": "#7f8c8d"
     },
-    "BG_MAIN": "#2c3e50", "CARD_BG": "#34495e", "MAX_CARDS_PER_ROW": 7, "SCROLL_PAGE_SIZE": 1, 
+    "BG_MAIN": "#2c3e50", "CARD_BG": "#34495e", "MAX_CARDS_PER_ROW": 10, "SCROLL_PAGE_SIZE": 1, 
     "COLOR_TEXT": "#ecf0f1", "COLOR_ACCENT": "#3498db", "COLOR_WARNING": "#f1c40f", 
     "COLOR_NOTE": "#f1c40f", "H_SCROLLBAR_HEIGHT": 15, "CARD_WIDTH": 300, 
     "CARD_BORDER_WIDTH": 1, "CARD_PADDING": 1, "H_MARGIN": 1,
-    "SUB_ITEM_POLICE": 14,"MAIN_ITEM_POLICE": 15,"animation_personnage": True, 
+    "SUB_ITEM_POLICE": 10,"MAIN_ITEM_POLICE": 11,"animation_personnage": True, 
     "SERVICE_TYPES": ["COMMANDE"], "SERVICE_SPLIT_MARKER": "AUTRE", 
     "REFRESH_RATE_MS": 3000, "TRUNCATE_LEN": 40, "ORDER_STATUS_PENDING": "En attente", 
     "BAUD_RATE": 9600, "SERIAL_TIMEOUT": 0.5, 
@@ -69,6 +72,7 @@ DEFAULT_PORTS_CONFIG = {
     }
 }
 
+PIZZA_DETECTION_FILE = 'pizza_web_detection.json'
 AUTO_CLOSE_FILE = "fermeture_auto.json"
 CONFIG_FILE = 'config_gui.json'
 PORTS_CONFIG_FILE = 'ports.json' 
@@ -168,6 +172,15 @@ class ConfigMenu(tk.Toplevel):
         self.working_shortcuts: List[str] = self._load_shortcuts_config()
         self.shortcut_list_var = tk.StringVar(value="\n".join(self.working_shortcuts))
         self.shortcut_listbox: Any = None # Pour stocker la référence au Listbox
+
+        self.working_pizza_config = self._load_pizza_detection_config()
+        
+        # Variables pour les listes de mots-clés et garnitures
+        self.pizza_keywords_var = tk.StringVar(value="\n".join(self.working_pizza_config.get("keywords", [])))
+        self.pizza_garnitures_var = tk.StringVar(value="\n".join(self.working_pizza_config.get("garnitures", [])))
+        
+        self.pizza_keywords_listbox = None
+        self.pizza_garnitures_listbox = None
 
         # --- Définition des constantes de couleur pour les styles ---
         BG_MAIN = KDS_CONFIG["BG_MAIN"]       # #2c3e50 (Fond Principal)
@@ -277,10 +290,17 @@ class ConfigMenu(tk.Toplevel):
         self.notebook.add(self.auto_close_tab, text="🍕 Auto-Fermeture")
         self._create_auto_close_tab_content(self.auto_close_tab)
 
+        
+
         # À la fin de la méthode _create_widgets(self):
         self.tab_serveuses = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_serveuses, text="Serveuses")
         self._setup_serveuses_tab()
+
+        # ⭐ NOUVEAU - Onglet Pizza Web Detection
+        self.pizza_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.pizza_tab, text="🍕 Détection Pizza")
+        self._create_pizza_tab_content(self.pizza_tab)
         
         # Boutons de contrôle en bas
         control_frame = ttk.Frame(self)
@@ -299,29 +319,217 @@ class ConfigMenu(tk.Toplevel):
     # --------------------------------------------------------------------------
 
     def _get_hardware_info(self):
-        """Récupère l'adresse MAC et le numéro de série du disque pour PyArmor."""
+        """Récupère l'adresse MAC et un identifiant unique du disque en pur Python (sans subprocess)."""
         # 1. Récupération de l'adresse MAC
         mac = ':'.join(['{:02x}'.format((uuid.getnode() >> ele) & 0xff)
-                         for ele in range(0, 8*6, 8)][::-1]).upper()
+                        for ele in range(0, 8*6, 8)][::-1]).upper()
         
-        # 2. Récupération du numéro de série du disque (Windows)
+        # 2. Récupération d'un identifiant de disque en pur Python
         disk_serial = "Non disponible"
         try:
             if platform.system() == "Windows":
-                # Utilise WMIC pour obtenir le numéro de série du disque physique
-                cmd = "wmic diskdrive get serialnumber"
-                output = subprocess.check_output(cmd, shell=True).decode().split()
-                if len(output) >= 2:
-                    disk_serial = output[1].strip()
+                # Utilisation de ctypes pour appeler l'API Windows GetVolumeInformationW sur C:\
+                vol_name_buf = ctypes.create_unicode_buffer(256)
+                file_sys_name_buf = ctypes.create_unicode_buffer(256)
+                serial_number = ctypes.c_ulong()
+                max_component_len = ctypes.c_ulong()
+                file_sys_flags = ctypes.c_ulong()
+                
+                rc = ctypes.windll.kernel32.GetVolumeInformationW(
+                    ctypes.c_wchar_p("C:\\"),
+                    vol_name_buf,
+                    ctypes.sizeof(vol_name_buf),
+                    ctypes.byref(serial_number),
+                    ctypes.byref(max_component_len),
+                    ctypes.byref(file_sys_flags),
+                    file_sys_name_buf,
+                    ctypes.sizeof(file_sys_name_buf)
+                )
+                if rc:
+                    # Formatage du numéro de série en hexadécimal standard (ex: A1B2-C3D4)
+                    serial = serial_number.value
+                    disk_serial = f"{serial >> 16:04X}-{serial & 0xFFFF:04X}"
             else:
-                # Commande simplifiée pour Linux (nécessite souvent les droits root)
-                disk_serial = "Utiliser 'lsblk -d -no serial' sur Linux"
-        except Exception:
-            disk_serial = "Erreur de lecture"
+                # Alternative propre pour Linux (lecture de l'ID machine unique)
+                try:
+                    with open("/etc/machine-id", "r") as f:
+                        disk_serial = f.read().strip()
+                except Exception:
+                    disk_serial = "Non disponible"
+        except Exception as e:
+            disk_serial = f"Erreur de lecture: {str(e)}"
+
 
         return mac, disk_serial
 
     
+    def _load_pizza_detection_config(self) -> Dict[str, List[str]]:
+        """Charge le contenu de pizza_web_detection.json ou retourne des valeurs par défaut."""
+        try:
+            if os.path.exists(PIZZA_DETECTION_FILE):
+                with open(PIZZA_DETECTION_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                return {
+                    "keywords": ["LARGE", "DONNER", "PIZZ", "XLARGE", "SMALL", "BAMBINO", "MINI", "COMBO", "DUO", "NACHOS", "LASAGNE", "GRATINE", "VEGETARIEN", "PIZZA", "FAMILLE", "SPECS", "GRATINEES"],
+                    "garnitures": ["GARNIE", "GARNI", "ANANAS", "SPECIAL", "GRECQUE", "FROMAGE", "FROM", "4 FROM", "PEPE", "FAJITAS", "POULET", "MEXICAINE", "VEGE", "CHAMP", "CHAMPIGNON", "COTE LEVEE", "COTES LEVEE", "FR MER", "FRUITS MER", "GHETTI", "PEP FROM BAC"]
+                }
+        except Exception as e:
+            messagebox.showwarning("Erreur de Fichier", f"Erreur lors de la lecture de '{PIZZA_DETECTION_FILE}': {e}")
+            return {"keywords": [], "garnitures": []}
+
+    def _create_pizza_tab_content(self, tab: ttk.Frame):
+        """Crée l'interface pour gérer les mots-clés et garnitures de détection de pizza."""
+        bg_main = KDS_CONFIG.get("BG_MAIN", "#2c3e50")
+        card_bg = KDS_CONFIG.get("CARD_BG", "#34495e")
+        color_text = KDS_CONFIG.get("COLOR_TEXT", "#ecf0f1")
+        color_accent = KDS_CONFIG.get("COLOR_ACCENT", "#3498db")
+
+        main_frame = ttk.Frame(tab, padding=15)
+        main_frame.pack(fill='both', expand=True)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(1, weight=1)
+
+        # Titre global de l'onglet
+        ttk.Label(main_frame, text="🍕 Édition des mots-clés et garnitures (pizza_web_detection.json)", 
+                  font=("Helvetica", 14, "bold"), foreground=color_accent).grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 10))
+
+        # --- COLONNE 1 : KEYWORDS ---
+        col1_frame = ttk.Frame(main_frame)
+        col1_frame.grid(row=1, column=0, sticky='nsew', padx=(0, 10))
+        col1_frame.rowconfigure(1, weight=1)
+        col1_frame.columnconfigure(0, weight=1)
+
+        ttk.Label(col1_frame, text="Mots-clés (Keywords):", font=("Helvetica", 12, "bold")).grid(row=0, column=0, sticky='w', pady=5)
+        
+        list_frame1 = ttk.Frame(col1_frame)
+        list_frame1.grid(row=1, column=0, sticky='nsew')
+        list_frame1.columnconfigure(0, weight=1)
+        list_frame1.rowconfigure(0, weight=1)
+
+        scrollbar1 = ttk.Scrollbar(list_frame1, orient=tk.VERTICAL)
+        scrollbar1.grid(row=0, column=1, sticky='ns')
+
+        self.pizza_keywords_listbox = tk.Listbox(list_frame1, yscrollcommand=scrollbar1.set,
+                                                font=("Helvetica", 12), bg=card_bg, fg=color_text,
+                                                selectbackground=color_accent, selectforeground='white', borderwidth=0)
+        self.pizza_keywords_listbox.grid(row=0, column=0, sticky='nsew')
+        scrollbar1.config(command=self.pizza_keywords_listbox.yview)
+
+        # Contrôles Colonne 1 (Ajout / Suppression Keywords)
+        ctrl_frame1 = ttk.Frame(col1_frame, padding=5)
+        ctrl_frame1.grid(row=2, column=0, sticky='ew', pady=5)
+        ctrl_frame1.columnconfigure(0, weight=1)
+
+        self.new_keyword_var = tk.StringVar()
+        entry_kw = ttk.Entry(ctrl_frame1, textvariable=self.new_keyword_var, font=("Helvetica", 12))
+        entry_kw.grid(row=0, column=0, sticky='ew', padx=(0, 5), ipady=4)
+        if VirtualKeyboard:
+            entry_kw.bind("<Button-1>", lambda e: self._show_keyboard(entry_kw))
+
+        ttk.Button(ctrl_frame1, text="➕ Ajouter", command=lambda: self._add_pizza_item("keyword"), style="AddRemove.TButton").grid(row=0, column=1, padx=2)
+        ttk.Button(ctrl_frame1, text="➖ Retirer", command=lambda: self._remove_pizza_item("keyword"), style="Reset.TButton").grid(row=0, column=2, padx=2)
+
+        # --- COLONNE 2 : GARNITURES ---
+        col2_frame = ttk.Frame(main_frame)
+        col2_frame.grid(row=1, column=1, sticky='nsew', padx=(10, 0))
+        col2_frame.rowconfigure(1, weight=1)
+        col2_frame.columnconfigure(0, weight=1)
+
+        ttk.Label(col2_frame, text="Garnitures:", font=("Helvetica", 12, "bold")).grid(row=0, column=0, sticky='w', pady=5)
+        
+        list_frame2 = ttk.Frame(col2_frame)
+        list_frame2.grid(row=1, column=0, sticky='nsew')
+        list_frame2.columnconfigure(0, weight=1)
+        list_frame2.rowconfigure(0, weight=1)
+
+        scrollbar2 = ttk.Scrollbar(list_frame2, orient=tk.VERTICAL)
+        scrollbar2.grid(row=0, column=1, sticky='ns')
+
+        self.pizza_garnitures_listbox = tk.Listbox(list_frame2, yscrollcommand=scrollbar2.set,
+                                                 font=("Helvetica", 12), bg=card_bg, fg=color_text,
+                                                 selectbackground=color_accent, selectforeground='white', borderwidth=0)
+        self.pizza_garnitures_listbox.grid(row=0, column=0, sticky='nsew')
+        scrollbar2.config(command=self.pizza_garnitures_listbox.yview)
+
+        # Contrôles Colonne 2 (Ajout / Suppression Garnitures)
+        ctrl_frame2 = ttk.Frame(col2_frame, padding=5)
+        ctrl_frame2.grid(row=2, column=0, sticky='ew', pady=5)
+        ctrl_frame2.columnconfigure(0, weight=1)
+
+        self.new_garniture_var = tk.StringVar()
+        entry_ga = ttk.Entry(ctrl_frame2, textvariable=self.new_garniture_var, font=("Helvetica", 12))
+        entry_ga.grid(row=0, column=0, sticky='ew', padx=(0, 5), ipady=4)
+        if VirtualKeyboard:
+            entry_ga.bind("<Button-1>", lambda e: self._show_keyboard(entry_ga))
+
+        ttk.Button(ctrl_frame2, text="➕ Ajouter", command=lambda: self._add_pizza_item("garniture"), style="AddRemove.TButton").grid(row=0, column=1, padx=2)
+        ttk.Button(ctrl_frame2, text="➖ Retirer", command=lambda: self._remove_pizza_item("garniture"), style="Reset.TButton").grid(row=0, column=2, padx=2)
+
+        # Remplir les listes initiales
+        self._refresh_pizza_listboxes()
+
+    def _refresh_pizza_listboxes(self):
+        """Met à jour les listes graphiques depuis les dictionnaires de travail."""
+        self.pizza_keywords_listbox.delete(0, tk.END)
+        for kw in self.working_pizza_config.get("keywords", []):
+            self.pizza_keywords_listbox.insert(tk.END, kw)
+
+        self.pizza_garnitures_listbox.delete(0, tk.END)
+        for ga in self.working_pizza_config.get("garnitures", []):
+            self.pizza_garnitures_listbox.insert(tk.END, ga)
+
+    def _add_pizza_item(self, target_type: str):
+        """Ajoute un élément dans la liste des keywords ou garnitures."""
+        if target_type == "keyword":
+            val = self.new_keyword_var.get().strip().upper()
+            target_list = self.working_pizza_config.setdefault("keywords", [])
+            entry_var = self.new_keyword_var
+        else:
+            val = self.new_garniture_var.get().strip().upper()
+            target_list = self.working_pizza_config.setdefault("garnitures", [])
+            entry_var = self.new_garniture_var
+
+        if val and val not in target_list:
+            target_list.append(val)
+            self._refresh_pizza_listboxes()
+            entry_var.set("")
+        elif val in target_list:
+            messagebox.showwarning("Doublon", f"L'élément '{val}' existe déjà.")
+        else:
+            messagebox.showwarning("Erreur", "Veuillez entrer une valeur valide.")
+
+    def _remove_pizza_item(self, target_type: str):
+        """Retire l'élément sélectionné de la liste correspondante."""
+        if target_type == "keyword":
+            listbox = self.pizza_keywords_listbox
+            target_list = self.working_pizza_config.get("keywords", [])
+        else:
+            listbox = self.pizza_garnitures_listbox
+            target_list = self.working_pizza_config.get("garnitures", [])
+
+        selected = listbox.curselection()
+        if not selected:
+            messagebox.showwarning("Sélection", "Veuillez sélectionner un élément à retirer.")
+            return
+
+        for index in reversed(selected):
+            item = listbox.get(index)
+            if item in target_list:
+                target_list.remove(item)
+
+        self._refresh_pizza_listboxes()
+
+    def _write_pizza_config(self) -> bool:
+        """Écrit les modifications dans le fichier pizza_web_detection.json."""
+        try:
+            with open(PIZZA_DETECTION_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.working_pizza_config, f, indent=4, ensure_ascii=False)
+            return True
+        except Exception as e:
+            messagebox.showerror("Erreur de Sauvegarde", f"Impossible d'écrire dans '{PIZZA_DETECTION_FILE}': {e}")
+            return False
 
     def _create_auto_close_tab_content(self, parent):
         """ Crée l'interface pour gérer les mots-clés de fermeture automatique """
@@ -1127,34 +1335,139 @@ class ConfigMenu(tk.Toplevel):
     # --------------------------------------------------------------------------
 
     def _save_all_configs(self):
-        """ Tente de sauvegarder les trois fichiers de configuration. """
+        """ Tente de sauvegarder uniquement les fichiers de configuration qui ont été modifiés. """
         
-        # 1. Sauvegarde config_gui.json
+        saved_files = []
+
+        # 1. Validation et traitement de config_gui.json
         success_gui, gui_config = self._process_and_validate_gui_config()
         if not success_gui:
             return
 
-        # 2. Sauvegarde ports.json
+        # Vérifier si config_gui.json a changé par rapport au disque
+        gui_changed = True
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    existing_gui = json.load(f)
+                if existing_gui == gui_config:
+                    gui_changed = False
+            except Exception:
+                pass
+
+        if gui_changed:
+            if self._write_gui_config(gui_config):
+                saved_files.append("config_gui.json")
+        else:
+            # Mettre à jour la config en mémoire même si non réécrite sur disque
+            KDS_CONFIG.clear()
+            KDS_CONFIG.update(gui_config)
+
+        # 2. Validation et traitement de ports.json
         success_ports, ports_config = self._process_and_validate_ports_config()
         if not success_ports:
             return
-            
-        # 3. Sauvegarde shortcut_word.json (pas de validation complexe requise)
-        success_shortcut = self._write_shortcuts_config()
-        if not success_shortcut:
-            return
-            
-        # 4. Écriture finale des deux premiers fichiers (shortcut_word est déjà écrit)
-        gui_saved = self._write_gui_config(gui_config)
-        ports_saved = self._write_ports_config(ports_config)
 
-        if gui_saved and ports_saved and success_shortcut:
-             messagebox.showinfo("Succès", "Configurations config_gui.json, ports.json ET shortcut_word.json sauvegardées ! Veuillez redémarrer l'application pour appliquer les changements.")
-             self.destroy()
+        # Vérifier si ports.json a changé par rapport au disque
+        ports_changed = True
+        if os.path.exists(PORTS_CONFIG_FILE):
+            try:
+                with open(PORTS_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    existing_ports = json.load(f)
+                if existing_ports == ports_config:
+                    ports_changed = False
+            except Exception:
+                pass
+
+        if ports_changed:
+            if self._write_ports_config(ports_config):
+                saved_files.append("ports.json")
+
+        # 3. Vérification et sauvegarde de shortcut_word.json
+        new_shortcuts_data = {"shortcuts": self.working_shortcuts}
+        shortcuts_changed = True
+        if os.path.exists(SHORTCUT_FILE):
+            try:
+                with open(SHORTCUT_FILE, 'r', encoding='utf-8') as f:
+                    existing_shortcuts = json.load(f)
+                if existing_shortcuts == new_shortcuts_data:
+                    shortcuts_changed = False
+            except Exception:
+                pass
+
+        if shortcuts_changed:
+            if self._write_shortcuts_config():
+                saved_files.append("shortcut_word.json")
+
+        # 4. Vérification et sauvegarde de pizza_web_detection.json
+        pizza_changed = True
+        if os.path.exists(PIZZA_DETECTION_FILE):
+            try:
+                with open(PIZZA_DETECTION_FILE, 'r', encoding='utf-8') as f:
+                    existing_pizza = json.load(f)
+                if existing_pizza == self.working_pizza_config:
+                    pizza_changed = False
+            except Exception:
+                pass
+
+        if pizza_changed:
+            if self._write_pizza_config():
+                saved_files.append("pizza_web_detection.json")
+
+        # 5. Affichage du message personnalisé sans croix 'X'
+        if saved_files:
+            files_list = ", ".join(saved_files)
+            msg = f"Fichiers mis à jour et sauvegardés :\n• {files_list}\n\nVeuillez redémarrer l'application si nécessaire."
+            self._show_custom_message("Succès de la Sauvegarde", msg)
         else:
-             pass
+            msg = "Aucune modification n'a été détectée. Aucun fichier n'a été réécrit."
+            self._show_custom_message("Information", msg)
 
-    
+    def _show_custom_message(self, titre, message):
+        """Affiche une fenêtre de message personnalisée sans le bouton 'X' avec un bouton OK."""
+        fenetre = tk.Toplevel(self)
+        fenetre.title(titre)
+        fenetre.geometry("480x240")
+        bg_main = KDS_CONFIG.get("BG_MAIN", "#2c3e50")
+        card_bg = KDS_CONFIG.get("CARD_BG", "#34495e")
+        color_accent = KDS_CONFIG.get("COLOR_ACCENT", "#3498db")
+        color_text = KDS_CONFIG.get("COLOR_TEXT", "#ecf0f1")
+        
+        fenetre.config(bg=bg_main)
+        
+        # 🛑 Désactive complètement la fermeture via le bouton 'X' de la fenêtre
+        fenetre.protocol("WM_DELETE_WINDOW", lambda: None)
+        
+        fenetre.transient(self)
+        fenetre.grab_set()
+        
+        # Centrer la fenêtre par rapport à la parente
+        fenetre.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() // 2) - (480 // 2)
+        y = self.winfo_rooty() + (self.winfo_height() // 2) - (240 // 2)
+        fenetre.geometry(f"+{x}+{y}")
+
+        # Conteneur visuel interne
+        cadre = tk.Frame(fenetre, bg=card_bg, bd=2, relief=tk.RAISED)
+        cadre.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        lbl_titre = tk.Label(cadre, text=titre.upper(), font=("Helvetica", 14, "bold"), fg=color_accent, bg=card_bg)
+        lbl_titre.pack(pady=(20, 10))
+
+        lbl_msg = tk.Label(cadre, text=message, font=("Helvetica", 12), fg=color_text, bg=card_bg, wraplength=420, justify="center")
+        lbl_msg.pack(expand=True, padx=20, pady=10)
+
+        # Action de fermeture combinée (ferme le popup ET la fenêtre de configuration)
+        def on_ok_clicked():
+            fenetre.destroy()
+            self.destroy()
+
+        # Bouton OK (ipady retiré des arguments de tk.Button)
+        btn_fermer = tk.Button(cadre, text="OK", command=on_ok_clicked,
+                               bg="#2ecc71", fg="white", font=("Helvetica", 12, "bold"), 
+                               relief=tk.FLAT, padx=30, pady=8)
+        btn_fermer.pack(pady=15)
+
     def _process_and_validate_gui_config(self):
         """ Collecte et valide la configuration de config_gui.json. """
         final_config = self.working_config.copy() 

@@ -769,6 +769,17 @@
         }
     };
 
+    let keywords = [
+    "LARGE","DONNER","PIZZ", "XLARGE", "SMALL", "BAMBINO", "MINI", "COMBO", "DUO", 
+    "NACHOS", "LASAGNE", "GRATINE", "VEGETARIEN", "PIZZA", "FAMILLE", "SPECS", "GRATINEES"
+    ];
+    let garnitures = [
+        "GARNIE", "GARNI", "ANANAS", "SPECIAL", "GRECQUE", "FROMAGE", 
+        "FROM", "4 FROM", "PEPE", "FAJITAS", "POULET", "MEXICAINE", 
+        "VEGE", "CHAMP", "CHAMPIGNON", "COTE LEVEE", "COTES LEVEE", 
+        "FR MER", "FRUITS MER", "GHETTI", "PEP FROM BAC"
+    ];
+
     // trashBtn.addEventListener('click', function() {
 //     modal.style.display = 'flex'; // Afficher le modal
 // });
@@ -806,6 +817,28 @@
     });
 
     
+    
+
+    // Fonction pour récupérer la config depuis Flask
+    function chargerConfigPizza() {
+        fetch('/api/pizza_detection_config')
+            .then(response => response.json())
+            .then(data => {
+                if (data.keywords && Array.isArray(data.keywords)) {
+                    keywords = data.keywords;
+                }
+                if (data.garnitures && Array.isArray(data.garnitures)) {
+                    garnitures = data.garnitures;
+                }
+                console.log("✅ Configuration Pizza chargée depuis le JSON :", { keywords, garnitures });
+                // Ré-appliquer les filtres immédiatement après le chargement
+                appliquerFiltresAffichage();
+            })
+            .catch(err => {
+                console.error("⚠️ Impossible de charger pizza_web_detection.json, utilisation des valeurs par défaut :", err);
+            });
+    }
+
     function setGridColumns(count) {
         const root = document.documentElement;
         
@@ -990,23 +1023,11 @@
         const voirPA = document.getElementById('toggle-pa').checked;
         const voirSalle = document.getElementById('toggle-salle').checked;
         
-        // État des toggles spécifiques
         const pizzaOnlyActive = document.getElementById('toggle-pizza-only').checked;
-        
-        // ➕ AJOUT : Récupération du nouveau toggle HEURE pour LIV/PA
         const heureLivPaActive = document.getElementById('toggle-heure-liv-pa').checked;
 
-        // Listes de mots-clés et garnitures
-        const keywords = [
-            "LARGE","DONNER","PIZZ", "XLARGE", "SMALL", "BAMBINO", "MINI", "COMBO", "DUO", 
-            "NACHOS", "LASAGNE", "GRATINE", "VEGETARIEN", "PIZZA", "FAMILLE", "SPECS", "GRATINEES"
-        ];
-        const garnitures = [
-            "GARNIE", "GARNI", "ANANAS", "SPECIAL", "GRECQUE", "FROMAGE", 
-            "FROM", "4 FROM", "PEPE", "FAJITAS", "POULET", "MEXICAINE", 
-            "VEGE", "CHAMP", "CHAMPIGNON", "COTE LEVEE", "COTES LEVEE", 
-            "FR MER", "FRUITS MER", "GHETTI", "PEP FROM BAC"
-        ];
+        // (Les déclarations const keywords / garnitures ont été retirées d'ici 
+        //  pour utiliser les variables globales définies plus haut)
 
         // Gérer l'affichage des colonnes
         const col888 = document.querySelector('.service-column[data-column-type="t888"]');
@@ -1027,7 +1048,6 @@
         commandes.forEach(card => {
             const type = card.getAttribute('data-order-type');
 
-            // Filtre de base par type de service
             let doitAfficher = false;
             if (type === 't888' && voir888) doitAfficher = true;
             if (type === 'liv' && voirLIV) doitAfficher = true;
@@ -1035,7 +1055,6 @@
             if (type === 'pa' && voirPA) doitAfficher = true;
             if (type === 'salle' && voirSalle) doitAfficher = true;
 
-            // ➕ NOUVEAU FILTRE : Si activé, restreint les types 'liv' et 'pa' aux factures contenant "HEURE:"
             if (doitAfficher && heureLivPaActive) {
                 if (type === 'liv' || type === 'pa') {
                     const contentUpper = card.innerText.toUpperCase();
@@ -1045,10 +1064,7 @@
                 }
             }
 
-            // Si la commande passe le filtre et que le toggle "Pizza" est actif
             if (doitAfficher && pizzaOnlyActive) {
-                
-                // 🚫 EXCEPTION : On applique le filtre partout SAUF pour le 888
                 if (type !== 't888') {
                     const contentUpper = card.innerText.toUpperCase();
 
@@ -1070,7 +1086,6 @@
                 }
             }
 
-            // Application finale de l'affichage
             if (doitAfficher) {
                 card.style.setProperty('display', '', 'important'); 
             } else {
@@ -1078,6 +1093,10 @@
             }
         });
     }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        chargerConfigPizza(); // Charge la config depuis le serveur Flask
+    });
 
     // FORCE LE PREMIER TRAGE AU CHARGEMENT DE LA PAGE
     document.addEventListener("DOMContentLoaded", function() {

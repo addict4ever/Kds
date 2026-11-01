@@ -810,6 +810,7 @@ class KDSGUI:
         self._configure_root()
         self._setup_signal_handler() 
         self.pa_spam_lock = False
+        self.pizza_source = "local"  # Par défaut en local ("local" ou "network")
 
         
 
@@ -1956,11 +1957,56 @@ class KDSGUI:
 
     def _refresh_pizza_tables_display(self):
         """
-        Affiche les cases des tables et affiche le temps écoulé (en jaune) 
-        toutes les 3 commandes (index 0, 3, 6, etc.), mis à jour dynamiquement via requête web.
+        Lance un thread pour récupérer les données de pizza (local ou réseau) 
+        sans bloquer le GUI Tkinter en cas de lenteur ou d'erreur réseau.
         """
+        # S'assurer que la fenêtre principale existe toujours avant de lancer le thread
+        if not hasattr(self, 'root') or not self.root.winfo_exists():
+            return
+
+        source = getattr(self, 'pizza_source', 'local')
+
+        def fetch_in_background():
+            pizza_data = []
+            network_error = False
+
+            if source == 'local':
+                try:
+                    if hasattr(self, 'db_manager') and self.db_manager:
+                        pizza_data = self.db_manager.get_pizza_commande_tables()
+                except Exception as db_err:
+                    logger.error(f"Erreur de récupération locale des pizzas: {db_err}")
+            else:
+                try:
+                    import requests
+                    url = "http://192.168.5.201:5000/kds_four_commande"
+                    headers = {
+                        "X-App-Access": "MonApplicationUnique123!",
+                        "User-Agent": "MaSuperAppKDS/2.0"
+                    }
+                    response = requests.get(url, headers=headers, timeout=2.0)
+                    if response.status_code == 200:
+                        pizza_data = response.json()
+                    else:
+                        network_error = True
+                        logger.error(f"Erreur HTTP route web /kds_four_commande: Code {response.status_code}")
+                except Exception as web_err:
+                    network_error = True
+                    logger.error(f"Erreur de connexion lors de la requête web pour les pizzas: {web_err}")
+
+            # Renvoyer l'affichage vers le thread principal Tkinter de manière sécurisée
+            if hasattr(self, 'root') and self.root.winfo_exists():
+                self.root.after(0, lambda: self._update_pizza_ui_safely(pizza_data, network_error))
+
+        # Démarrage du thread de récupération
+        threading.Thread(target=fetch_in_background, daemon=True).start()
+
+        # Actualisation automatique programmée dans 5 secondes
+        self.root.after(5000, self._refresh_pizza_tables_display)
+
+    def _update_pizza_ui_safely(self, pizza_data, network_error):
+        """Met à jour l'interface graphique des pizzas dans le thread principal."""
         try:
-            # S'assurer que la fenêtre principale existe toujours avant de rafraîchir
             if not hasattr(self, 'root') or not self.root.winfo_exists():
                 return
 
@@ -1968,45 +2014,37 @@ class KDSGUI:
             for widget in self.pizza_boxes_container.winfo_children():
                 widget.destroy()
 
-            # 2. Récupérer la liste complète des dictionnaires {'table': ..., 'creation_date': ...} via la requête web
-            pizza_data = []
-            try:
-                import requests
-                url = "http://192.168.5.201:5000/kds_four_commande"
-                
-                # En-têtes complets incluant la clé secrète et le User-Agent autorisé
-                headers = {
-                    "X-App-Access": "MonApplicationUnique123!",
-                    "User-Agent": "MaSuperAppKDS/2.0"
-                }
-                
-                response = requests.get(url, headers=headers, timeout=2.0)
-                if response.status_code == 200:
-                    pizza_data = response.json()
-                else:
-                    logger.error(f"Erreur HTTP route web /kds_four_commande: Code {response.status_code}")
-            except Exception as web_err:
-                logger.error(f"Erreur de connexion lors de la requête web pour les pizzas: {web_err}")
+            # 2. Si une erreur réseau est survenue en mode Network, afficher le message d'alerte
+            if network_error:
+                err_lbl = tk.Label(
+                    self.pizza_boxes_container,
+                    text="NETWORK ERREUR",
+                    font=("Arial", 9, "bold"),
+                    fg="#ffffff",
+                    bg="#c0392b",
+                    padx=10,
+                    pady=4
+                )
+                err_lbl.pack(side=tk.LEFT, padx=4, pady=5)
+                return
 
+            # 3. Traitement et affichage des données récupérées
             for index, item in enumerate(pizza_data):
                 table_num = item.get("table", "")
                 full_date = item.get("creation_date", "")
                 
-                # 3. Afficher le temps toutes les 3 commandes (index 0, 3, 6, 9...)
+                # Afficher le temps toutes les 3 commandes (index 0, 3, 6, 9...)
                 if index % 3 == 0:
                     diff_minutes = 0
                     if full_date:
                         try:
-                            # Convertit la date de création de la DB en objet datetime
                             creation_dt = datetime.strptime(full_date, "%Y-%m-%d %H:%M:%S")
-                            # Calcule la différence avec l'heure actuelle
                             now = datetime.now()
                             diff_seconds = (now - creation_dt).total_seconds()
-                            diff_minutes = max(0, int(diff_seconds // 60)) # Convertit en minutes pleines
+                            diff_minutes = max(0, int(diff_seconds // 60))
                         except Exception as e:
                             logger.error(f"Erreur calcul temps écoulé: {e}")
 
-                    # Case plus large pour afficher le numéro de table et les minutes écoulées
                     box = tk.Frame(
                         self.pizza_boxes_container, 
                         width=95,  
@@ -2030,7 +2068,6 @@ class KDSGUI:
                     )
                     lbl_table.pack(side=tk.LEFT, padx=(4, 2))
 
-                    # Affichage du temps progressif en minutes (en JAUNE)
                     lbl_time = tk.Label(
                         inner_frame, 
                         text=f"{diff_minutes}m", 
@@ -2041,7 +2078,6 @@ class KDSGUI:
                     lbl_time.pack(side=tk.LEFT, padx=(0, 4))
                 
                 else:
-                    # 4. Pour les autres tables intermédiaires : case classique 30x30
                     box = tk.Frame(
                         self.pizza_boxes_container, 
                         width=30, 
@@ -2063,10 +2099,7 @@ class KDSGUI:
                     lbl.pack(expand=True, fill="both")
 
         except Exception as e:
-            logger.error(f"Erreur lors du rafraîchissement des cases Pizza: {e}")
-
-        # 5. Actualisation automatique toutes les 1 seconde (1000 ms) pour que le timer soit progressif et en temps réel
-        self.root.after(5000, self._refresh_pizza_tables_display)
+            logger.error(f"Erreur lors de la mise à jour UI des cases Pizza: {e}")
         
     def _create_main_frames(self):
         """Crée les cadres principaux : Header/Status et PostitSelector."""
@@ -2081,13 +2114,19 @@ class KDSGUI:
         self.pizza_bar_frame.pack_propagate(False) # Force une hauteur fixe pour la barre
 
         # Petit libellé explicatif à gauche de la barre
-        tk.Label(
+        self.pizza_label_title = tk.Label(
             self.pizza_bar_frame, 
             text="🍕 : ", 
             font=('Arial', 11, 'bold'), 
             bg="#1a252f", 
-            fg="#f1c40f"
-        ).pack(side=tk.LEFT, padx=10)
+            fg="#f1c40f",
+            cursor="hand2"
+        )
+        self.pizza_label_title.pack(side=tk.LEFT, padx=10)
+
+        # ⏱️ Liaison pour l'appui long de 5 secondes sur le label Pizza
+        self.pizza_label_title.bind("<ButtonPress-1>", self._on_pizza_label_press)
+        self.pizza_label_title.bind("<ButtonRelease-1>", self._on_pizza_label_release)
 
         # Conteneur interne où vont s'aligner dynamiquement les petites cases 30x30
         self.pizza_boxes_container = tk.Frame(self.pizza_bar_frame, bg="#1a252f")
@@ -2296,6 +2335,64 @@ class KDSGUI:
     #    # On importe ici pour éviter les erreurs de dépendance circulaire si besoin
     #    from floating_note import FloatingNote
     #    FloatingNote(self.root, self.db_manager)
+    
+    def _on_pizza_label_press(self, event):
+        """Déclenche un timer de 5 secondes lors du maintien du clic sur le label Pizza."""
+        self.pizza_menu_opened = False
+        
+        def open_pizza_popup():
+            self.pizza_menu_opened = True
+            self._show_pizza_source_popup(event)
+
+        # Timer de 5000 ms (5 secondes)
+        self.pizza_timer = self.root.after(5000, open_pizza_popup)
+
+    def _on_pizza_label_release(self, event):
+        """Annule le timer si on relâché avant 5 secondes."""
+        if hasattr(self, 'pizza_timer'):
+            self.root.after_cancel(self.pizza_timer)
+        self.pizza_menu_opened = False
+
+    def _show_pizza_source_popup(self, event):
+        """Affiche un petit menu tactile pour choisir entre Local et Network."""
+        top = tk.Toplevel(self.root)
+        top.overrideredirect(True)
+        top.attributes("-topmost", True)
+        
+        menu_w, menu_h = 260, 180
+        x = event.x_root - (menu_w // 2)
+        y = event.y_root - menu_h - 10
+        top.geometry(f"{menu_w}x{menu_h}+{max(0, x)}+{max(0, y)}")
+        top.configure(bg='#2c3e50', highlightbackground="#f1c40f", highlightthickness=2)
+
+        tk.Label(top, text="🍕 PROVENANCE DES PIZZAS", bg='#2c3e50', fg='#f1c40f', 
+                 font=('Segoe UI', 11, 'bold'), pady=12).pack(fill=tk.X)
+
+        current_source = getattr(self, 'pizza_source', 'local')
+
+        def set_source(src):
+            self.pizza_source = src
+            status_msg = "Source des pizzas : LOCALE (Base de données)" if src == "local" else "Source des pizzas : RÉSEAU (Network)"
+            self.update_status(status_msg, "#2ecc71")
+            top.destroy()
+
+        btn_style = {
+            'font': ('Segoe UI', 10, 'bold'),
+            'fg': 'white',
+            'relief': tk.FLAT,
+            'height': 2
+        }
+
+        # Couleurs dynamiques pour indiquer le choix actif
+        bg_local = '#27ae60' if current_source == 'local' else '#34495e'
+        bg_net = '#27ae60' if current_source == 'network' else '#34495e'
+
+        tk.Button(top, text="💻 Local", bg=bg_local, command=lambda: set_source('local'), **btn_style).pack(fill=tk.X, padx=15, pady=2)
+        tk.Button(top, text="🌐 Network", bg=bg_net, command=lambda: set_source('network'), **btn_style).pack(fill=tk.X, padx=15, pady=2)
+
+        # Fermeture automatique si on clique en dehors
+        top.bind("<FocusOut>", lambda e: top.destroy())
+        top.focus_set()
         
     def _on_pa_press(self, event):
         # On initialise un drapeau pour savoir si le menu a été ouvert

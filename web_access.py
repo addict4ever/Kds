@@ -29,6 +29,8 @@ APP_AUTH_KEY = "MonApplicationUnique123!" # Changez ceci par une clé secrète
 ALLOWED_IPS = ['192.168.5.205', '192.168.5.203', '127.0.0.1']
 ALLOWED_USER_AGENT = "MaSuperAppKDS/2.0" # Le nom de votre application
 
+PIZZA_CONFIG_FILE = "pizza_web_detection.json"
+
 # --- LISTE DES ROUTES AUTORISÉES (WHITELIST) ---
 # Seules ces routes seront accessibles. Tout le reste sera bloqué.
 WHITELIST_ROUTES = [
@@ -86,7 +88,8 @@ WHITELIST_ROUTES = [
     '/kds_pa_pizza',
     '/envoyer_tcp_commande',
     '/kds_four_commande',
-    '/kds_friteuse'
+    '/kds_friteuse',
+    '/api/pizza_detection_config'
     
     
     
@@ -302,6 +305,8 @@ def filtrer_acces_global():
         return
     if path == '/kds_friteuse':
         return
+    if path == '/api/pizza_detection_config':
+        return
 
     # 4. VÉRIFICATION DE L'IP (Couche 1)
     #if not is_ip_allowed():
@@ -322,6 +327,40 @@ def filtrer_acces_global():
 
 from flask import render_template, jsonify, request
 
+@app.route('/api/pizza_detection_config', methods=['GET'])
+def get_pizza_detection_config():
+    """Renvoie les mots-clés et garnitures depuis le fichier JSON."""
+    default_config = {
+        "keywords": [
+            "LARGE","DONNER","PIZZ", "XLARGE", "SMALL", "BAMBINO", "MINI", "COMBO", "DUO", 
+            "NACHOS", "LASAGNE", "GRATINE", "VEGETARIEN", "PIZZA", "FAMILLE", "SPECS", "GRATINEES"
+        ],
+        "garnitures": [
+            "GARNIE", "GARNI", "ANANAS", "SPECIAL", "GRECQUE", "FROMAGE", 
+            "FROM", "4 FROM", "PEPE", "FAJITAS", "POULET", "MEXICAINE", 
+            "VEGE", "CHAMP", "CHAMPIGNON", "COTE LEVEE", "COTES LEVEE", 
+            "FR MER", "FRUITS MER", "GHETTI", "PEP FROM BAC"
+        ]
+    }
+    
+    if os.path.exists(PIZZA_CONFIG_FILE):
+        try:
+            with open(PIZZA_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return jsonify(data), 200
+        except Exception as e:
+            logger.error(f"Erreur lecture {PIZZA_CONFIG_FILE}: {e}")
+            return jsonify(default_config), 200
+            
+    # Si le fichier n'existe pas encore, on le crée automatiquement
+    try:
+        with open(PIZZA_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(default_config, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"Impossible de créer {PIZZA_CONFIG_FILE}: {e}")
+        
+    return jsonify(default_config), 200
+    
 @app.route('/kds_friteuse')
 def kds_friteuse():
     # Liste des items à suivre

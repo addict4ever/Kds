@@ -539,8 +539,8 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
 
         def send_to(p_index):
             from serial_reader import SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3, SERIAL_PORT_PRINTER_4
-            
-            ports = [SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3, SERIAL_PORT_PRINTER_4]
+            SERIAL_PORT_PRINTER_5 = "COM40"
+            ports = [SERIAL_PORT_PRINTER, SERIAL_PORT_PRINTER_2, SERIAL_PORT_PRINTER_3, SERIAL_PORT_PRINTER_4,SERIAL_PORT_PRINTER_5]
             selected_port = ports[p_index-1]
             
             success = SerialReader.reprint_ticket_to_printer(content_to_print, selected_port)
@@ -631,6 +631,36 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
                 print_win.destroy()
                 show_custom_error("Erreur TCP", "Impossible d'envoyer vers Barbecue.")
 
+        def handle_raw_computer_1_send():
+            """Récupère le raw_content brut de la commande et l'envoie vers SERIAL_TCP_COMPUTER_1 (Port 9100)."""
+            try:
+                import socket
+                from serial_reader import SERIAL_TCP_COMPUTER_1, SERIAL_TCP_COMPUTER_PORT_1, TICKET_END_BINARY_SEQUENCE
+                
+                # 1. Récupération du raw_content initial sans modification
+                raw_data = self.order_data.get('raw_content')
+                
+                if raw_data:
+                    if isinstance(raw_data, str):
+                        payload = raw_data.encode('latin-1', errors='replace')
+                    else:
+                        payload = raw_data
+                else:
+                    payload = content_to_print.encode('latin-1', errors='replace') + TICKET_END_BINARY_SEQUENCE
+                
+
+                # 2. Envoi TCP vers Computer 1 (Port 9100)
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(2.0)
+                    s.connect((SERIAL_TCP_COMPUTER_1, SERIAL_TCP_COMPUTER_PORT_1))
+                    s.sendall(payload)
+                
+                print_win.destroy()
+            except Exception as e:
+                print(f"Erreur lors de l'envoi Raw vers {SERIAL_TCP_COMPUTER_1}:{SERIAL_TCP_COMPUTER_PORT_1}: {e}")
+                print_win.destroy()
+                show_custom_error("Erreur TCP", "Impossible d'envoyer la copie raw.")
+
         def handle_resend_to_pizza():
             # On récupère l'identifiant unique de la commande (ex: 'id' ou 'bill_id')
             order_id = self.order_data.get('id') or self.order_data.get('bill_id')
@@ -666,15 +696,18 @@ class OrderPostIt(tk.Frame): # Assurez-vous d'avoir (tk.Frame) ici!
         tk.Button(print_win, text="Imprimante 4 (Livreur)", font=('Arial', 10, 'bold'),
                   height=2, width=22, bg="#90EE90", fg="black", command=lambda: send_to(4)).pack(pady=4)
         
+        tk.Button(print_win, text="Imprimante 4 (Livreur Raw)", font=('Arial', 10, 'bold'),
+                  height=2, width=22, bg="#90EE90", fg="black", command=handle_raw_computer_1_send).pack(pady=4)
+        
         # Bouton Barbecue configuré pour importer et utiliser SERIAL_TCP_COMPUTER_2 et PORT_2
         tk.Button(print_win, text="Barbecue", font=('Arial', 10, 'bold'),
                   height=2, width=22, bg="#d35400", fg="white", command=handle_barbecue_send).pack(pady=4)
         
         tk.Button(print_win, text="Renvoyer à Pizza", font=('Arial', 10, 'bold'),
-                  height=1, width=22, bg="#e67e22", fg="white", command=handle_resend_to_pizza).pack(pady=4)
+                  height=2, width=22, bg="#e67e22", fg="white", command=handle_resend_to_pizza).pack(pady=4)
 
         tk.Button(print_win, text="ANNULER", font=('Arial', 10),
-                  height=1, width=15, bg="#95a5a6", fg="white",
+                  height=2, width=15, bg="#95a5a6", fg="white",
                   command=print_win.destroy).pack(pady=10)
     
     
