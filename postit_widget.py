@@ -1770,10 +1770,9 @@ class PostitSelector(tk.Frame):
         # 1. Récupération des post-its avec filtrage des widgets détruits
         selected_postits = self.get_selected_postits()
         
-        # ⭐ SÉCURITÉ : Vérifier le nombre AVANT d'accéder aux index [0] ou [1]
-        # Cela évite l'erreur "IndexError: list index out of range"
-        num_selected = len(selected_postits)
-        
+        # 🛑 Empêche l'action s'il n'y a pas au moins 2 factures sélectionnées (aucun message affiché)
+        if len(selected_postits) < 2:
+            return
 
         # p1 = Destination (métadonnées), p2 = Source
         p1, p2 = selected_postits[0], selected_postits[1] 
@@ -1796,9 +1795,6 @@ class PostitSelector(tk.Frame):
                 # 5. Supprimer les deux cartes d'ORIGINE de l'interface
                 self.remove_postit(p2) 
                 self.remove_postit(p1)
-                
-                # Optionnel: forcer le refresh ici si nécessaire
-                # self.kds_app.check_for_new_orders()
 
             except Exception as e:
                 messagebox.showerror("Erreur de Fusion DB", f"Échec de la fusion : {e}")

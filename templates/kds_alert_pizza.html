@@ -135,6 +135,12 @@
         box-sizing: border-box; /* Évite les débordements avec la bordure de 15px */
     }
 
+    .card-header-pa[data-order-type*="pa"] { background-color: #3498db !important; color: #fff !important; }
+    .card-header-pa[data-order-type*="liv"] { background-color: #2ecc71 !important; color: #fff !important; }
+    .card-header-pa[data-order-type*="t888"], .card-header-pa[data-order-type*="888"] { background-color: #e74c3c !important; color: #fff !important; }
+    .card-header-pa[data-order-type*="t999"], .card-header-pa[data-order-type*="999"] { background-color: #9b59b6 !important; color: #fff !important; }
+    .card-header-pa[data-order-type*="salle"] { background-color: #f1c40f !important; color: #000 !important; }
+
     /* --- STYLES POUR LA TREE VIEW --- */
     .tree-category-group {
         background-color: var(--kds-card-bg);
@@ -760,7 +766,7 @@
     const modal = document.getElementById('confirmModal');
 
     
-
+    
     document.getElementById('modalNo').addEventListener('click', function() {
         modal.style.display = 'none'; // Cacher le modal
     });
@@ -842,6 +848,22 @@
             }
         }
     });
+
+    function colorizeCardHeaders() {
+        const cards = document.querySelectorAll('.order-wrapper');
+        cards.forEach(card => {
+            const orderType = (card.getAttribute('data-order-type') || '').toLowerCase();
+            const header = card.querySelector('.card-header-pa');
+            if (header) {
+                // On applique un attribut pour que le CSS sache quelle couleur prendre
+                header.setAttribute('data-order-type', orderType);
+            }
+        });
+    }
+
+    // Lancer la coloration au chargement et après chaque rafraîchissement
+    document.addEventListener("DOMContentLoaded", colorizeCardHeaders);
+
 
     function switchView(mode) {
         const gridView = document.getElementById('kds-grid-view');
@@ -1374,22 +1396,45 @@
             tempDiv.innerHTML = html;
             const newOrders = Array.from(tempDiv.querySelectorAll('.order-wrapper'));
 
-            // On trie les nouvelles commandes proprement
+            // 🚀 TRI PAR TEMPS (Basé sur data-created-at) + EXCEPTIONS EN HAUT
             newOrders.sort((a, b) => {
                 const headerA = a.querySelector('.card-header-pa')?.innerText || "";
                 const headerB = b.querySelector('.card-header-pa')?.innerText || "";
-                const isAImportant = headerA.includes("T: 888 | INCONNU");
-                const isBImportant = headerB.includes("T: 888 | INCONNU");
+                const typeA = (a.getAttribute('data-order-type') || '').toLowerCase();
+                const typeB = (b.getAttribute('data-order-type') || '').toLowerCase();
+                const textA = a.innerText.toUpperCase();
+                const textB = b.innerText.toUpperCase();
+
+                // 1. Priorité absolue pour les tickets 888
+                const isA888 = headerA.includes("T: 888") || typeA.includes('t888');
+                const isB888 = headerB.includes("T: 888") || typeB.includes('t888');
+
+                if (isA888 && !isB888) return -1;
+                if (!isA888 && isB888) return 1;
+
+                // 2. EXCEPTION : Priorité pour les PA contenant "DONNER AU PC"
+                const isAPaPc = typeA.includes('pa') && (textA.includes("DONNER AU PC") || textA.includes("DONNER"));
+                const isBPaPc = typeB.includes('pa') && (textB.includes("DONNER AU PC") || textB.includes("DONNER"));
                 
-                if (isAImportant && !isBImportant) return -1;
-                if (!isAImportant && isBImportant) return 1;
-                
+                if (isAPaPc && !isBPaPc) return -1;
+                if (!isAPaPc && isBPaPc) return 1;
+
+                // 3. CLASSEMENT PAR TEMPS (Du plus ancien au plus récent basé sur data-created-at)
+                const timeA = new Date(a.getAttribute('data-created-at') || 0).getTime();
+                const timeB = new Date(b.getAttribute('data-created-at') || 0).getTime();
+
+                // Si les horodatages sont valides, on trie du plus ancien au plus récent
+                if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+                    return timeA - timeB; 
+                }
+
+                // Fallback par ID si les dates sont identiques
                 const idA = parseInt(a.getAttribute('data-order-id')) || 0;
                 const idB = parseInt(b.getAttribute('data-order-id')) || 0;
                 return idA - idB;
             });
 
-            // Récupération des IDs actuels pour détecter les nouveautés (audio / alerte visuelle)
+            // Récupération des IDs actuels pour détecter les nouveautés
             const currentOrderIds = Array.from(document.querySelectorAll('#kds-grid-view .order-wrapper')).map(el => el.getAttribute('data-order-id'));
             const newOrderIds = newOrders.map(el => el.getAttribute('data-order-id'));
 
@@ -1415,7 +1460,7 @@
 
             updateOrderTimers();
             
-            // Mise à jour des vues spécifiques si elles sont actives
+            // Mise à jour des vues spécifiques
             const table = document.getElementById('kds-table-zone');
             if (table && table.classList.contains('view-active-table')) {
                 syncTableData();
@@ -1437,13 +1482,33 @@
             }
 
             // Vérification de l'arrivée de nouvelles commandes pour les alertes sonores/visuelles
-            const hasNewArrival = newOrderIds.some(id => !currentOrderIds.includes(id));
-            if (hasNewArrival && newOrderIds.length > 0) {
+            let shouldTriggerAlert = false;
+
+            newOrders.forEach(orderEl => {
+                const orderId = orderEl.getAttribute('data-order-id');
+                
+                if (!currentOrderIds.includes(orderId)) {
+                    const orderType = (orderEl.getAttribute('data-order-type') || '').toLowerCase();
+                    const cardText = orderEl.innerText.toUpperCase();
+
+                    const is888 = orderType.includes('t888') || cardText.includes('888');
+                    const isPaDonnerAuPc = orderType.includes('pa') && cardText.includes('DONNER AU PC');
+
+                    if (is888 || isPaDonnerAuPc) {
+                        shouldTriggerAlert = true;
+                    }
+                }
+            });
+
+            if (shouldTriggerAlert && newOrderIds.length > 0) {
                 triggerVisualAlert();
                 if (localStorage.getItem('kds_pa_audio') === 'true') {
                     playTripleBeep();
                 }
             }
+
+            colorizeCardHeaders();
+            initOrderCollapsibles();
 
             if (scrollContainer) {
                 scrollContainer.scrollTop = currentScrollTop;
@@ -1453,13 +1518,110 @@
             console.error("Erreur de rafraîchissement KDS :", error);
         });
     }
+
+    function initOrderCollapsibles() {
+        const orders = document.querySelectorAll('.order-wrapper');
+        
+        // Récupère la liste des IDs de commandes réduites stockée en mémoire
+        let collapsedOrders = JSON.parse(localStorage.getItem('kds_collapsed_orders') || '[]');
+
+        orders.forEach(order => {
+            const orderId = order.getAttribute('data-order-id');
+            const header = order.querySelector('.card-header-pa');
+            const mainItems = order.querySelectorAll('.item-main');
+
+            // Vérifie s'il y a 2 main items ou plus et que le bouton n'a pas déjà été ajouté
+            if (mainItems.length >= 2 && header && !header.querySelector('.collapse-btn')) {
+                
+                // Crée le bouton
+                const collapseBtn = document.createElement('button');
+                collapseBtn.className = 'collapse-btn';
+                collapseBtn.style.cssText = `
+                    background: rgba(0,0,0,0.3);
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    width: 38px;
+                    height: 38px;
+                    font-size: 1.5rem;
+                    font-weight: bold;
+                    cursor: pointer;
+                    float: left;
+                    margin-right: 10px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                `;
+
+                // On cible UNIQUEMENT les sous-éléments (.item-subs)
+                const subElements = order.querySelectorAll('.item-subs');
+
+                // 🚀 Restaure l'état mémorisé si les sous-éléments étaient masqués
+                if (collapsedOrders.includes(orderId)) {
+                    collapseBtn.innerText = '+';
+                    subElements.forEach(el => {
+                        el.style.display = 'none';
+                    });
+                } else {
+                    collapseBtn.innerText = '-';
+                    subElements.forEach(el => {
+                        el.style.display = '';
+                    });
+                }
+
+                // Action au clic pour masquer/afficher les sub items et sauvegarder l'état
+                collapseBtn.onclick = (e) => {
+                    e.stopPropagation(); // Évite de déclencher d'autres événements sur le header
+                    
+                    const isCollapsed = collapseBtn.innerText === '+';
+                    let currentCollapsed = JSON.parse(localStorage.getItem('kds_collapsed_orders') || '[]');
+
+                    // On applique le masquage/affichage uniquement sur les .item-subs
+                    subElements.forEach(el => {
+                        el.style.display = isCollapsed ? '' : 'none';
+                    });
+
+                    if (isCollapsed) {
+                        // Si on réouvre, on retire l'ID de la mémoire
+                        collapseBtn.innerText = '-';
+                        currentCollapsed = currentCollapsed.filter(id => id !== orderId);
+                    } else {
+                        // Si on réduit (cache les sub), on ajoute l'ID en mémoire
+                        collapseBtn.innerText = '+';
+                        if (!currentCollapsed.includes(orderId)) {
+                            currentCollapsed.push(orderId);
+                        }
+                    }
+
+                    // Sauvegarde la liste mise à jour dans le localStorage
+                    localStorage.setItem('kds_collapsed_orders', JSON.stringify(currentCollapsed));
+                };
+
+                // Insère le bouton tout au début de l'en-tête
+                header.prepend(collapseBtn);
+            }
+        });
+    }
+
+    
     
     function toggleAudio() {
-        const newState = !(localStorage.getItem('kds_pa_audio') === 'true');
+        const newState = true;
         localStorage.setItem('kds_pa_audio', newState);
         updateAudioUI(newState);
-        if (newState) playTripleBeep();
+        playTripleBeep();
     }
+
+
+    /* 
+      ANCIENNE FONCTION TOGGLE (Basculement ON/OFF) :
+      function toggleAudio() {
+          const newState = !(localStorage.getItem('kds_pa_audio') === 'true');
+          localStorage.setItem('kds_pa_audio', newState);
+          updateAudioUI(newState);
+          if (newState) playTripleBeep();
+      }
+    */
 
     function updateAudioUI(enabled) {
         audioBtn.innerText = enabled ? "🔔 BIP: ACTIVÉ" : "🔕 BIP: DÉSACTIVÉ";

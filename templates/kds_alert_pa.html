@@ -640,6 +640,40 @@
                     <span>🕒 LIV/PA Heure</span>
                 </label>
 
+                <!-- REMPLACER L'ANCIEN BLOC "toggle-minus-one-hour" DANS LA SECTION FILTRES PAR CE BLOC : -->
+
+                <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; border-left: 4px solid #e67e22; display: flex; flex-direction: column; gap: 10px; margin-top: 10px; width: 100%;">
+                    
+                    <!-- TOGGLE 1 : DÉCALAGE DE L'HEURE EN DIRECT (HAUT À DROITE) -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+                        <label for="slider-clock-offset" style="color: #f1c40f; font-weight: bold; font-size: 1.1rem; white-space: nowrap;">
+                            🕒 HEURE EN DIRECT (HORLOGE) :
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="range" id="slider-clock-offset" min="-24" max="24" value="0" step="1" 
+                                oninput="updateClockOffsetLabel(this.value); updateLiveClock();"
+                                style="cursor: pointer; width: 180px;">
+                            <span id="label-clock-offset" style="font-weight: bold; font-size: 1.2rem; color: #fff; min-width: 60px; text-align: right;">0h</span>
+                            <button onclick="resetClockOffset()" style="padding: 4px 8px; font-size: 0.9rem; background: #555; color: white; border: none; border-radius: 4px; cursor: pointer;">Réinitialiser</button>
+                        </div>
+                    </div>
+
+                    <!-- TOGGLE 2 : DÉCALAGE DE L'HEURE DES FACTURES / TIMERS -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+                        <label for="slider-order-offset" style="color: #e67e22; font-weight: bold; font-size: 1.1rem; white-space: nowrap;">
+                            ⏰ HEURE DES FACTURES (TIMERS) :
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="range" id="slider-order-offset" min="-24" max="24" value="0" step="1" 
+                                oninput="updateOrderOffsetLabel(this.value); updateOrderTimers();"
+                                style="cursor: pointer; width: 180px;">
+                            <span id="label-order-offset" style="font-weight: bold; font-size: 1.2rem; color: #fff; min-width: 60px; text-align: right;">0h</span>
+                            <button onclick="resetOrderOffset()" style="padding: 4px 8px; font-size: 0.9rem; background: #555; color: white; border: none; border-radius: 4px; cursor: pointer;">Réinitialiser</button>
+                        </div>
+                    </div>
+
+                </div>
+
             </div>
         </div>
 
@@ -974,11 +1008,52 @@
         }
     }
 
+    function updateClockOffsetLabel(val) {
+        const hours = parseInt(val, 10);
+        const text = hours > 0 ? `+${hours}h` : `${hours}h`;
+        document.getElementById('label-clock-offset').innerText = text;
+        localStorage.setItem('kds_clock_offset', hours);
+    }
+
+    function updateOrderOffsetLabel(val) {
+        const hours = parseInt(val, 10);
+        const text = hours > 0 ? `+${hours}h` : `${hours}h`;
+        document.getElementById('label-order-offset').innerText = text;
+        localStorage.setItem('kds_order_offset', hours);
+    }
+
+    function resetClockOffset() {
+        const slider = document.getElementById('slider-clock-offset');
+        if (slider) {
+            slider.value = 0;
+            updateClockOffsetLabel(0);
+            updateLiveClock();
+        }
+    }
+
+    function resetOrderOffset() {
+        const slider = document.getElementById('slider-order-offset');
+        if (slider) {
+            slider.value = 0;
+            updateOrderOffsetLabel(0);
+            updateOrderTimers();
+        }
+    }
+
+    // 1. MISE À JOUR DE L'HORLOGE EN DIRECT
+    // MISE À JOUR DE L'HORLOGE EN DIRECT (FORMAT 24 HEURES)
     function updateLiveClock() {
         const now = new Date();
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const slider = document.getElementById('slider-clock-offset');
+        const hoursOffset = slider ? parseInt(slider.value, 10) : 0;
+
+        // Calcul avec décalage dynamique en millisecondes
+        const timeToDisplay = new Date(now.getTime() + (hoursOffset * 3600000));
+
+        // Utilisation explicite de getHours() (qui est déjà de 0 à 23) avec padStart pour s'assurer d'avoir 2 chiffres
+        const hours = String(timeToDisplay.getHours()).padStart(2, '0');
+        const minutes = String(timeToDisplay.getMinutes()).padStart(2, '0');
+        const seconds = String(timeToDisplay.getSeconds()).padStart(2, '0');
         
         const clockElement = document.getElementById('live-clock');
         if (clockElement) {
@@ -1101,6 +1176,24 @@
     // FORCE LE PREMIER TRAGE AU CHARGEMENT DE LA PAGE
     document.addEventListener("DOMContentLoaded", function() {
         appliquerFiltresAffichage();
+    });
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const savedClockOffset = localStorage.getItem('kds_clock_offset') || 0;
+        const savedOrderOffset = localStorage.getItem('kds_order_offset') || 0;
+
+        const clockSlider = document.getElementById('slider-clock-offset');
+        const orderSlider = document.getElementById('slider-order-offset');
+
+        if (clockSlider) {
+            clockSlider.value = savedClockOffset;
+            updateClockOffsetLabel(savedClockOffset);
+        }
+
+        if (orderSlider) {
+            orderSlider.value = savedOrderOffset;
+            updateOrderOffsetLabel(savedOrderOffset);
+        }
     });
 
 
@@ -1317,6 +1410,12 @@
     // --- LOGIQUE AJAX ET RAFRAÎCHISSEMENT ---
     function refreshOrders() {
 
+        const ingredientsModal = document.getElementById('ingredientsModal');
+        if (ingredientsModal && window.getComputedStyle(ingredientsModal).display === 'flex') {
+            console.log("🔒 Rafraîchissement suspendu : Le modal des ingrédients est ouvert.");
+            return; // Ignore ce cycle de rafraîchissement tant que le modal est ouvert
+        }
+
         const modals = ['#modal-note', '#modal-utensils', '#modal-confirm', '#paModalOverlay', '#ingredientsModal', '#confirmModal'];
         const isModalOpen = modals.some(selector => {
             const modal = document.querySelector(selector);
@@ -1351,11 +1450,32 @@
                 const headerA = a.querySelector('.card-header-pa')?.innerText || "";
                 const headerB = b.querySelector('.card-header-pa')?.innerText || "";
                 
+                const typeA = a.getAttribute('data-order-type');
+                const typeB = b.getAttribute('data-order-type');
+                
+                const textA = a.innerText.toUpperCase();
+                const textB = b.innerText.toUpperCase();
+                
                 const isAImportant = headerA.includes("T: 888 | INCONNU");
                 const isBImportant = headerB.includes("T: 888 | INCONNU");
                 
                 if (isAImportant && !isBImportant) return -1;
                 if (!isAImportant && isBImportant) return 1;
+
+                // 🚀 PRIORITÉ MAXIMALE : PA ou texte contenant "DONNER"
+                const hasDonnerA = textA.includes("DONNER");
+                const hasDonnerB = textB.includes("DONNER");
+
+                const isPaA = typeA === 'pa' || hasDonnerA;
+                const isPaB = typeB === 'pa' || hasDonnerB;
+
+                // Si les deux ont "DONNER" ou sont des PA, on met en priorité absolue ceux avec "DONNER" en premier
+                if (hasDonnerA && !hasDonnerB) return -1;
+                if (!hasDonnerA && hasDonnerB) return 1;
+
+                if (isPaA && !isPaB) return -1;
+                if (!isPaA && isPaB) return 1;
+
                 return 0;
             });
             
@@ -1374,28 +1494,52 @@
             if (zonePa) zonePa.innerHTML = '';
             if (zoneSalle) zoneSalle.innerHTML = '';
 
-            // 2. Répartir chaque commande dans la grille et dans sa colonne respective
+            // Tableaux temporaires pour trier spécifiquement la colonne PA
+            let paOrders = [];
+            let otherOrders = [];
+
+            // Séparer les commandes PA des autres types
             orders.forEach(order => {
                 const type = order.getAttribute('data-order-type');
                 
-                // Alimentation de la vue grille (avec clone pour l'afficher en double vue si besoin, ou déplacement direct)
+                // Alimentation de la vue grille
                 if (zoneGrid) {
                     zoneGrid.appendChild(order.cloneNode(true));
                 }
                 
-                // Répartition dans les colonnes de service
                 if (type === 't888' && zone888) zone888.appendChild(order);
                 else if (type === 'liv' && zoneLiv) zoneLiv.appendChild(order);
                 else if (type === 't999' && zone999) zone999.appendChild(order);
-                else if (type === 'pa' && zonePa) zonePa.appendChild(order);
+                else if (type === 'pa' && zonePa) {
+                    // On isole les commandes de type PA pour leur appliquer un tri de priorité
+                    paOrders.push(order);
+                }
                 else if (type === 'salle' && zoneSalle) zoneSalle.appendChild(order);
                 else {
-                    // Fallback de sécurité si le type ne correspond à aucune colonne
                     const ajaxZone = document.getElementById('ajax-zone');
                     if (ajaxZone) ajaxZone.appendChild(order);
                 }
             });
+
+            // 🚀 TRI PRIORITAIRE POUR LA COLONNE PA : "DONNER AU PC" en haut
+            paOrders.sort((orderA, orderB) => {
+                const textA = orderA.innerText.toUpperCase();
+                const textB = orderB.innerText.toUpperCase();
+                
+                const hasA = textA.includes("DONNER AU PC");
+                const hasB = textB.includes("DONNER AU PC");
+
+                if (hasA && !hasB) return -1; // A passe en premier
+                if (!hasA && hasB) return 1;  // B passe en premier
+                return 0; // Conserve l'ordre d'origine si égalité
+            });
+
+            // Injecter les commandes PA triées dans leur colonne dédiée
+            paOrders.forEach(order => {
+                if (zonePa) zonePa.appendChild(order);
+            });
             // --------------------------------------------------
+
             updateOrderTimers();
             appliquerFiltresAffichage();
             
@@ -1428,11 +1572,22 @@
     }
 
     function toggleAudio() {
-        const newState = !(localStorage.getItem('kds_pa_audio') === 'true');
+        const newState = true;
         localStorage.setItem('kds_pa_audio', newState);
         updateAudioUI(newState);
-        if (newState) playTripleBeep();
+        playTripleBeep();
     }
+
+
+    /* 
+      ANCIENNE FONCTION TOGGLE (Basculement ON/OFF) :
+      function toggleAudio() {
+          const newState = !(localStorage.getItem('kds_pa_audio') === 'true');
+          localStorage.setItem('kds_pa_audio', newState);
+          updateAudioUI(newState);
+          if (newState) playTripleBeep();
+      }
+    */
 
     function updateAudioUI(enabled) {
         audioBtn.innerText = enabled ? "🔔 BIP: ACTIVÉ" : "🔕 BIP: DÉSACTIVÉ";
@@ -1489,30 +1644,45 @@
         const orders = document.querySelectorAll('.order-wrapper');
         const now = new Date().getTime();
 
+        // Récupération de la valeur du slider des factures (-24 à +24)
+        const slider = document.getElementById('slider-order-offset');
+        const hoursOffset = slider ? parseInt(slider.value, 10) : 0;
+
         orders.forEach(order => {
             const createdAtStr = order.getAttribute('data-created-at');
             if (!createdAtStr) return;
 
-            const createdAt = new Date(createdAtStr).getTime();
+            let createdAt = new Date(createdAtStr).getTime();
             if (isNaN(createdAt)) return;
 
+            // 🛠️ CORRECTION : On applique le décalage en soustrayant ou en ajoutant 
+            // les heures selon le sens choisi pour ajuster l'âge de la facture.
+            // Si le temps tombe à 0, inversez le signe '+' par '-' ici si nécessaire :
+            createdAt -= (hoursOffset * 3600000);
+
             const diffSeconds = Math.floor((now - createdAt) / 1000);
-            if (diffSeconds < 0) return;
+            
+            // Empêche d'afficher un temps négatif si le décalage projette la facture dans le futur
+            if (diffSeconds < 0) {
+                const timerSpan = order.querySelector('.order-timer');
+                if (timerSpan) timerSpan.innerText = "00:00";
+                return;
+            }
 
             const minutes = Math.floor(diffSeconds / 60);
             const seconds = diffSeconds % 60;
             const timeFormatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
-            // Mettre à jour le texte du timer
             const timerSpan = order.querySelector('.order-timer');
             if (timerSpan) {
                 timerSpan.innerText = timeFormatted;
                 
-                // Optionnel : Changement de couleur dynamique selon l'attente
                 if (minutes >= 15) {
-                    timerSpan.style.backgroundColor = '#e74c3c'; // Rouge (très en retard)
+                    timerSpan.style.backgroundColor = '#e74c3c'; // Rouge
                 } else if (minutes >= 8) {
-                    timerSpan.style.backgroundColor = '#e67e22'; // Orange (attention)
+                    timerSpan.style.backgroundColor = '#e67e22'; // Orange
+                } else {
+                    timerSpan.style.backgroundColor = '';
                 }
             }
         });

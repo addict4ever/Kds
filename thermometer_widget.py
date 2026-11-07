@@ -99,6 +99,12 @@ class FloatingApp:
         self.widgets = []
         self.init_widgets()
             
+        # Dictionnaire pour compter les échecs consécutifs par capteur
+        self.consecutive_failures = {s.get('name', 'unknown'): 0 for s in self.sensors}
+        
+        # Verrou de thread pour sécuriser l'accès simultané au port COM partagé (Bus RS485)
+        self.serial_lock = threading.Lock()
+            
         self.running = True
         self.thread = threading.Thread(target=self.loop, daemon=True)
         self.thread.start()
@@ -165,21 +171,78 @@ class FloatingApp:
         except Exception as e:
             logging.error(f"Erreur log : {e}")
 
+    def reset_com_port(self, port_name):
+        """Force la libération et le reset matériel/logiciel du port COM via PySerial de manière sécurisée."""
+        with self.serial_lock:
+            try:
+                import serial
+                s_port = serial.Serial(port_name, baudrate=9600, timeout=0.5)
+                s_port.reset_input_buffer()
+                s_port.reset_output_buffer()
+                s_port.close()
+                time.sleep(1.0) # Pause de stabilisation accrue après un reset matériel
+                logging.info(f"Port COM {port_name} réinitialisé et purgé avec succès.")
+            except Exception as e:
+                logging.error(f"Impossible de réinitialiser le port {port_name}: {e}")
+
     def read_modbus(self, s):
-        client = None
-        try:
-            client = ModbusSerialClient(method='rtu', port=s.get('port', 'COM20'), baudrate=9600, timeout=1.5, stopbits=1, bytesize=8, parity='N')
-            if client.connect():
-                res = client.read_holding_registers(address=s.get('addr', 1), count=1, unit=s.get('slave_id', 1))
-                client.close()
-                if res and not res.isError() and hasattr(res, 'registers'):
-                    return res.registers[0] / 10.0
-            return None
-        except Exception:
-            if client:
-                try: client.close()
-                except Exception: pass
-            return None
+        port_name = s.get('port', 'COM20')
+        sensor_name = s.get('name', 'Inconnu')
+        
+        should_reset = False
+        
+        # Utilisation d'un verrou pour éviter les collisions si un autre thread accède au même port COM
+        with self.serial_lock:
+            client = None
+            try:
+                client = ModbusSerialClient(
+                    method='rtu', 
+                    port=port_name, 
+                    baudrate=9600, 
+                    timeout=1.5, 
+                    stopbits=1, 
+                    bytesize=8, 
+                    parity='N'
+                )
+                
+                if client.connect():
+                    res = client.read_holding_registers(
+                        address=s.get('addr', 1), 
+                        count=1, 
+                        unit=s.get('slave_id', 1)
+                    )
+                    client.close()
+                    
+                    if res and not res.isError() and hasattr(res, 'registers'):
+                        self.consecutive_failures[sensor_name] = 0
+                        return res.registers[0] / 10.0
+                
+                raise ValueError("Réponse Modbus invalide ou pas de connexion")
+
+            except Exception as e:
+                if client:
+                    try: 
+                        client.close()
+                    except Exception: 
+                        pass
+                
+                # Incrémentation des échecs consécutifs
+                self.consecutive_failures[sensor_name] = self.consecutive_failures.get(sensor_name, 0) + 1
+                logging.warning(f"Échec de lecture sur {sensor_name} ({port_name}). Erreurs consécutives : {self.consecutive_failures[sensor_name]}")
+
+                # Si on atteint 3 échecs, on marque qu'un reset est nécessaire
+                if self.consecutive_failures[sensor_name] >= 3:
+                    logging.error(f"Perte de connexion persistante sur {sensor_name}. Un reset du port {port_name} va être déclenché.")
+                    should_reset = True
+                    self.consecutive_failures[sensor_name] = 0
+
+                return None
+
+        # Exécuté en dehors du verrou pour éviter les interblocages lors de la réinitialisation physique
+        if should_reset:
+            self.reset_com_port(port_name)
+
+        return None
 
     def loop(self):
         while self.running:
@@ -192,6 +255,8 @@ class FloatingApp:
                             self.root.after(0, lambda w=self.widgets[i], v=val: w.update(v))
                         if val is not None:
                             self.save_log(s['name'], val)
+                
+                # Petite pause répartie pour interroger sans saturer le processeur ni le bus
                 for _ in range(60):
                     if not self.running: break
                     time.sleep(1)

@@ -532,24 +532,26 @@
     }
 
     function refreshKDS() {
-        // 1. DÉTECTION DES MODALES OUVERTES
+        // 1. DÉTECTION DES MODALES OUVERTES (Vérifie 'block' et 'flex')
         const modals = ['#modal-note', '#modal-utensils', '#modal-confirm', '#paModalOverlay', '#ingredientsModal'];
         const isModalOpen = modals.some(selector => {
             const modal = document.querySelector(selector);
-            return modal && modal.style.display === 'block';
+            return modal && (modal.style.display === 'block' || modal.style.display === 'flex');
         });
 
         // 2. VÉRIFICATION DE L'ACTIVITÉ UTILISATEUR
         const activeEl = document.activeElement;
         const isUserTyping = (
-            activeEl.tagName === 'INPUT' || 
-            activeEl.tagName === 'SELECT' || 
-            activeEl.tagName === 'TEXTAREA' ||
-            activeEl.isContentEditable
+            activeEl && (
+                activeEl.tagName === 'INPUT' || 
+                activeEl.tagName === 'SELECT' || 
+                activeEl.tagName === 'TEXTAREA' ||
+                activeEl.isContentEditable
+            )
         );
 
-        // 3. BLOCAGE DU REFRESH
-        if (isModalOpen || isUserTyping || (typeof isEditing !== 'undefined' && isEditing)) {
+        // 3. BLOCAGE DU REFRESH (Ajout de la vérification de isNumpadOpen)
+        if (isModalOpen || isUserTyping || (typeof isEditing !== 'undefined' && isEditing) || (typeof isNumpadOpen !== 'undefined' && isNumpadOpen)) {
             console.log("⚠️ Refresh suspendu : Modale ouverte ou saisie en cours...");
             return;
         }

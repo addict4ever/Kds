@@ -19,15 +19,39 @@
             width: 100vw;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* Empêche tout défilement global sur la tablette */
+            overflow: hidden;
         }
 
-        /* Grille compacte adaptée pour 15 éléments sur une dalle 10 pouces */
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 0 5px;
+        }
+
+        .header-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #38bdf8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .live-indicator {
+            font-size: 0.85rem;
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(5, 1fr); /* 5 colonnes pour un affichage parfait en paysage */
-            grid-template-rows: repeat(3, 1fr);   /* 3 lignes (5 x 3 = 15 cartes) */
-            gap: 10px;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(auto-fit, minmax(0, 1fr));
+            gap: 8px;
             flex-grow: 1;
             width: 100%;
             height: 100%;
@@ -35,15 +59,14 @@
 
         @media (max-width: 1024px) {
             .grid-container {
-                grid-template-columns: repeat(4, 1fr); /* S'adapte dynamiquement si résolution moindre */
-                grid-template-rows: repeat(auto-fit, minmax(0, 1fr));
+                grid-template-columns: repeat(4, 1fr);
             }
         }
 
         .card {
             background-color: #1e293b;
-            border-radius: 10px;
-            padding: 8px;
+            border-radius: 8px;
+            padding: 6px 8px;
             text-align: center;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
             border-top: 4px solid #3b82f6;
@@ -53,20 +76,20 @@
             overflow: hidden;
         }
 
-        /* Variation des couleurs de bordure supérieure par carte */
         .card:nth-child(2n) { border-top-color: #8b5cf6; }
         .card:nth-child(3n) { border-top-color: #ec4899; }
         .card:nth-child(4n) { border-top-color: #10b981; }
         .card:nth-child(5n) { border-top-color: #f59e0b; }
+        .card:nth-child(6n) { border-top-color: #38bdf8; }
         
         .item-name {
-            font-size: 0.85rem;
+            font-size: 0.75rem;
             font-weight: 700;
             color: #e2e8f0;
             text-transform: uppercase;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.2px;
             line-height: 1.1;
-            max-height: 2.4em;
+            max-height: 2.2em;
             overflow: hidden;
             display: -webkit-box;
             -webkit-line-clamp: 2;
@@ -74,7 +97,7 @@
         }
 
         .item-count {
-            font-size: 2.5rem;
+            font-size: 2.3rem;
             font-weight: 900;
             line-height: 1;
         }
@@ -84,42 +107,28 @@
             text-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
         }
         .no-stock {
-            color: #64748b;
+            color: #475569;
         }
     </style>
 </head>
 <body>
 
+    
+
     <div class="grid-container">
         {% for item, qty in counts.items() %}
         <div class="card">
             <div class="item-name">
-                <!-- Attribution automatique d'un émoji selon le nom de l'item -->
-                {% set name_lower = item | lower %}
-                {% if 'cuisse' in name_lower %}🍗
-                {% elif 'poit' in name_lower %}🐓
-                {% elif 'ailes' in name_lower %}🔥
-                {% elif 'croq' in name_lower %}{% if 'enf' in name_lower %}👶{% else %}🟡{% endif %}
-                {% elif 'doigt' in name_lower %}{% if 'enf' in name_lower %}👶{% else %}🥖{% endif %}
-                {% elif 'jalapano' in name_lower %}🌶️
-                {% elif 'popper' in name_lower %}🧀
-                {% elif 'fondu' in name_lower %}🫕
-                {% elif 'batt' in name_lower %}🍟
-                {% elif 'of' in name_lower %}📦
-                {% elif 'pat' in name_lower %}🥔
-                {% else %}🍽️{% endif %}
                 {{ item }}
             </div>
             
-            <!-- ID unique par item pour cibler uniquement le chiffre en JS sans recharger la page -->
-            <div id="count-{{ item }}" class="item-count {% if qty > 0 %}has-stock{% else %}no-stock{% endif %}">
+            <div data-item-count="{{ item }}" class="item-count {% if qty > 0 %}has-stock{% else %}no-stock{% endif %}">
                 {{ qty }}
             </div>
         </div>
         {% endfor %}
     </div>
 
-    <!-- Script JavaScript pour rafraîchir uniquement les valeurs via la même route -->
     <script>
         function updateCounts() {
             fetch('/kds_friteuse?json=1', {
@@ -130,10 +139,9 @@
             .then(response => response.json())
             .then(data => {
                 for (const [item, qty] of Object.entries(data)) {
-                    const countElement = document.getElementById(`count-${item}`);
+                    const countElement = document.querySelector(`[data-item-count="${CSS.escape(item)}"]`);
                     if (countElement) {
                         countElement.textContent = qty;
-                        // Met à jour la classe couleur (vert si stock > 0, gris sinon)
                         if (qty > 0) {
                             countElement.className = "item-count has-stock";
                         } else {
@@ -142,10 +150,9 @@
                     }
                 }
             })
-            .catch(error => console.error('Erreur lors de la mise à jour des données KDS :', error));
+            .catch(error => console.error('Erreur lors de la mise à jour des données KDS Friteuse :', error));
         }
 
-        // Exécute la mise à jour toutes les 5 secondes (5000 ms)
         setInterval(updateCounts, 5000);
     </script>
 

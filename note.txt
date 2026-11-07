@@ -8,6 +8,7 @@ pyinstaller --noconfirm --onefile --windowed --name "Pizzeria_PA_Print_Boss" --c
 
 pyinstaller --noconfirm --onefile --windowed --name "pizza_client" --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --hidden-import PyQt6.QtWebEngineCore --hidden-import PyQt6.QtWebEngineWidgets --icon=pizzeria_kds.ico "pizza_client.py"
 
+pyinstaller --noconfirm --onefile --windowed --name "pizza_four" --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --hidden-import PyQt6.QtWebEngineCore --hidden-import PyQt6.QtWebEngineWidgets --icon=pizzeria_kds.ico "pizza_four.py"
 
 pyinstaller --noconsole --onefile --hidden-import=pyserial --hidden-import=watchdog virtualprinter.py
 

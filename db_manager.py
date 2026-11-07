@@ -129,7 +129,50 @@ class DBManager:
             if conn_consultation: conn_consultation.close()
             if conn_livreur: conn_livreur.close()
 
-
+    def delete_all_pa_orders(self):
+        """
+        Supprime uniquement les commandes de type P.A. (table commençant par 'PA', '888' ou service 'EMPORTER')
+        QUI SONT DÉJÀ TRAITÉES, dans la BDD KDS et le clone Livreur.
+        """
+        conn = None
+        conn_livreur = None
+        row_count = 0
+        
+        try:
+            # Nettoyage base principale (uniquement les traitées)
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM orders 
+                WHERE (table_number LIKE 'PA%' 
+                   OR table_number = '888' 
+                   OR service_type LIKE '%EMPORTER%')
+                  AND status = 'Traitée'
+            """)
+            row_count = cursor.rowcount
+            conn.commit()
+            
+            # Nettoyage clone livreur (uniquement les traitées)
+            conn_livreur = sqlite3.connect(LIVREUR_DB_PATH)
+            cursor_livreur = conn_livreur.cursor()
+            cursor_livreur.execute("""
+                DELETE FROM orders 
+                WHERE (table_number LIKE 'PA%' 
+                   OR table_number = '888' 
+                   OR service_type LIKE '%EMPORTER%')
+                  AND status = 'Traitée'
+            """)
+            conn_livreur.commit()
+            
+            logger.warning(f"Commandes P.A. traitées supprimées : {row_count} lignes effacées des deux bases.")
+        except sqlite3.Error as e:
+            logger.error(f"Erreur lors de la suppression des P.A. traitées : {e}")
+        finally:
+            if conn: conn.close()
+            if conn_livreur: conn_livreur.close()
+            
+        return row_count
+        
     def _execute_on_main_and_clone(self, query, params):
         """
         Exécute une commande SQL sur la base principale (kds_orders.db) 
@@ -1833,9 +1876,11 @@ class DBManager:
     def get_all_pending_items_for_kds_total(self, bill_ids=None):
         """
         Récupère tous les items des commandes en attente (ou sélectionnées) 
+        uniquement pour les types de service 'POUR EMPORTER', 'LIVRAISON' et 'COMMANDE'
         pour calculer le total KDS.
         
-        ⭐ MODIFIÉ pour décoder la structure JSON et inclure les sous-items dans le total.
+        ⭐ MODIFIÉ pour filtrer par service_type, décoder la structure JSON 
+        et inclure les sous-items dans le total.
         """
         conn = None
         rows = []
@@ -1843,19 +1888,28 @@ class DBManager:
             conn = self._get_connection()
             cursor = conn.cursor()
             
+            # Définition des types de service autorisés
+            target_types = ('POUR EMPORTER', 'LIVRAISON', 'COMMANDE')
+            placeholders_types = ','.join('?' * len(target_types))
+            
             if bill_ids and len(bill_ids) > 0:
-                placeholders = ','.join('?' * len(bill_ids))
+                placeholders_bills = ','.join('?' * len(bill_ids))
                 query = f"""
                     SELECT items FROM orders 
-                    WHERE status NOT IN ('Traitée') AND bill_id IN ({placeholders})
+                    WHERE status NOT IN ('Traitée') 
+                      AND service_type IN ({placeholders_types})
+                      AND bill_id IN ({placeholders_bills})
                 """
-                cursor.execute(query, bill_ids)
+                # Combinaison des paramètres pour les types de service et les bill_ids
+                params = list(target_types) + list(bill_ids)
+                cursor.execute(query, params)
             else:
-                query = """
+                query = f"""
                     SELECT items FROM orders 
                     WHERE status NOT IN ('Traitée')
+                      AND service_type IN ({placeholders_types})
                 """
-                cursor.execute(query)
+                cursor.execute(query, target_types)
                 
             rows = cursor.fetchall()
         except sqlite3.Error as e:

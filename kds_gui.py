@@ -880,9 +880,17 @@ class KDSGUI:
 
 
     def _handle_keyboard_input(self, event):
-        """Écoute le clavier dans KDSGUI et gère la fermeture rapide des tables sur l'écran serveur."""
+        """Écoute le clavier dans KDSGUI et gère la fermeture rapide des tables avec un délai (timeout) de 1s."""
         import time
         current_time = time.time()
+
+        # Annuler tout minuteur en attente à chaque nouvelle frappe de touche
+        if hasattr(self, 'table_timeout_id') and self.table_timeout_id:
+            try:
+                self.root.after_cancel(self.table_timeout_id)
+            except:
+                pass
+            self.table_timeout_id = None
 
         # Réinitialisation automatique après 5 secondes d'inactivité globale
         if self.first_key_time and (current_time - self.first_key_time > 5.0):
@@ -920,6 +928,7 @@ class KDSGUI:
                 if hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
                     table_exists = False
                     prefix_match = False
+                    has_longer_match = False
 
                     # Analyse chiffre par chiffre des tables actuellement affichées sur l'écran serveur
                     for bill_id, info in self.serveur_window.active_tables_frames.items():
@@ -928,20 +937,46 @@ class KDSGUI:
                             table_exists = True
                         if t_num.startswith(current_input):
                             prefix_match = True
+                            if t_num != current_input:
+                                has_longer_match = True
 
-                    # CAS 1 : Correspondance exacte -> Fermeture immédiate
+                    # CAS 1 : Correspondance exacte
                     if table_exists:
-                        table_to_close = current_input
-                        self._reset_key_buffer()
-                        self._close_table_by_number(table_to_close)
-                        return "break"
+                        if not has_longer_match:
+                            # Pas de table plus longue (ex: juste 4), fermeture immédiate
+                            table_to_close = current_input
+                            self._reset_key_buffer()
+                            self._close_table_by_number(table_to_close)
+                            return "break"
+                        else:
+                            # Il existe une table plus longue (ex: 4 et 48)
+                            # On met en place un délai de 1 seconde (1000 ms) avant de valider le chiffre court
+                            def delayed_close():
+                                if hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
+                                    self._close_table_by_number(current_input)
+                                self._reset_key_buffer()
 
-                    # CAS 2 (Option A) : Aucun préfixe ne correspond chiffre par chiffre -> Rejet immédiat sans attendre
+                            self.table_timeout_id = self.root.after(1000, delayed_close)
+                            return "break"
+
+                    # CAS 2 : Aucun préfixe ne correspond -> Rejet immédiat
                     if not prefix_match:
                         self._update_serveur_typing_label(f"Table .{current_input} introuvable !", "#E74C3C")
                         self.root.after(1200, self._reset_key_buffer)
                         return "break"
 
+                return "break"
+
+            # Validation immédiate avec la touche Entrée (pour forcer sans attendre la fin de la seconde)
+            elif event.keysym in ("Return", "KP_Enter"):
+                current_input = self.key_buffer.strip()
+                if current_input and hasattr(self, 'serveur_window') and self.serveur_window and self.serveur_window.winfo_exists():
+                    for bill_id, info in self.serveur_window.active_tables_frames.items():
+                        if str(info.get("table_num")) == current_input:
+                            self._reset_key_buffer()
+                            self._close_table_by_number(current_input)
+                            return "break"
+                self._reset_key_buffer()
                 return "break"
 
             # Effacer un chiffre avec Retour arrière (BackSpace)
@@ -968,6 +1003,13 @@ class KDSGUI:
 
     def _reset_key_buffer(self):
         """Réinitialise l'état de la saisie et efface le texte sur ServeurWindow."""
+        if hasattr(self, 'table_timeout_id') and self.table_timeout_id:
+            try:
+                self.root.after_cancel(self.table_timeout_id)
+            except:
+                pass
+            self.table_timeout_id = None
+
         self.key_buffer = ""
         self.first_key_time = 0.0
         self.is_point_active = False

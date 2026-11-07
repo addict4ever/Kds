@@ -411,7 +411,7 @@ QUICK_PRESETS = [
     ("🍢 Brochette Poulet", 6 * 60),
     ("🧅 Soupe Oignon", 2 * 60),
     ("🐚 Entree Coquille", 2 * 60), # Changé 🧅 pour 🐚
-    ("🥪 Smoke Meat", 2 * 60),      # Changé 🧅 pour 🥪
+    ("🥪 Pain Smoke Meat", int(1.5 * 60)),
     ("🍄 Champignons Gratinés", 2 * 60),
     ("🍕 Pizza Vieux Four", 13 * 60), # Ajout
     ("🍝 Lasagne Gratinée", 15 * 60), # Ajout
@@ -485,10 +485,10 @@ class TimerManagerWindow(tk.Toplevel):
             full_text = f"{name}\n{duration_str}"
 
             # LOGIQUE DES 4 COULEURS :
-            if i < 14:
+            if i < 11:
                 # 🔵 SECTION 1 : Les préparations longues / Plats signatures
                 current_bg = "#2980b9" 
-            elif i < 18:
+            elif i < 15:
                 # 🟠 SECTION 2 : Accompagnements et Entrées (Pain, Ailes, etc.)
                 current_bg = "#e67e22"
             elif i < 32:

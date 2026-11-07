@@ -182,6 +182,15 @@ class TrashWindow(tk.Toplevel):
         )
         self.btn_reactivate.pack(side=tk.LEFT, fill="both", expand=True, padx=5)
 
+        self.btn_delete_pa = tk.Button(
+            button_frame, text="🗑️ SUPPRIMER LES P.A.", 
+            command=self.clear_all_pa_orders,
+            bg="#d35400", fg="white", font=("Arial", 12, "bold"),
+            relief="raised", bd=4, activebackground="#e67e22"
+        )
+        self.btn_delete_pa.pack(side=tk.LEFT, fill="both", expand=True, padx=5)
+
+
         self.btn_clear = tk.Button(
             button_frame, text="🗑️ TOUT SUPPRIMER", 
             command=self.clear_all_archived,
@@ -234,6 +243,30 @@ class TrashWindow(tk.Toplevel):
         self.load_all_archived_orders()
         self.display_orders()
         self.update_sort_indicator()
+
+    def clear_all_pa_orders(self):
+        """Supprime définitivement toutes les commandes de type P.A. après confirmation."""
+        
+        def action_suppression_pa():
+            # Exécution de la suppression des P.A. via le db_manager
+            deleted_count = self.db_manager.delete_all_pa_orders()
+            
+            # Rafraîchissement de l'interface
+            self.load_all_archived_orders()
+            self.update_sort_indicator()
+            self.display_orders()           
+            
+            # Message de succès dans la barre de statut
+            self.kds_gui.update_status(f"🗑️ {deleted_count} commandes P.A. supprimées.", 'red')
+            self.kds_gui.refresh_orders(force_sound_off=True)
+
+        # Dialogue de confirmation personnalisé
+        KDSConfirmDialog(
+            self, 
+            "⚠️ SUPPRESSION DES P.A.", 
+            "Êtes-vous SÛR de vouloir supprimer\nTous les P.A. (Pour Emporter) ?", 
+            action_suppression_pa
+        )
 
     def set_filter(self, filter_value):
         """Change le filtre actif et rafraîchit l'affichage."""

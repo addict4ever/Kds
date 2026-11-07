@@ -8,7 +8,7 @@
     },
     "BG_MAIN": "#2c3e50",
     "CARD_BG": "#34495e",
-    "MAX_CARDS_PER_ROW": 7,
+    "MAX_CARDS_PER_ROW": 10,
     "SCROLL_PAGE_SIZE": 1,
     "COLOR_TEXT": "#ecf0f1",
     "COLOR_ACCENT": "#3498db",
@@ -19,8 +19,8 @@
     "CARD_BORDER_WIDTH": 1,
     "CARD_PADDING": 1,
     "H_MARGIN": 1,
-    "SUB_ITEM_POLICE": 14,
-    "MAIN_ITEM_POLICE": 15,
+    "SUB_ITEM_POLICE": 10,
+    "MAIN_ITEM_POLICE": 11,
     "animation_personnage": true,
     "SERVICE_TYPES": [
         "COMMANDE"

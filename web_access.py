@@ -363,50 +363,73 @@ def get_pizza_detection_config():
     
 @app.route('/kds_friteuse')
 def kds_friteuse():
-    # Liste des items à suivre
+    # Vos termes exacts à suivre (triés par longueur décroissante pour traiter les plus spécifiques d'abord)
     items_to_track = [
-        "cuisse", "poitrine", "ailes", "croquette", 
-        "croquette enf", "doigts enf", "doigts poulet", "jalapeno poppers", 
-        "popper", "fondu", "bat. fromage", "batonnets midi", "oignon francais", "pt. pat anc", "pogo"
+        "CUISSE POULET MIDI", "CUISSE POULET", "POITRINE/ COTE LEVEE", "POIT/ COTE LEVE", 
+        "POITRINE", "AILES POULET", "DOIGT/ COTE LEVE", "DOIGTS POULET", "CROQUETTE ENF", 
+        "DOIGTS ENF", "croquette", "JALAPENO POPPERS", "FISH N CHIP MIDI", "FISH AND CHIPS", 
+        "SAL. THAI CREV. BOUL", "SAL. THAI POUL. BOUL", "BATONNETS MIDI", "BAT. FROMAGE", 
+        "FONDU PARMESAN", "ASS. CREV. BOUL-BANG", "(12) CREV. BOUL-BANG", "(6) CREV. BOUL-BANG", 
+        "oignon francais", "PT. PAT ANC", "POGO ENF"
     ]
     
-    # 1. Récupération des décomptes d'items actifs
+    # 1. Récupération des décomptes bruts d'items actifs depuis la base de données
     active_items_counts = db_manager.get_all_pending_items_for_kds_total()
     
     # Initialisation du dictionnaire de résultat
     counts = {target: 0 for target in items_to_track}
     
-    # 2. Tri des cibles par longueur DÉCROISSANTE (les plus longues et précises d'abord)
-    # Ex: "croq enf" sera évalué avant "croq"
-    sorted_targets = sorted(items_to_track, key=lambda x: len(x.strip()), reverse=True)
-    
-    # Copie de travail des items de la DB
+    # Copie de travail propre en uppercase et nettoyée des espaces superflus
     remaining_db_items = {
-        item_name.strip().lower(): qty 
+        str(item_name).strip().upper(): int(qty) 
         for item_name, qty in active_items_counts.items()
+        if item_name and qty > 0
     }
     
-    # 3. Association sans double comptage
+    # Tri rigoureux par longueur décroissante pour éviter qu'un mot court ne capture un item long
+    sorted_targets = sorted(items_to_track, key=lambda x: len(x.strip()), reverse=True)
+    
     for target in sorted_targets:
-        target_lower = target.strip().lower()
+        target_upper = target.strip().upper()
+        # Découpage de la cible en mots individuels pour s'assurer qu'ils sont TOUS présents
+        target_words = target_upper.split()
+        
         matched_keys = []
         
-        for item_name_lower, qty in remaining_db_items.items():
-            if target_lower in item_name_lower:
-                counts[target] += qty
-                matched_keys.append(item_name_lower)
-        
-        # Supprime les items attribués pour qu'ils ne soient pas comptés par une règle plus courte (ex: "croq")
+        for item_name_upper, qty in remaining_db_items.items():
+            # Vérifie si TOUS les mots de la cible sont présents dans l'item de la BDD
+            all_words_present = all(word in item_name_upper for word in target_words)
+            
+            if all_words_present:
+                multiplier = 1
+                
+                # Logique unitaire pour les Ailes de poulet (ex: "6 AILES", "12 AILES", etc.)
+                if "AILE" in target_upper:
+                    match = re.search(r'\(?(\d+)\)?\s*(?:AILE|AILES)', item_name_upper)
+                    if match:
+                        multiplier = int(match.group(1))
+                
+                # Logique unitaire pour les Crevettes Boul-Bang (ex: "(6) CREV.", "(12) CREV.")
+                elif "CREV" in target_upper:
+                    match = re.search(r'\(?(\d+)\)?', item_name_upper)
+                    if match:
+                        multiplier = int(match.group(1))
+                
+                counts[target] += qty * multiplier
+                matched_keys.append(item_name_upper)
+                
+        # Supprime définitivement les items attribués pour éviter le double comptage
         for key in matched_keys:
-            del remaining_db_items[key]
+            if key in remaining_db_items:
+                del remaining_db_items[key]
 
-    # ⭐ Retour JSON si requête AJAX / JS
+    # Retour JSON si requête AJAX / JS de rafraîchissement
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('json') == '1':
         return jsonify(counts)
 
-    # Rendu du template HTML
+    # Rendu du template HTML complet
     return render_template('kds_friteuse.html', counts=counts)
-
+    
 @app.route('/kds_four_commande', methods=['GET'])
 def kds_four_commande():
     """
@@ -1052,7 +1075,6 @@ def print_bill():
     import json
     import os
     import socket
-    from datetime import datetime
     
     data = request.json
     bid = data.get('bid')
@@ -1060,10 +1082,15 @@ def print_bill():
     if bid not in livraisons_store:
         return jsonify(success=False, error="Commande introuvable")
     
-    # Récupération des données de la commande et des extras
+    # Récupération des données de la commande
     item_full = livraisons_store[bid]
     order_data = item_full.get('data', {})
-    extras = item_full.get('extras', {})
+    
+    # Récupération du raw_content brut enregistré
+    raw_content = order_data.get('raw_content')
+    
+    if not raw_content:
+        return jsonify(success=False, error="Aucun contenu brut (raw_content) disponible pour cette commande")
     
     # --- 1. CHARGEMENT DE LA CONFIG TCP DEPUIS printer_ip.json ---
     computer_ip = None
@@ -1085,60 +1112,14 @@ def print_bill():
     if not computer_port:
         computer_port = 9100
 
-    # --- 2. LOGIQUE D'EXTRACTION ---
-    formatted_items = []
-    raw_items = order_data.get('items', [])
-    
-    for raw_it in raw_items:
-        try:
-            it = json.loads(raw_it) if isinstance(raw_it, str) else raw_it
-            main_item = str(it.get('main_item', '')).replace('@', '').strip()
-            sub_items = it.get('sub_items', [])
-            formatted_items.append({'main': main_item, 'subs': sub_items})
-        except:
-            formatted_items.append({'main': str(raw_it), 'subs': []})
-
-    # --- 3. CONSTRUCTION DU TICKET (TAILLE HAUTEUR DOUBLÉE COMME À DROITE) ---
-    h_desiree = extras.get('desired_time', '').strip()
-    ustensiles = extras.get('utensils', '').strip()
-    note_kds = extras.get('custom_note', '').strip()
-
-    lines = [
-        "REIMPRESSION",
-        "BON DE LIVRAISON",
-        "--------------------------------",
-    ]
-
-    if h_desiree and h_desiree.upper() != "HEURE":
-        lines.append(f"HEURE REQU : {h_desiree}")
-    
-    if ustensiles and ustensiles.upper() != "UST":
-        lines.append(f"EXTRAS     : {ustensiles}")
-        
-    if note_kds and note_kds.upper() != "NOTE":
-        lines.append(f"NOTE KDS   : {note_kds}")
-
-    if h_desiree or ustensiles or note_kds:
-        lines.append("--------------------------------")
-
-    # Affichage séquentiel propre
-    for it in formatted_items:
-        if it['main']:
-            lines.append(it['main'])
-        for sub in it['subs']:
-            if sub:
-                lines.append(sub)
-        
-    lines.append("--------------------------------")
-    lines.append("\n\n\n\n") # Espace pour la coupe
-
-    # \x1b!\x10 applique la double hauteur (taille comme le ticket de droite)
-    ticket_text = "\x1b!\x10" + "\n".join(lines) + "\x1b!\x00"
-
-    # --- 4. ENVOI TCP DIRECT ---
+    # --- 2. ENVOI TCP DIRECT DU RAW SANS MODIFICATION ---
     success = False
     try:
-        encoded_data = ticket_text.encode('latin-1', errors='replace')
+        # Si c'est déjà des bytes, on les envoie directement, sinon on encode en latin-1
+        if isinstance(raw_content, bytes):
+            encoded_data = raw_content
+        else:
+            encoded_data = str(raw_content).encode('latin-1', errors='replace')
         
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2.0)
@@ -1146,12 +1127,12 @@ def print_bill():
             s.sendall(encoded_data)
             
         success = True
-        print(f"Copie TCP envoyée avec succès vers {computer_ip}:{computer_port}")
+        print(f"✅ Raw content envoyé brut avec succès vers {computer_ip}:{computer_port}")
     except Exception as e:
-        print(f"Échec de l'envoi TCP sur {computer_ip}:{computer_port} : {e}")
+        print(f"❌ Échec de l'envoi TCP sur {computer_ip}:{computer_port} : {e}")
         success = False
     
-    return jsonify(success=success, printed_content=ticket_text)
+    return jsonify(success=success, printed_content=str(raw_content))
 
 @app.template_filter('regex_replace')
 def regex_replace(value, pattern, repl=""):
