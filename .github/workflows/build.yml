@@ -3,7 +3,7 @@ name: Compiler KDS en EXE Windows
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch: # Permet de lancer la compilation manuellement depuis GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,18 +16,21 @@ jobs:
     - name: Installer Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10' # Version stable pour ce type d'application Tkinter/Flask
+        python-version: '3.10'
 
     - name: Mettre à jour pip et installer les dépendances de base
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller wheel
+      shell: cmd
 
     - name: Installer toutes les bibliothèques requises du projet
       run: |
         pip install flask pywebview pyinput pymodbus qrcode pyotp requests jinja2 werkzeug pyserial tkcalendar psutil pygame matplotlib numpy pillow
+      shell: cmd
 
     - name: Compiler avec PyInstaller (Commande complète KDS)
+      shell: cmd
       run: |
         pyinstaller --windowed --noconfirm --onefile --name "main_app" ^
           --collect-submodules flask ^
@@ -104,6 +107,7 @@ jobs:
           --add-data "testprint.py;." ^
           --add-data "floating_note.py;." ^
           --add-data "test_print_net.py;." ^
+          --add-data "web_access.py;." ^
           --add-data "thermometer_widget.py;." ^
           --add-data "temperature_view_gui.py;." ^
           --add-data "pyarmor_runtime_000000;pyarmor_runtime_000000" ^
