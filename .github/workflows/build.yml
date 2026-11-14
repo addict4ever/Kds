@@ -24,7 +24,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyinstaller wheel flask pywebview pyinput pymodbus qrcode pyotp requests jinja2 werkzeug pyserial tkcalendar psutil pygame matplotlib numpy pillow
 
-    - name: Compiler avec PyInstaller
+    - name: Compiler avec PyInstaller (Tous les imports et data forcés)
       shell: cmd
       run: |
         pyinstaller --windowed --noconfirm --onefile --name "main_app" ^
@@ -42,9 +42,6 @@ jobs:
           --hidden-import=requests ^
           --hidden-import=jinja2 ^
           --hidden-import=werkzeug ^
-          --add-data "templates;templates" ^
-          --add-data "static;static" ^
-          --add-data "sound;sound" ^
           --hidden-import=serial.tools.list_ports ^
           --hidden-import=uuid ^
           --hidden-import=socket ^
@@ -75,6 +72,9 @@ jobs:
           --hidden-import=winsound ^
           --hidden-import=shutil ^
           --hidden-import=subprocess ^
+          --add-data "templates;templates" ^
+          --add-data "static;static" ^
+          --add-data "sound;sound" ^
           --add-data "postit_widget.py;." ^
           --add-data "db_manager.py;." ^
           --add-data "db_maindish.py;." ^
