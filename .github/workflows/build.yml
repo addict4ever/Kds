@@ -24,7 +24,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyinstaller wheel flask pywebview pynput "pymodbus==2.5.3" qrcode pyotp requests jinja2 werkzeug pyserial tkcalendar psutil pygame matplotlib numpy pillow
 
-    - name: Compiler avec PyInstaller (Collection complète d'origine)
+    - name: Compiler avec PyInstaller (Liste complète et sécurisée)
       shell: cmd
       run: |
         pyinstaller --windowed --noconfirm --onefile --name "main_app" ^
@@ -34,6 +34,8 @@ jobs:
           --collect-all PIL ^
           --collect-all pymodbus ^
           --hidden-import=pywebview ^
+          --hidden-import=webview ^
+          --hidden-import=webview.platforms.winforms ^
           --hidden-import=flask ^
           --hidden-import=pynput ^
           --hidden-import=pymodbus.transaction ^
@@ -70,7 +72,6 @@ jobs:
           --hidden-import=logging ^
           --hidden-import=datetime ^
           --hidden-import=math ^
-          --hidden-import=hashlib ^
           --hidden-import=re ^
           --hidden-import=threading ^
           --hidden-import=platform ^
