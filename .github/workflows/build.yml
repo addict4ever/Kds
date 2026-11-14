@@ -1,1 +1,117 @@
-p
+name: Compiler KDS en EXE Windows
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: # Permet de lancer la compilation manuellement depuis GitHub
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Récupérer le code du dépôt
+      uses: actions/checkout@v4
+
+    - name: Installer Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10' # Version stable pour ce type d'application Tkinter/Flask
+
+    - name: Mettre à jour pip et installer les dépendances de base
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller wheel
+
+    - name: Installer toutes les bibliothèques requises du projet
+      run: |
+        pip install flask pywebview pyinput pymodbus qrcode pyotp requests jinja2 werkzeug pyserial tkcalendar psutil pygame matplotlib numpy pillow
+
+    - name: Compiler avec PyInstaller (Commande complète KDS)
+      run: |
+        pyinstaller --windowed --noconfirm --onefile --name "main_app" ^
+          --collect-submodules flask ^
+          --hidden-import=pywebview ^
+          --hidden-import=flask ^
+          --hidden-import=pyinput ^
+          --hidden-import=pymodbus.transaction ^
+          --hidden-import=pymodbus.payload ^
+          --hidden-import=pymodbus.client.sync ^
+          --hidden-import=pymodbus ^
+          --hidden-import=qrcode ^
+          --hidden-import=pyotp ^
+          --hidden-import=hashlib ^
+          --hidden-import=requests ^
+          --hidden-import=jinja2 ^
+          --hidden-import=werkzeug ^
+          --add-data "templates;templates" ^
+          --add-data "static;static" ^
+          --add-data "sound;sound" ^
+          --hidden-import=serial.tools.list_ports ^
+          --hidden-import=uuid ^
+          --hidden-import=socket ^
+          --hidden-import=tkcalendar ^
+          --hidden-import=psutil ^
+          --hidden-import=pygame ^
+          --hidden-import=matplotlib ^
+          --hidden-import=matplotlib.backends.backend_tkagg ^
+          --hidden-import=numpy ^
+          --hidden-import=PIL ^
+          --hidden-import=PIL._tkinter_finder ^
+          --hidden-import=tkinter ^
+          --hidden-import=tkinter.ttk ^
+          --hidden-import=tkinter.messagebox ^
+          --hidden-import=tkinter.filedialog ^
+          --hidden-import=tkinter.simpledialog ^
+          --hidden-import=tkinter.colorchooser ^
+          --hidden-import=tkinter.scrolledtext ^
+          --hidden-import=serial ^
+          --hidden-import=sqlite3 ^
+          --hidden-import=json ^
+          --hidden-import=logging ^
+          --hidden-import=datetime ^
+          --hidden-import=math ^
+          --hidden-import=re ^
+          --hidden-import=threading ^
+          --hidden-import=platform ^
+          --hidden-import=winsound ^
+          --hidden-import=shutil ^
+          --hidden-import=subprocess ^
+          --add-data "postit_widget.py;." ^
+          --add-data "db_manager.py;." ^
+          --add-data "db_maindish.py;." ^
+          --add-data "db_maindish_gui.py;." ^
+          --add-data "kds_constants.py;." ^
+          --add-data "kds_gui.py;." ^
+          --add-data "serial_reader.py;." ^
+          --add-data "keyboardModifier.py;." ^
+          --add-data "timer_widget.py;." ^
+          --add-data "consultation.py;." ^
+          --add-data "cmd_tool.py;." ^
+          --add-data "edit_config.py;." ^
+          --add-data "loginpass.py;." ^
+          --add-data "kds_total_widget.py;." ^
+          --add-data "DBKonstantesManager.py;." ^
+          --add-data "kds_trash_window.py;." ^
+          --add-data "keyboard.py;." ^
+          --add-data "popit.py;." ^
+          --add-data "log_view.py;." ^
+          --add-data "config_menu.py;." ^
+          --add-data "utils.py;." ^
+          --add-data "web_access.py;." ^
+          --add-data "animate_pack.py;." ^
+          --add-data "salade_game.py;." ^
+          --add-data "testprint.py;." ^
+          --add-data "floating_note.py;." ^
+          --add-data "test_print_net.py;." ^
+          --add-data "thermometer_widget.py;." ^
+          --add-data "temperature_view_gui.py;." ^
+          --add-data "pyarmor_runtime_000000;pyarmor_runtime_000000" ^
+          --icon=pizzeria_kds.ico ^
+          main_app.py
+
+    - name: Sauvegarder l'exécutable (.exe) en tant qu'artéfact
+      uses: actions/upload-artifact@v4
+      with:
+        name: KDS-Windows-Executable
+        path: dist/main_app.exe
