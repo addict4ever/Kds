@@ -22,7 +22,7 @@ jobs:
       shell: cmd
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller wheel flask pywebview pyinput pymodbus qrcode pyotp requests jinja2 werkzeug pyserial tkcalendar psutil pygame matplotlib numpy pillow
+        pip install pyinstaller wheel flask pywebview pynput "pymodbus==2.5.3" qrcode pyotp requests jinja2 werkzeug pyserial tkcalendar psutil pygame matplotlib numpy pillow
 
     - name: Compiler avec PyInstaller (Collection complète d'origine)
       shell: cmd
@@ -35,7 +35,7 @@ jobs:
           --collect-all pymodbus ^
           --hidden-import=pywebview ^
           --hidden-import=flask ^
-          --hidden-import=pyinput ^
+          --hidden-import=pynput ^
           --hidden-import=pymodbus.transaction ^
           --hidden-import=pymodbus.payload ^
           --hidden-import=pymodbus.client.sync ^
