@@ -29,7 +29,7 @@ jobs:
         pip install flask pywebview pyinput pymodbus qrcode pyotp requests jinja2 werkzeug pyserial tkcalendar psutil pygame matplotlib numpy pillow
       shell: cmd
 
-    - name: Compiler avec PyInstaller (Commande complète KDS)
+    - name: Compiler avec PyInstaller (Sans Pyarmor)
       shell: cmd
       run: |
         pyinstaller --windowed --noconfirm --onefile --name "main_app" ^
@@ -110,7 +110,6 @@ jobs:
           --add-data "web_access.py;." ^
           --add-data "thermometer_widget.py;." ^
           --add-data "temperature_view_gui.py;." ^
-          --add-data "pyarmor_runtime_000000;pyarmor_runtime_000000" ^
           --icon=pizzeria_kds.ico ^
           main_app.py
 
