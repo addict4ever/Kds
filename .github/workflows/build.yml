@@ -24,11 +24,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyinstaller wheel flask pywebview pyinput pymodbus qrcode pyotp requests jinja2 werkzeug pyserial tkcalendar psutil pygame matplotlib numpy pillow
 
-    - name: Compiler avec PyInstaller (Tous les imports et data forcés)
+    - name: Compiler avec PyInstaller (Collection complète d'origine)
       shell: cmd
       run: |
         pyinstaller --windowed --noconfirm --onefile --name "main_app" ^
-          --collect-submodules flask ^
+          --collect-all flask ^
+          --collect-all matplotlib ^
+          --collect-all pygame ^
+          --collect-all PIL ^
+          --collect-all pymodbus ^
           --hidden-import=pywebview ^
           --hidden-import=flask ^
           --hidden-import=pyinput ^
@@ -66,6 +70,7 @@ jobs:
           --hidden-import=logging ^
           --hidden-import=datetime ^
           --hidden-import=math ^
+          --hidden-import=hashlib ^
           --hidden-import=re ^
           --hidden-import=threading ^
           --hidden-import=platform ^
